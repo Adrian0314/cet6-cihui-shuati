@@ -2954,6 +2954,11 @@ function checkSpacedRepetition() {
 }
 
 // ============ INIT ============
+// 使用指南：仅首次访问展开，后续访问自动折叠
+if (localStorage.getItem('cet6_onboarded')) {
+  var _rulesCard = document.getElementById('rulesCard');
+  if (_rulesCard) _rulesCard.classList.add('collapsed');
+}
 // PWA manifest 动态注入：file:// 下不注入（避免 CORS 报错），https 下正常启用
 if (location.protocol !== 'file:') {
   var _manifestLink = document.createElement('link');
