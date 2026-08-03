@@ -1347,7 +1347,7 @@ function renderQuizCard() {
         '<span class="ol" aria-hidden="true">' + labels[i] + '</span><span>' + txt + extra + '</span></button>';
     }
 
-    var fbHTML = '';
+    var fbHTML = '<div class="feedback" id="feedback"></div>';
     if (answered || isSkip) {
       var confHTML = '';
       var confusables = getConfusableDisplay(word, mode);
@@ -2955,6 +2955,11 @@ function checkSpacedRepetition() {
 }
 
 // ============ INIT ============
+// 本地 file:// 打开时移除 manifest 引用（PWA 仅 https 生效，避免 CORS 报错）
+if (location.protocol === 'file:') {
+  var _manifestLink = document.querySelector('link[rel="manifest"]');
+  if (_manifestLink) _manifestLink.remove();
+}
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('./sw.js').catch(function() {});
 }
