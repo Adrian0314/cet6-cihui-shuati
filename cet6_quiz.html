@@ -2884,6 +2884,12 @@ if (window.speechSynthesis) {
 
 // ============ DAILY GOAL ============
 var _goalToastShown = false;
+// 今天已达成目标则当天不再重复弹"完成目标"提示（同一天多次进入只提示一次）
+try {
+  var _gtoday0 = new Date().toISOString().split('T')[0];
+  var _gtd0 = state.stats.dailyHistory[_gtoday0];
+  if (_gtd0 && (_gtd0.attempts || 0) >= (state.dailyGoal || 30)) _goalToastShown = true;
+} catch(e) {}
 function checkDailyGoal() {
   if (_goalToastShown) return;
   var st = window.state ? window.state.stats : state.stats;
