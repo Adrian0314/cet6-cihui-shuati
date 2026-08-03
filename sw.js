@@ -1,5 +1,5 @@
 // CET-6 Quiz Service Worker — offline support (PWA)
-var CACHE_NAME = 'cet6-quiz-v3';
+var CACHE_NAME = 'cet6-quiz-v4';
 var ASSETS = [
   './cet6_quiz.html',
   './manifest.json',
