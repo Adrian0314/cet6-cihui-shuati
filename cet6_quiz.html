@@ -9,7 +9,6 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="六级刷题">
-<link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <style>
@@ -2955,10 +2954,12 @@ function checkSpacedRepetition() {
 }
 
 // ============ INIT ============
-// 本地 file:// 打开时移除 manifest 引用（PWA 仅 https 生效，避免 CORS 报错）
-if (location.protocol === 'file:') {
-  var _manifestLink = document.querySelector('link[rel="manifest"]');
-  if (_manifestLink) _manifestLink.remove();
+// PWA manifest 动态注入：file:// 下不注入（避免 CORS 报错），https 下正常启用
+if (location.protocol !== 'file:') {
+  var _manifestLink = document.createElement('link');
+  _manifestLink.rel = 'manifest';
+  _manifestLink.href = 'manifest.json';
+  document.head.appendChild(_manifestLink);
 }
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('./sw.js').catch(function() {});
