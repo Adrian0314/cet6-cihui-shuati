@@ -21,8 +21,22 @@
   --radius:10px;--radius-sm:6px;--shadow:0 1px 3px rgba(0,0,0,0.04),0 1px 2px rgba(0,0,0,0.06);
   --border:#e5e5e5;
 }
+/* 手动强制亮色/暗色（data-theme 属性切换，覆盖系统偏好） */
+:root[data-theme="light"]{
+  --bg:#fafafa;--surface:#ffffff;--surface2:#f5f5f5;
+  --text:#1a1a1a;--text2:#737373;--accent:#7c3aed;
+  --accent2:#a78bfa;--border:#e5e5e5;
+  --shadow:0 1px 3px rgba(0,0,0,0.04),0 1px 2px rgba(0,0,0,0.06);
+}
+:root[data-theme="dark"]{
+  --bg:#0f172a;--surface:#1e293b;--surface2:#334155;
+  --text:#e2e8f0;--text2:#94a3b8;--accent:#7c3aed;
+  --accent2:#a78bfa;--border:#334155;
+  --shadow:0 4px 24px rgba(0,0,0,0.3);
+}
+/* 未手动设置时跟随系统 */
 @media(prefers-color-scheme:dark){
-  :root{
+  :root:not([data-theme]){
     --bg:#0f172a;--surface:#1e293b;--surface2:#334155;
     --text:#e2e8f0;--text2:#94a3b8;--accent:#7c3aed;
     --accent2:#a78bfa;--border:#334155;
@@ -35,7 +49,9 @@ body{
 }
 .container{max-width:720px;margin:0 auto;padding:16px}
 
-.header{text-align:center;padding:24px 16px;background:var(--surface);border-radius:var(--radius);margin-bottom:20px;border:1px solid var(--border);box-shadow:var(--shadow)}
+.header{position:relative;text-align:center;padding:24px 16px;background:var(--surface);border-radius:var(--radius);margin-bottom:20px;border:1px solid var(--border);box-shadow:var(--shadow)}
+.theme-toggle{position:absolute;top:12px;right:12px;padding:8px 12px;border:1px solid var(--border);background:var(--surface2);color:var(--text);border-radius:20px;cursor:pointer;font-size:0.95em;line-height:1;transition:background 200ms,transform 100ms}
+.theme-toggle:active{transform:scale(0.92)}
 .header h1{font-size:1.6em;color:var(--accent);margin-bottom:6px}
 .header .subtitle{color:var(--text2);font-size:0.88em}
 
@@ -287,6 +303,7 @@ body{
 <body>
 <div class="container">
 <div class="header">
+  <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()" title="切换深浅色模式" aria-label="切换深浅色模式">🌙</button>
   <h1>🎓 英语六级词汇 · 刷题系统</h1>
   <p class="subtitle">1500核心词 + 5500+全词汇 · 频率分级 · 智能混淆项 · 错题本 · 重做追踪 · 详细统计</p>
 </div>
@@ -546,6 +563,34 @@ function applyWordDetail(words) {
   });
 }
 applyWordDetail(ALL_WORDS);
+
+// ============ THEME TOGGLE (深浅色切换) ============
+var THEME_KEY = 'cet6_theme';
+function applyTheme(t) {
+  if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+  else document.documentElement.removeAttribute('data-theme');
+  var isDark = t === 'dark' || (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  var b = document.getElementById('themeBtn');
+  if (b) b.textContent = isDark ? '\u2600\uFE0F' : '\u{1F319}';
+  if (window.Chart) {
+    try { Chart.defaults.color = isDark ? '#94a3b8' : '#737373'; } catch(e) {}
+  }
+  // 图表重绘可能依赖尚未初始化的状态，失败不影响主题切换
+  if (typeof renderAllCharts === 'function') {
+    try { renderAllCharts(); } catch(e) {}
+  }
+}
+function toggleTheme() {
+  var t = document.documentElement.getAttribute('data-theme') || '';
+  var next = t === 'dark' ? 'light' : 'dark';
+  try { localStorage.setItem(THEME_KEY, next); } catch(e) {}
+  applyTheme(next);
+}
+(function() {
+  var saved = '';
+  try { saved = localStorage.getItem(THEME_KEY) || ''; } catch(e) {}
+  applyTheme(saved);
+})();
 ;// ============ MANUAL CONFUSABLE GROUPS ============
 var CONFUSABLE_GROUPS = [
   ['adapt','adept','adopt'],
