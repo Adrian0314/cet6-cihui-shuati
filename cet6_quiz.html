@@ -2955,10 +2955,12 @@ function renderBrowse() {
     var w = page[j];
     var cn = getChinese(w.meaning);
     html += '<div style=\"padding:10px 14px;border-bottom:1px solid var(--border)\">' +
-      '<div style=\"display:flex;justify-content:space-between\">' +
+      '<div style=\"display:flex;justify-content:space-between;align-items:center\">' +
       '<span><strong>' + w.word + '</strong> <span style=\"color:var(--text2);font-size:0.85em\">' + (w.pronunciation || '') + '</span></span>' +
-      '<span style=\"color:var(--text2);font-size:0.8em\">' + getPOS(w.meaning) + '</span></div>' +
+      '<span style=\"display:flex;gap:8px;align-items:center\"><span style=\"color:var(--text2);font-size:0.8em\">' + getPOS(w.meaning) + '</span>' +
+      '<button class=\"ctrl-btn\" id=\"bdbtn-' + w.word + '\" style=\"padding:3px 10px;font-size:0.78em\" onclick=\"toggleBrowseDetail(&quot;' + w.word + '&quot;)\">\u67E5\u8BE2</button></span></div>' +
       '<div style=\"color:var(--text2);font-size:0.85em;margin-top:2px\">' + cn + '</div>' +
+      '<div id=\"bd-' + w.word + '\" style=\"display:none\"></div>' +
       '</div>';
   }
   if (filtered.length > _browsePageSize) {
@@ -2972,6 +2974,28 @@ function renderBrowse() {
       '</div>';
   }
   list.innerHTML = html || '<p style=\"text-align:center;color:var(--text2);padding:40px;\">\u{1F50D} \u6CA1\u6709\u5339\u914D\u7684\u5355\u8BCD</p>';
+}
+
+// ============ BROWSE WORD DETAIL ============
+function toggleBrowseDetail(word) {
+  var box = document.getElementById('bd-' + word);
+  var btn = document.getElementById('bdbtn-' + word);
+  if (!box || !btn) return;
+  if (box.style.display === 'none') {
+    if (!box.innerHTML) {
+      // 按单词拼写精确匹配（不能用 id：全词库与核心词库 id 编号体系不同会冲突）
+      var w = null;
+      for (var i = 0; i < FULL_WORDS.length; i++) {
+        if (FULL_WORDS[i].word === word) { w = FULL_WORDS[i]; break; }
+      }
+      box.innerHTML = (w ? getWordDetailHTML(w) : '') || '<div style=\"color:var(--text2);font-size:0.85em;padding:8px 0\">\u6682\u65E0\u8BE6\u89E3</div>';
+    }
+    box.style.display = 'block';
+    btn.textContent = '\u6536\u8D77';
+  } else {
+    box.style.display = 'none';
+    btn.textContent = '\u67E5\u8BE2';
+  }
 }
 
 // ============ SPACED REPETITION ============
