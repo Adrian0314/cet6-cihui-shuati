@@ -310,6 +310,7 @@ body{
       <div class="rb">　<code>空格</code> — 选择题模式：跳过当前题目（等同于点"不会，跳过"）</div>
       <div class="rb">　<code>Esc</code> — 取消输入框焦点，回到按钮导航</div>
       <div class="rb"><strong>📡 离线说明：</strong>所有功能（含统计图表）均已内置，无需网络即可使用。用手机浏览器打开本页后，选择「添加到主屏幕」，即可像 App 一样全屏使用（需通过 https 地址访问，本地双击打开不支持安装）。</div>
+      <div class="rb"><strong>🎯 每日目标：</strong>统计页可自选每日目标（做题+复习总数），达标后做题页会弹出庆祝提示；学习热力图的深绿色格子即代表"当日达标"。</div>
       <div class="rb"><strong>🧠 间隔复习：</strong>系统按间隔重复算法自动调度每个单词的复习时间——作答后答对的词复习间隔翻倍（1→2→4→8→16→30天封顶），答错或跳过的词间隔重置为1天。打开网页时若有到期单词，做题页顶部会显示复习横幅，点击"开始复习"一键清债；复习采用四选一快刷，复习中跳过视同答错（明天必来）。复习只从功能上线后的作答开始计，历史数据不迁移。</div>
       <div class="rb" style="text-align:center;margin-top:8px;"><span style="color:var(--accent2);cursor:pointer;text-decoration:underline;" onclick="document.getElementById('rulesCard').classList.toggle('collapsed')">点击收起 ▲</span></div>
     </div>
@@ -402,7 +403,14 @@ body{
 </div>
 
 <div id="tab-stats-page" style="display:none;">
-  <div class="stats-sec"><h2>📊 总体统计</h2><div class="sg" id="overallStats"></div><div class="ctrl-row"><button class="ctrl-btn danger" id="resetStatsBtn">🔄 重置统计数据</button></div></div>
+  <div class="stats-sec"><h2>📊 总体统计</h2><div class="sg" id="overallStats"></div>
+    <div class="goal-set-row" style="display:flex;align-items:center;gap:8px;margin:12px 0;flex-wrap:wrap;">
+      <span style="color:var(--text2);font-size:0.9em;">🎯 每日目标（做题/复习总数）：</span>
+      <input type="number" id="goalInput" min="1" max="1000" style="width:72px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);" onkeydown="if(event.key==='Enter')setDailyGoal()">
+      <button class="ctrl-btn" onclick="setDailyGoal()">保存目标</button>
+      <span id="goalMsg" style="color:var(--green);font-size:0.85em;"></span>
+    </div>
+    <div class="ctrl-row"><button class="ctrl-btn danger" id="resetStatsBtn">🔄 重置统计数据</button></div></div>
   <div class="stats-sec"><h2>📈 分模式统计</h2><div class="sg" id="modeStats"></div></div>
   <div class="stats-sec"><h2>📅 近7天统计</h2><div class="sg" id="weeklyStats"></div></div>
   <div class="stats-sec"><h2>🔥 最近活动记录</h2><div class="panel-b" id="recentHistory" style="max-height:300px;"></div></div>
@@ -1774,6 +1782,9 @@ function renderStatsPage() {
   var today = new Date().toISOString().split('T')[0];
   var td = st.dailyHistory[today] || { attempts: 0, correct: 0, wrong: 0 };
   var todayR = td.attempts > 0 ? Math.round(td.correct / td.attempts * 100) : 0;
+  // 同步目标输入框
+  var goalInp = document.getElementById('goalInput');
+  if (goalInp && parseInt(goalInp.value) !== (state.dailyGoal || 30)) goalInp.value = state.dailyGoal || 30;
 
   document.getElementById('overallStats').innerHTML =
     '<div class="sdc"><div class="sdv" style="color:var(--accent2)">' + getActivePool().length + '</div><div class="sdl">当前词库</div></div>' +
@@ -1951,6 +1962,23 @@ function renderAllCharts() {
   }
 }
 
+function setDailyGoal() {
+  var inp = document.getElementById('goalInput');
+  if (!inp) return;
+  var v = parseInt(inp.value);
+  if (isNaN(v) || v < 1) { alert('请输入至少 1 的数值'); return; }
+  if (v > 1000) { v = 1000; }
+  state.dailyGoal = v;
+  saveState();
+  renderStatsPage();
+  renderHeatmapChart();
+  var msg = document.getElementById('goalMsg');
+  if (msg) {
+    msg.textContent = '✅ 已保存：每日 ' + v + ' 题（做题+复习都计入）';
+    setTimeout(function() { msg.textContent = ''; }, 3000);
+  }
+}
+
 function renderHeatmapChart() {
   var canvas = document.getElementById('heatmapChart');
   if (!canvas) return;
@@ -1996,10 +2024,12 @@ function renderHeatmapChart() {
     var x = startX + col * (cellSize + cellGap);
     var y = 30 + row * (cellSize + cellGap);
 
+    // 颜色档位跟随每日目标：0 / 未达1/3 / 未达标 / 达标（深绿）
+    var goal = state.dailyGoal || 30;
     var color = emptyColor;
     if (count > 0) color = '#bbf7d0';
-    if (count > 10) color = '#4ade80';
-    if (count > 30) color = '#16a34a';
+    if (count >= Math.ceil(goal / 3)) color = '#4ade80';
+    if (count >= goal) color = '#16a34a';
 
     ctx.fillStyle = color;
     ctx.fillRect(x, y, cellSize, cellSize);
