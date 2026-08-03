@@ -253,7 +253,11 @@ body{
 .toggle-fs-btn{position:absolute;top:10px;right:10px;padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text2);cursor:pointer;font-size:0.78em;transition:transform 80ms cubic-bezier(0.34,1.56,0.64,1),border-color 150ms,background 150ms;z-index:10}
 .toggle-fs-btn:hover{border-color:var(--accent);color:var(--accent)}
 .toggle-fs-btn:active{transform:scale(0.96)}
-.quiz-card.fullscreen{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:200;overflow-y:auto;border-radius:0;margin:0}
+.quiz-card.fullscreen{position:fixed;top:0;left:0;width:100vw;height:100vh;height:100dvh;z-index:200;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;border-radius:0;margin:0;padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 96px)}
+/* 全屏时"下一题"固定屏幕底部，始终可见 */
+.quiz-card.fullscreen .next-btn{position:fixed;bottom:calc(env(safe-area-inset-bottom, 0px) + 14px);left:50%;transform:translateX(-50%);z-index:202;width:calc(100% - 48px);max-width:420px;display:none}
+.quiz-card.fullscreen .next-btn.show{display:block}
+.quiz-card.fullscreen .skip-btn{position:fixed;bottom:calc(env(safe-area-inset-bottom, 0px) + 74px);left:50%;transform:translateX(-50%);z-index:202;margin:0!important;white-space:nowrap}
 .quiz-card.fullscreen .toggle-fs-btn{position:fixed;top:12px;right:12px;z-index:201}
 
 /* === TOAST === */
