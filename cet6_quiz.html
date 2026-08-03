@@ -2720,13 +2720,36 @@ function showOnboarding() {
 }
 
 // ============ TTS ============
+var _pendingSpeak = null;
 function speakWord(text) {
-  if (!window.speechSynthesis) return;
+  if (!window.speechSynthesis) { alert('当前浏览器不支持语音朗读'); return; }
+  // 首次调用前先触发语音列表加载（部分浏览器需要，否则无声）
+  var voices = window.speechSynthesis.getVoices();
+  if (voices.length === 0) {
+    // 语音列表未就绪：等加载完成后只读一次，避免重复朗读
+    _pendingSpeak = text;
+    return;
+  }
   window.speechSynthesis.cancel();
   var u = new SpeechSynthesisUtterance(text);
-  u.lang = 'en-US';
+  // 显式选择第一个英语音色，避免默认音色缺失导致无声
+  var enVoice = null;
+  for (var i = 0; i < voices.length; i++) {
+    if (voices[i].lang && voices[i].lang.toLowerCase().indexOf('en') === 0) { enVoice = voices[i]; break; }
+  }
+  if (enVoice) { u.voice = enVoice; u.lang = enVoice.lang; }
+  else { u.lang = 'en-US'; }
   u.rate = 0.85;
   window.speechSynthesis.speak(u);
+}
+// 页面加载时预加载语音列表；列表就绪后补读等待中的朗读
+if (window.speechSynthesis) {
+  try {
+    window.speechSynthesis.getVoices();
+    window.speechSynthesis.onvoiceschanged = function() {
+      if (_pendingSpeak) { var t = _pendingSpeak; _pendingSpeak = null; speakWord(t); }
+    };
+  } catch(e) {}
 }
 
 // ============ DAILY GOAL ============
