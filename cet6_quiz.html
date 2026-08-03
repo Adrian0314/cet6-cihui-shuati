@@ -2737,37 +2737,37 @@ function renderBrowse() {
 
 // ============ SPACED REPETITION ============
 function checkSpacedRepetition() {
-  var intervals = [1, 2, 4, 7, 15];
-  var now = new Date();
-  var wh = state.wrongHistory || [];
-  var seen = {}, due = [];
-  for (var i = 0; i < wh.length; i++) {
-    var h = wh[i];
-    if (seen[h.wordId]) continue;
-    seen[h.wordId] = true;
-    var wrongDate = new Date(h.timestamp);
-    var daysAgo = Math.floor((now - wrongDate) / 86400000);
-    for (var j = 0; j < intervals.length; j++) {
-      if (daysAgo >= intervals[j] && daysAgo < intervals[j] + 2) {
-        var w = getWord(h.wordId);
-        if (w) due.push({ word: w.word, meaning: getChinese(w.meaning), daysAgo: daysAgo, interval: intervals[j] });
-        break;
-      }
-    }
-  }
+  if (quizActive) return; // 做题/复习中不弹窗
+  var due = getDueWordIds();
   if (due.length === 0) return;
-  var lines = due.slice(0, 5).map(function(d) { return d.word + ' (' + d.daysAgo + '天前答错, 应' + d.interval + '天后复习)'; }).join('\n');
+  var st = state.stats;
+  var now = Date.now();
+  var dueInfo = due.slice(0, 5).map(function(id) {
+    var wa = st.wordAttempts[id] || {};
+    var w = getWord(id);
+    var daysAgo = wa.lastTime ? Math.floor((now - wa.lastTime) / 86400000) : 0;
+    return (w ? w.word : '?') + ' (' + daysAgo + '天前, 间隔' + (wa.interval || 1) + '天)';
+  });
+  var lines = dueInfo.join('\n');
   if (due.length > 5) lines += '\n...还有 ' + (due.length - 5) + ' 个单词';
   var modal = document.createElement('div');
+  modal.id = 'reviewReminderModal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:400;display:flex;align-items:center;justify-content:center;';
   modal.innerHTML = '<div style="background:var(--surface);padding:24px;border-radius:12px;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,0.3);">' +
     '<h3>\u{1F514} \u590D\u4E60\u63D0\u9192</h3>' +
-    '<p style="color:var(--text2);margin:12px 0;">以\u4E0B\u9519\u8BEF\u5355\u8BCD\u5EFA\u8BAE\u4ECA\u5929\u590D\u4E60\uFF1A</p>' +
+    '<p style="color:var(--text2);margin:12px 0;">\u4EE5\u4E0B\u5355\u8BCD\u5DF2\u5230\u590D\u4E60\u65F6\u95F4\uFF1A</p>' +
     '<pre style="background:var(--surface2);padding:12px;border-radius:6px;font-size:0.85em;max-height:200px;overflow-y:auto;">' + lines + '</pre>' +
     '<div style="margin-top:16px;text-align:right;">' +
-    '<button class="ctrl-btn accent" onclick="this.closest(\'div\').parentElement.remove();startRetryQuiz(currentMode)">\u73B0\u5728\u590D\u4E60</button>' +
-    '<button class="ctrl-btn" style="margin-left:8px;" onclick="this.closest(\'div\').parentElement.remove()">\u7A0D\u540E</button></div></div>';
+    '<button class="ctrl-btn accent" id="reviewReminderGo">\u73B0\u5728\u590D\u4E60</button>' +
+    '<button class="ctrl-btn" style="margin-left:8px;" id="reviewReminderLater">\u7A0D\u540E</button></div></div>';
   document.body.appendChild(modal);
+  document.getElementById('reviewReminderGo').addEventListener('click', function() {
+    modal.remove(); // 关键修复：移除整个遮罩（含弹窗）
+    startReview();
+  });
+  document.getElementById('reviewReminderLater').addEventListener('click', function() {
+    modal.remove(); // 关键修复：移除整个遮罩（含弹窗）
+  });
 }
 
 // ============ INIT ============
