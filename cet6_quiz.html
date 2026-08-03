@@ -304,6 +304,7 @@ body{
       <div class="rb"><strong>🎯 频率筛选：</strong>在全词汇模式下，可多选频率级别进行筛选（默认选中5、4、3级）。统计页面会按频率级别展示正确率。</div>
       <div class="rb"><strong>⌨️ 电脑端快捷键：</strong></div>
       <div class="rb">　<code>1</code> <code>2</code> <code>3</code> <code>4</code> — 选择题模式：直接选择对应选项</div>
+      <div class="rb">　<code>←</code> <code>→</code> — 做题时随时切换上一题 / 下一题；顶部导航框可输入题号直接跳转</div>
       <div class="rb">　<code>Tab</code> — 在按钮之间切换焦点（提交→跳过→全屏→下一题）</div>
       <div class="rb">　<code>Enter</code> — 确认当前焦点按钮 / 提交默写答案 / 进入下一题</div>
       <div class="rb">　<code>空格</code> — 选择题模式：跳过当前题目（等同于点"不会，跳过"）</div>
@@ -960,7 +961,10 @@ function nowStr() {
 var quizState = {
   mode: 'cn2en',
   isRetry: false,
-  remaining: [],
+  ids: [],
+  pos: -1,
+  questions: [],
+  answers: {},
   done: 0,
   current: null
 };
@@ -972,11 +976,16 @@ var quizActive = false;
 function buildQuiz(mode, wordPool) {
   var pool = wordPool || getActivePool();
   var ids = pool.map(function(w) { return w.id; });
+  // 过滤无效 id（数据异常保护）
+  ids = ids.filter(function(id) { return getWord(id) !== null; });
   quizState = {
     mode: mode,
     isRetry: !!wordPool,
     isReview: false,
-    remaining: shuffle(ids),
+    ids: shuffle(ids),
+    pos: -1,
+    questions: [],
+    answers: {},
     done: 0,
     current: null,
     poolType: currentPool
@@ -1039,33 +1048,66 @@ function generateOneQuestion(word) {
 }
 
 function advanceQuestion() {
-  if (!quizActive || quizState.remaining.length === 0) {
-    finishQuiz();
-    return;
+  if (!quizActive) return;
+  if (quizState.pos >= quizState.ids.length - 1) { finishQuiz(); return; }
+  goToQuestion(quizState.pos + 1);
+}
+
+function goToQuestion(pos) {
+  if (!quizActive) return;
+  if (pos < 0 || pos >= quizState.ids.length) return;
+  quizState.pos = pos;
+  if (!quizState.questions[pos]) {
+    var word = getWord(quizState.ids[pos]);
+    if (!word) {
+      // 数据缺失题：标记跳过，前进到下一题
+      quizState.answers[pos] = 'skip';
+      if (pos >= quizState.ids.length - 1) { finishQuiz(); return; }
+      advanceQuestion();
+      return;
+    }
+    quizState.questions[pos] = generateOneQuestion(word);
   }
-
-  var nextId = quizState.remaining.pop();
-  var word = getWord(nextId);
-  if (!word) { advanceQuestion(); return; }
-
-  quizState.current = generateOneQuestion(word);
+  quizState.current = quizState.questions[pos];
   renderQuizCard();
+}
+
+function prevQuestion() {
+  if (quizState.pos > 0) goToQuestion(quizState.pos - 1);
+}
+
+function jumpToQuestion(n) {
+  var idx = parseInt(n);
+  if (!isNaN(idx) && idx >= 1 && idx <= quizState.ids.length) goToQuestion(idx - 1);
+}
+
+function isAnswered(pos) {
+  return quizState.answers.hasOwnProperty(pos);
+}
+
+function isAnsweredCorrectly(pos) {
+  var a = quizState.answers[pos];
+  if (a === 'skip') return false;
+  if (typeof a === 'object' && a !== null) return !!a.correct; // 默写
+  var q = quizState.questions[pos];
+  return q !== null && a === q.correctIndex;
 }
 
 function finishQuiz() {
   quizActive = false;
-  var total = quizState.done;
+  var total = quizState.ids.length;
+  var done = quizState.done;
   var card = document.getElementById('quizCard');
   if (quizState.isReview) {
     var rc = quizState.reviewCorrect || 0;
-    var rate = total > 0 ? Math.round(rc / total * 100) : 0;
-    card.innerHTML = '<div class="empty"><div class="ei">🧠</div><p>复习完成！共 ' + total + ' 题，答对 ' + rc + ' 题（' + rate + '%）</p>' +
+    var rate = done > 0 ? Math.round(rc / done * 100) : 0;
+    card.innerHTML = '<div class="empty"><div class="ei">🧠</div><p>复习完成！共 ' + total + ' 题，已答 ' + done + ' 题，答对 ' + rc + ' 题（' + rate + '%）</p>' +
       '<p style="font-size:0.85em;color:var(--text2);margin-top:6px;">答对间隔翻倍，答错/跳过的单词明天会再次出现</p></div>';
   } else {
-    card.innerHTML = '<div class="empty"><div class="ei">\u{1F389}</div><p>本轮题目全部完成！共 ' + total + ' 题</p></div>';
+    card.innerHTML = '<div class="empty"><div class="ei">\u{1F389}</div><p>本轮题目全部完成！共 ' + total + ' 题，已答 ' + done + ' 题</p></div>';
   }
   document.getElementById('startBtn').style.display = 'inline-block';
-  document.getElementById('startBtn').textContent = quizState.isReview ? '▶ 再来一轮' : '▶ 再来一轮';
+  document.getElementById('startBtn').textContent = '▶ 再来一轮';
   document.getElementById('retryInfo').classList.remove('show');
   quizState.isRetry = false;
   quizState.isReview = false;
@@ -1102,7 +1144,10 @@ function startReview() {
     mode: 'en2cn',
     isRetry: false,
     isReview: true,
-    remaining: shuffle(due),
+    ids: shuffle(due),
+    pos: -1,
+    questions: [],
+    answers: {},
     done: 0,
     current: null,
     reviewCorrect: 0,
@@ -1120,8 +1165,11 @@ function saveSuspendedQuiz() {
     mode: quizState.mode,
     isRetry: quizState.isRetry,
     isReview: !!quizState.isReview,
-    remaining: quizState.remaining.slice(),
+    ids: quizState.ids.slice(),
+    pos: quizState.pos,
+    answers: Object.assign({}, quizState.answers),
     done: quizState.done,
+    reviewCorrect: quizState.reviewCorrect || 0,
     poolType: quizState.poolType || currentPool,
     currentId: quizState.current ? quizState.current.word.id : null
   };
@@ -1133,12 +1181,13 @@ function saveSuspendedQuiz() {
 
 function checkSuspendedQuiz() {
   var sq = state.suspendedQuiz;
-  if (sq && sq.remaining && sq.remaining.length > 0) {
+  var remaining = sq ? (sq.ids || (sq.remaining || [])).length : 0;
+  if (sq && remaining > 0) {
     document.getElementById('savedInfo').textContent =
       '暂存的做题进度 — ' + (sq.poolType === 'full' ? '全词汇' : '1500核心词') +
       ' · ' + (sq.mode === 'cn2en' ? '看中文选英文' : '看英文选中文') +
       (sq.isRetry ? '（重做模式）' : '') +
-      ' — 已完成' + sq.done + '题，剩余' + sq.remaining.length + '题';
+      ' — 已完成' + (sq.done || 0) + '题，剩余' + remaining + '题';
     document.getElementById('savedBar').classList.add('show');
     currentMode = sq.mode;
     document.querySelectorAll('.mode-btn[data-mode]').forEach(function(b) {
@@ -1150,16 +1199,27 @@ function checkSuspendedQuiz() {
 function resumeQuiz() {
   var sq = state.suspendedQuiz;
   if (!sq) return;
+  if (!sq.ids || sq.ids.length === 0) {
+    // 旧版挂起数据无法恢复（无题目列表），丢弃
+    state.suspendedQuiz = null;
+    saveState();
+    document.getElementById('savedBar').classList.remove('show');
+    alert('暂存的做题进度已失效，请重新开始');
+    return;
+  }
   currentPool = sq.poolType || 'core';
   updatePoolUI();
   quizState = {
     mode: sq.mode,
     isRetry: sq.isRetry,
     isReview: !!sq.isReview,
-    remaining: sq.remaining.slice(),
-    done: sq.done,
+    ids: sq.ids.slice(),
+    pos: -1,
+    questions: [],
+    answers: Object.assign({}, sq.answers || {}),
+    done: sq.done || 0,
     current: null,
-    reviewCorrect: sq.isReview ? 0 : 0,
+    reviewCorrect: sq.reviewCorrect || 0,
     poolType: sq.poolType || 'core'
   };
   quizActive = true;
@@ -1167,7 +1227,7 @@ function resumeQuiz() {
   saveState();
   document.getElementById('savedBar').classList.remove('show');
   document.getElementById('retryInfo').classList.toggle('show', quizState.isRetry);
-  advanceQuestion();
+  goToQuestion(typeof sq.pos === 'number' ? sq.pos : 0);
   renderAll();
 }
 
@@ -1190,7 +1250,12 @@ function renderQuizCard() {
   var mode = quizState.mode;
   var word = q.word;
   var labels = ['A', 'B', 'C', 'D'];
-  var total = quizState.done + quizState.remaining.length + 1;
+  var total = quizState.ids.length;
+  var pos = quizState.pos;
+  var answered = isAnswered(pos);
+  var answerVal = quizState.answers[pos];
+  var isSkip = answered && answerVal === 'skip';
+  var correctHere = isAnsweredCorrectly(pos);
 
   var qTextRaw = (mode === 'cn2en') ? getChinese(word.meaning) : word.word;
   var qPOS = (mode === 'cn2en') ? getPOS(word.meaning) : '';
@@ -1200,29 +1265,60 @@ function renderQuizCard() {
   var typeLabel = (currentQuizType === 'dictation') ? ' · 默写' : '';
   var prefix = quizState.isReview ? '🧠 [复习] ' : (quizState.isRetry ? '\u{1F504} [重做] ' : '');
 
+  // 导航条：上一题 / 题号跳转 / 下一题
+  var navBar =
+    '<div class="quiz-nav" style="display:flex;align-items:center;justify-content:center;gap:8px;margin:2px 0 12px;">' +
+    '<button class="ctrl-btn" id="prevQBtn" onclick="prevQuestion()" ' + (pos <= 0 ? 'disabled style="opacity:0.4"' : '') + '>◀ 上一题</button>' +
+    '<span style="color:var(--text2);font-size:0.85em;white-space:nowrap;">第 <input type="number" id="jumpInput" value="' + (pos + 1) + '" min="1" max="' + total + '" style="width:56px;padding:3px 4px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);text-align:center;font-size:0.9em;" onkeydown="if(event.key===\'Enter\'){jumpToQuestion(this.value);}"> / ' + total + ' 题</span>' +
+    '<button class="ctrl-btn" id="nextQBtn" onclick="advanceQuestion()">下一题 ▶</button>' +
+    '</div>';
+
   if (currentQuizType === 'dictation') {
     var placeholder = (mode === 'cn2en') ? '输入英文单词...' : '输入中文意思...';
+    var dictInputHTML = '';
+    if (answered && typeof answerVal === 'object' && answerVal !== null) {
+      // 已提交的默写：显示原答案 + 判定
+      var inpCls = answerVal.correct ? 'result-green' : (answerVal.close ? 'result-orange' : 'result-red');
+      dictInputHTML =
+        '<input type="text" class="dict-input ' + inpCls + '" value="' + answerVal.text.replace(/"/g, '&quot;') + '" disabled style="opacity:0.9">' +
+        '<div class="feedback show ' + (answerVal.correct ? 'ok' : (answerVal.close ? 'close' : 'fail')) + '">' +
+        '<h4>' + (answerVal.correct ? '\u2705 \u6B63\u786E\uFF01' : (answerVal.close ? '\uD83D\uDFE1 \u63A5\u8FD1\u6B63\u786E' : '\u274C \u9519\u8BEF')) + '</h4>' +
+        '<div style="margin:6px 0;"><b>\u4F60\u7684\u7B54\u6848\uFF1A</b>' + answerVal.text + '</div>' +
+        '<div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + ((mode === 'cn2en') ? word.word : getChinese(word.meaning)) + '</div>' +
+        '</div>';
+    } else if (isSkip) {
+      dictInputHTML =
+        '<input type="text" class="dict-input result-orange" value="' + ((mode === 'cn2en') ? word.word : getChinese(word.meaning)) + '" disabled style="opacity:0.9">' +
+        '<div class="feedback show close"><h4>\u{1F6AA} \u5DF2\u8DF3\u8FC7</h4><div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + ((mode === 'cn2en') ? word.word : getChinese(word.meaning)) + '</div></div>';
+    } else {
+      dictInputHTML =
+        '<input type="text" class="dict-input" id="dictInput" placeholder="' + placeholder + '" autocomplete="off" autofocus>' +
+        '<button class="dict-submit-btn" id="dictSubmitBtn" onclick="handleDictationSubmit()">提交</button>' +
+        '<button class="skip-btn" id="skipBtn" onclick="handleSkip()" style="display:block;margin:8px auto 0;padding:8px 20px;background:transparent;border:1px dashed var(--border);color:var(--text2);border-radius:20px;cursor:pointer;font-size:0.85em;">不会，跳过</button>' +
+        '<div class="feedback" id="feedback"></div>';
+    }
+
     card.innerHTML =
       '<button class="toggle-fs-btn" id="toggleFsBtn" onclick="(function(e){e.stopPropagation();toggleFullscreen();})(event)">⛶ 全屏</button>' +
-      '<div class="q-label">' + prefix + '第 ' + (quizState.done + 1) + ' / ' + total + ' 题 · ' + modeLabel + typeLabel + '</div>' +
+      '<div class="q-label">' + prefix + '第 ' + (pos + 1) + ' / ' + total + ' 题 · ' + modeLabel + typeLabel + '</div>' +
+      navBar +
       '<div class="q-word" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qText + '</div>' +
       (qPron ? '<div class="q-pron" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qPron + ' <span onclick="speakWord(\'' + word.word.replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:1.2em;" title="朗读发音">\u{1F50A}</span></div>' : '') +
       (mode === 'en2cn' && !qPron ? '<div style="margin-bottom:16px"><span onclick="speakWord(\'' + word.word.replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:1.1em;padding:4px 10px;background:var(--surface2);border-radius:20px;border:1px solid var(--border);display:inline-block;" title="朗读发音">\u{1F50A} 朗读</span></div>' : '') +
-      '<input type="text" class="dict-input" id="dictInput" placeholder="' + placeholder + '" autocomplete="off" autofocus>' +
-      '<button class="dict-submit-btn" id="dictSubmitBtn" onclick="handleDictationSubmit()">提交</button>' +
-      '<button class="skip-btn" id="skipBtn" onclick="handleSkip()" style="display:block;margin:8px auto 0;padding:8px 20px;background:transparent;border:1px dashed var(--border);color:var(--text2);border-radius:20px;cursor:pointer;font-size:0.85em;">不会，跳过</button>' +
-      '<div class="feedback" id="feedback"></div>' +
-      '<button class="next-btn" id="nextBtn" onclick="advanceQuestion()">下一题 →</button>';
+      dictInputHTML +
+      '<button class="next-btn" id="nextBtn" onclick="advanceQuestion()" ' + (answered || isSkip ? 'class="next-btn show"' : 'class="next-btn"') + '>下一题 →</button>';
 
-    setTimeout(function() {
-      var inp = document.getElementById('dictInput');
-      if (inp) {
-        inp.focus();
-        inp.addEventListener('keydown', function(e) {
-          if (e.key === 'Enter') handleDictationSubmit();
-        });
-      }
-    }, 50);
+    if (!answered && !isSkip) {
+      setTimeout(function() {
+        var inp = document.getElementById('dictInput');
+        if (inp) {
+          inp.focus();
+          inp.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') handleDictationSubmit();
+          });
+        }
+      }, 50);
+    }
   } else {
     var optHTML = '';
     var delays = [0, 60, 120, 180];
@@ -1230,20 +1326,47 @@ function renderQuizCard() {
       var o = q.options[i];
       var txt = (mode === 'cn2en') ? o.word : getChinese(o.meaning);
       var extra = (mode === 'cn2en' && o.pronunciation) ? ' <span style="color:var(--text2);font-size:0.85em;">' + o.pronunciation + '</span>' : '';
-      optHTML += '<button class="opt-btn opt-entering" data-index="' + i + '" id="opt-' + i + '" style="animation-delay:' + delays[i] + 'ms" aria-label="' + labels[i] + ': ' + txt.replace(/"/g, '&quot;') + '">' +
+      var cls = 'opt-btn';
+      if (answered || isSkip) {
+        cls += i === q.correctIndex ? ' correct' : '';
+        if (typeof answerVal === 'number' && i === answerVal && i !== q.correctIndex) cls += ' wrong';
+      } else {
+        cls += ' opt-entering';
+      }
+      optHTML += '<button class="' + cls + '" data-index="' + i + '" id="opt-' + i + '" style="animation-delay:' + delays[i] + 'ms"' +
+        (answered || isSkip ? ' disabled' : '') +
+        ' aria-label="' + labels[i] + ': ' + txt.replace(/"/g, '&quot;') + '">' +
         '<span class="ol" aria-hidden="true">' + labels[i] + '</span><span>' + txt + extra + '</span></button>';
+    }
+
+    var fbHTML = '';
+    if (answered || isSkip) {
+      var confHTML = '';
+      var confusables = getConfusableDisplay(word, mode);
+      if (confusables.length > 0) {
+        confHTML = '<div class="fb-conf"><strong>⚠️ 易混淆词：</strong>';
+        confusables.forEach(function(c) {
+          confHTML += '<div class="ci">• <strong>' + c.word + '</strong> — ' + c.meaning + '</div>';
+        });
+        confHTML += '</div>';
+      }
+      fbHTML = '<div class="feedback show ' + (isSkip ? 'close' : (correctHere ? 'ok' : 'fail')) + '">' +
+        '<h4>' + (isSkip ? '\u{1F6AA} \u5DF2\u8DF3\u8FC7' : (correctHere ? '\u2705 \u56DE\u7B54\u6B63\u786E\uFF01' : '\u274C \u56DE\u7B54\u9519\u8BEF')) + '</h4>' +
+        '<div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + ((mode === 'cn2en') ? word.word : getChinese(word.meaning)) + '</div>' +
+        confHTML + '</div>';
     }
 
     card.innerHTML =
       '<button class="toggle-fs-btn" id="toggleFsBtn" onclick="(function(e){e.stopPropagation();toggleFullscreen();})(event)">⛶ 全屏</button>' +
-      '<div class="q-label">' + prefix + '第 ' + (quizState.done + 1) + ' / ' + total + ' 题 · ' + modeLabel + '</div>' +
+      '<div class="q-label">' + prefix + '第 ' + (pos + 1) + ' / ' + total + ' 题 · ' + modeLabel + '</div>' +
+      navBar +
       '<div class="q-word" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qText + '</div>' +
       (qPron ? '<div class="q-pron" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qPron + '</div>' : '') +
       (mode === 'en2cn' ? '<div style="margin-bottom:16px"><span onclick="speakWord(\'' + word.word.replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:1.05em;padding:4px 12px;background:var(--surface2);border-radius:20px;border:1px solid var(--border);display:inline-block;" title="朗读发音">\u{1F50A} 朗读</span></div>' : '') +
       '<div class="options">' + optHTML + '</div>' +
-      '<button class="skip-btn" id="skipBtn" onclick="handleSkip()" style="display:block;margin:12px auto 0;padding:8px 20px;background:transparent;border:1px dashed var(--border);color:var(--text2);border-radius:20px;cursor:pointer;font-size:0.85em;">不会，跳过</button>' +
-      '<div class="feedback" id="feedback"></div>' +
-      '<button class="next-btn" id="nextBtn" onclick="advanceQuestion()">下一题 →</button>';
+      (answered || isSkip ? '' : '<button class="skip-btn" id="skipBtn" onclick="handleSkip()" style="display:block;margin:12px auto 0;padding:8px 20px;background:transparent;border:1px dashed var(--border);color:var(--text2);border-radius:20px;cursor:pointer;font-size:0.85em;">不会，跳过</button>') +
+      fbHTML +
+      '<button class="next-btn' + (answered || isSkip ? ' show' : '') + '" id="nextBtn" onclick="advanceQuestion()">下一题 →</button>';
 
     card.querySelectorAll('.opt-btn').forEach(function(btn) {
       btn.addEventListener('click', function() {
@@ -1321,6 +1444,7 @@ function recordStat(word, mode, isCorrect, isClose, isDictation) {
 
 function handleDictationSubmit() {
   if (!quizActive || !quizState.current) return;
+  if (isAnswered(quizState.pos)) return; // 已答题不可重复作答
 
   var q = quizState.current;
   var word = q.word;
@@ -1376,6 +1500,7 @@ function handleDictationSubmit() {
   }
 
   quizState.done++;
+  quizState.answers[quizState.pos] = { text: userAnswer, correct: isCorrect, close: isClose };
   recordStat(word, mode, isCorrect, isClose, true);
 
   var correctAnswerText = (mode === 'cn2en') ? word.word : getChinese(word.meaning);
@@ -1431,6 +1556,7 @@ function handleDictationSubmit() {
 }
 function handleAnswer(chosenIndex) {
   if (!quizActive || !quizState.current) return;
+  if (isAnswered(quizState.pos)) return; // 已答题不可重复作答
 
   var q = quizState.current;
   var word = q.word;
@@ -1440,6 +1566,7 @@ function handleAnswer(chosenIndex) {
   var labels = ['A', 'B', 'C', 'D'];
 
   quizState.done++;
+  quizState.answers[quizState.pos] = chosenIndex;
   if (quizState.isReview) quizState.reviewCorrect = (quizState.reviewCorrect || 0) + (isCorrect ? 1 : 0);
 
   // Disable buttons & highlight
@@ -2625,11 +2752,13 @@ function checkDailyGoal() {
 // ============ SKIP & KEYBOARD ============
 function handleSkip() {
   if (!quizActive || !quizState.current) return;
+  if (isAnswered(quizState.pos)) return; // 已跳过不可再操作
   var q = quizState.current;
   var word = q.word;
   var mode = quizState.mode;
 
   quizState.done++;
+  quizState.answers[quizState.pos] = 'skip';
   state.stats.totalSkip = (state.stats.totalSkip || 0) + 1;
   state.stats.dictation.skip = (state.stats.dictation.skip || 0) + 1;
   state.stats[mode + '_dict'].skip = (state.stats[mode + '_dict'].skip || 0) + 1;
@@ -2675,7 +2804,9 @@ document.addEventListener('keydown', function(e) {
     else if (e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); handleSkip(); }
     return;
   }
-  if (e.key >= '1' && e.key <= '4' && currentQuizType === 'choice') {
+  if (e.key === 'ArrowLeft') { e.preventDefault(); prevQuestion(); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); advanceQuestion(); }
+  else if (e.key >= '1' && e.key <= '4' && currentQuizType === 'choice') {
     var idx = parseInt(e.key) - 1;
     var btn = document.getElementById('opt-' + idx);
     if (btn && !btn.disabled) { handleAnswer(idx); e.preventDefault(); }
