@@ -148,3 +148,22 @@ test('heatmap renders with range switch and tooltip', async ({ page }) => {
   await page.locator('h2:has-text("学习热力图")').click();
   await expect(page.locator('#heatmapTip')).toBeHidden();
 });
+
+test('multi-POS words render uniform POS badges', async ({ page }) => {
+  // splitMeaning 解析逻辑：多词性 / 联合词性 / 中间夹音标
+  const r1 = await page.evaluate(() => splitMeaning('n.手指 v.告发，拨弄'));
+  expect(r1).toEqual([{ pos: 'n.', cn: '手指' }, { pos: 'v.', cn: '告发，拨弄' }]);
+  const r2 = await page.evaluate(() => splitMeaning('v./n. 辩论，讨论'));
+  expect(r2).toEqual([{ pos: 'v./n.', cn: '辩论，讨论' }]);
+  const r3 = await page.evaluate(() => splitMeaning("n.影响 /ɪm'pækt/ v.有影响"));
+  expect(r3).toEqual([{ pos: 'n.', cn: '影响' }, { pos: 'v.', cn: '有影响' }]);
+
+  // 题目渲染：多词性单词的每个词性都有 badge
+  const badgeCount = await page.evaluate(() => {
+    const w = ALL_WORDS.find(x => (x.meaning.match(/[a-z]+\./g) || []).length > 1);
+    const entries = splitMeaning(w.meaning);
+    const html = entries.map(e => (e.pos ? '<span class="pos-badge">' + e.pos + '</span>' : '') + e.cn).join(' ');
+    return (html.match(/pos-badge/g) || []).length;
+  });
+  expect(badgeCount).toBeGreaterThan(1);
+});

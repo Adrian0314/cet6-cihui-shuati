@@ -907,9 +907,22 @@ function getChinese(meaning) {
   return cleaned;
 }
 
-function getPOS(meaning) {
-  var m = meaning.match(/^([a-z]+\.\s*(?:\/\s*[a-z]+\.?\s*)?)/i);
-  return m ? m[1].trim() : '';
+function splitMeaning(meaning) {
+  // 剥离音标（/.../ 对），折叠空格
+  var s = String(meaning || '').replace(/\s*\/[^/]+\/\s*/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  if (!s) return [];
+  // 在词性标记前插入哨兵，切分多词性条目（如 "n.手指 v.告发" → 两个条目）
+  var marked = s.replace(/\s+(?=[a-z]+\.(?:\s*\/\s*[a-z]+\.?)?)/g, '\u0001');
+  var parts = marked.split('\u0001').map(function(p) { return p.trim(); }).filter(Boolean);
+  var entries = [];
+  var posRe = /^([a-z]+\.(?:\s*\/\s*[a-z]+\.?)?)\s*([\s\S]*)$/i;
+  for (var i = 0; i < parts.length; i++) {
+    var pm = parts[i].match(posRe);
+    if (pm) entries.push({ pos: pm[1].trim(), cn: pm[2].trim() });
+    else if (entries.length > 0) entries[entries.length - 1].cn += ' ' + parts[i];
+    else entries.push({ pos: '', cn: parts[i] });
+  }
+  return entries;
 }
 
 // ============ DISTRACTOR GENERATION ============
@@ -1490,9 +1503,14 @@ function renderQuizCard() {
   var isFS = card.classList.contains('fullscreen');
   var fsText = isFS ? '⛶ 退出全屏' : '⛶ 全屏';
 
-  var qTextRaw = (mode === 'cn2en') ? getChinese(word.meaning) : word.word;
-  var qPOS = (mode === 'cn2en') ? getPOS(word.meaning) : '';
-  var qText = qPOS ? '<span class="pos-badge">' + qPOS + '</span> ' + qTextRaw : qTextRaw;
+  // 题目：多词性单词的每个词性统一用 badge 渲染（如 [n.]股份 [v.]分享）
+  var qText = word.word;
+  if (mode === 'cn2en') {
+    var posEntries = splitMeaning(word.meaning);
+    qText = posEntries.length > 0
+      ? posEntries.map(function(e) { return (e.pos ? '<span class="pos-badge">' + e.pos + '</span>' : '') + e.cn; }).join(' ')
+      : getChinese(word.meaning);
+  }
   var qPron = (mode === 'en2cn' && word.pronunciation) ? word.pronunciation : '';
   var modeLabel = (mode === 'cn2en') ? '看中文选英文' : '看英文选中文';
   var typeLabel = (currentQuizType === 'dictation') ? ' · 默写' : '';
@@ -3313,13 +3331,16 @@ function renderBrowse() {
   var html = '';
   for (var j = 0; j < page.length; j++) {
     var w = page[j];
-    var cn = getChinese(w.meaning);
+    // 词性统一 badge 渲染（多词性单词的每个词性都有独立标签）
+    var posHtml = splitMeaning(w.meaning).map(function(e) {
+      return (e.pos ? '<span class=\"pos-badge\" style=\"font-size:0.7em;margin-right:6px\">' + e.pos + '</span>' : '') + e.cn;
+    }).join(' ');
     html += '<div style=\"padding:10px 14px;border-bottom:1px solid var(--border)\">' +
       '<div style=\"display:flex;justify-content:space-between;align-items:center\">' +
       '<span><strong>' + w.word + '</strong> <span style=\"color:var(--text2);font-size:0.85em\">' + (w.pronunciation || '') + '</span>' +
       '<span onclick=\"speakWord(&quot;' + w.word + '&quot;)\" style=\"cursor:pointer;font-size:0.95em;margin-left:8px;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;vertical-align:middle;border-radius:50%;transition:background 200ms;\" title=\"朗读发音\">\u{1F50A}</span></span>' +
       '<button class=\"ctrl-btn\" id=\"bdbtn-' + w.word + '\" style=\"padding:6px 14px;font-size:0.8em\" onclick=\"toggleBrowseDetail(&quot;' + w.word + '&quot;)\">\u67E5\u8BE2</button></div>' +
-      '<div style=\"color:var(--text2);font-size:0.85em;margin-top:2px\">' + getPOS(w.meaning) + ' ' + cn + '</div>' +
+      '<div style=\"color:var(--text2);font-size:0.85em;margin-top:2px\">' + posHtml + '</div>' +
       '<div id=\"bd-' + w.word + '\" style=\"display:none\"></div>' +
       '</div>';
   }
