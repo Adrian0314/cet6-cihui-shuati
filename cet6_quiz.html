@@ -278,11 +278,11 @@ body{
 /* 全屏时按钮 fixed 悬浮右上角，标签容器右侧让位避免遮挡 */
 .quiz-card.fullscreen .quiz-top-row{padding-right:76px}
 .quiz-card.fullscreen .quiz-top-row .q-label{max-width:calc(100% - 76px)}
-.quiz-card.fullscreen{position:fixed;top:0;left:0;width:100vw;height:100vh;height:100dvh;z-index:200;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;border-radius:0;margin:0;padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 96px)}
-/* 全屏时"下一题"固定屏幕底部，始终可见 */
-.quiz-card.fullscreen .next-btn{position:fixed;bottom:calc(env(safe-area-inset-bottom, 0px) + 14px);left:50%;transform:translateX(-50%);z-index:202;width:calc(100% - 48px);max-width:420px;display:none}
-.quiz-card.fullscreen .next-btn.show{display:block}
-.quiz-card.fullscreen .skip-btn{position:fixed;bottom:calc(env(safe-area-inset-bottom, 0px) + 74px);left:50%;transform:translateX(-50%);z-index:202;margin:0!important;white-space:nowrap}
+.quiz-card.fullscreen{position:fixed;top:0;left:0;width:100vw;height:100vh;height:100dvh;z-index:200;display:flex;flex-direction:column;overflow:hidden;border-radius:0;margin:0;padding:0}
+.quiz-card.fullscreen .quiz-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:32px;padding-bottom:16px}
+.quiz-card.fullscreen .quiz-actions{flex-shrink:0;padding:12px 32px calc(env(safe-area-inset-bottom, 0px) + 12px);border-top:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;align-items:center;gap:10px}
+.quiz-card.fullscreen .quiz-actions .next-btn{margin-top:0;width:100%;max-width:420px}
+.quiz-card.fullscreen .quiz-actions .next-btn.show{display:block}
 .quiz-card.fullscreen .toggle-fs-btn{position:fixed;top:12px;right:12px;z-index:201}
 
 /* === TOAST === */
@@ -1519,6 +1519,7 @@ function renderQuizCard() {
     }
 
     card.innerHTML =
+      '<div class="quiz-scroll">' +
       '<div class="quiz-top-row">' +
       '<div class="q-label">' + prefix + (quizState.isMemory ? '剩余 ' + quizState.ids.length + ' 词' : '第 ' + (pos + 1) + ' / ' + total + ' 题') + ' · ' + modeLabel + typeLabel + '</div>' +
       '<button class="toggle-fs-btn" id="toggleFsBtn" onclick="(function(e){e.stopPropagation();toggleFullscreen();})(event)">⛶ 全屏</button>' +
@@ -1528,7 +1529,10 @@ function renderQuizCard() {
       (qPron ? '<div class="q-pron" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qPron + ' <span onclick="speakWord(\'' + word.word.replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:1.2em;" title="朗读发音">\u{1F50A}</span></div>' : '') +
       (mode === 'en2cn' && !qPron ? '<div style="margin-bottom:16px"><span onclick="speakWord(\'' + word.word.replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:1.1em;padding:4px 10px;background:var(--surface2);border-radius:20px;border:1px solid var(--border);display:inline-block;" title="朗读发音">\u{1F50A} 朗读</span></div>' : '') +
       dictInputHTML +
-      '<button class="next-btn" id="nextBtn" onclick="advanceQuestion()" ' + (answered || isSkip ? 'class="next-btn show"' : 'class="next-btn"') + '>' + (quizState.isMemory ? '继续学习 →' : '下一题 →') + '</button>';
+      '</div>' +
+      '<div class="quiz-actions">' +
+      '<button class="next-btn" id="nextBtn" onclick="advanceQuestion()" ' + (answered || isSkip ? 'class="next-btn show"' : 'class="next-btn"') + '>' + (quizState.isMemory ? '继续学习 →' : '下一题 →') + '</button>' +
+      '</div>';
 
     if (!answered && !isSkip) {
       setTimeout(function() {
@@ -1579,6 +1583,7 @@ function renderQuizCard() {
     }
 
     card.innerHTML =
+      '<div class="quiz-scroll">' +
       '<div class="quiz-top-row">' +
       '<div class="q-label">' + prefix + (quizState.isMemory ? '剩余 ' + quizState.ids.length + ' 词' : '第 ' + (pos + 1) + ' / ' + total + ' 题') + ' · ' + modeLabel + '</div>' +
       '<button class="toggle-fs-btn" id="toggleFsBtn" onclick="(function(e){e.stopPropagation();toggleFullscreen();})(event)">⛶ 全屏</button>' +
@@ -1588,10 +1593,13 @@ function renderQuizCard() {
       (qPron ? '<div class="q-pron" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qPron + '</div>' : '') +
       (mode === 'en2cn' ? '<div style="margin-bottom:16px"><span onclick="speakWord(\'' + word.word.replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:1.05em;padding:4px 12px;background:var(--surface2);border-radius:20px;border:1px solid var(--border);display:inline-block;" title="朗读发音">\u{1F50A} 朗读</span></div>' : '') +
       '<div class="options">' + optHTML + '</div>' +
-      (answered || isSkip ? '' : '<button class="skip-btn" id="skipBtn" onclick="handleSkip()" style="display:block;margin:12px auto 0;padding:8px 20px;background:transparent;border:1px dashed var(--border);color:var(--text2);border-radius:20px;cursor:pointer;font-size:0.85em;">不会，跳过</button>') +
       fbHTML +
       (answered || isSkip ? getWordDetailHTML(word) : '') +
-      '<button class="next-btn' + (answered || isSkip ? ' show' : '') + '" id="nextBtn" onclick="advanceQuestion()">' + (quizState.isMemory ? '继续学习 →' : '下一题 →') + '</button>';
+      '</div>' +
+      '<div class="quiz-actions">' +
+      (answered || isSkip ? '' : '<button class="skip-btn" id="skipBtn" onclick="handleSkip()" style="display:block;margin:0 auto;padding:8px 20px;background:transparent;border:1px dashed var(--border);color:var(--text2);border-radius:20px;cursor:pointer;font-size:0.85em;">不会，跳过</button>') +
+      '<button class="next-btn' + (answered || isSkip ? ' show' : '') + '" id="nextBtn" onclick="advanceQuestion()">' + (quizState.isMemory ? '继续学习 →' : '下一题 →') + '</button>' +
+      '</div>';
 
     card.querySelectorAll('.opt-btn').forEach(function(btn) {
       btn.addEventListener('click', function() {
