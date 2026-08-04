@@ -2985,26 +2985,48 @@ function showOnboarding() {
 
 // ============ TTS ============
 var _pendingSpeak = null;
-function speakWord(text) {
-  if (!window.speechSynthesis) { alert('当前浏览器不支持语音朗读'); return; }
-  // 首次调用前先触发语音列表加载（部分浏览器需要，否则无声）
+var _ttsFallback = null; // null=未决定, true=用在线发音, false=用系统TTS
+var _ttsWaiting = false;
+// 在线发音降级：系统 TTS 不可用（如国产安卓无 Google 服务）时使用有道词典发音
+function playOnlineTTS(text) {
+  try {
+    var audio = new Audio('https://dict.youdao.com/dictvoice?audio=' + encodeURIComponent(text) + '&type=2');
+    audio.play().catch(function() {});
+  } catch(e) {}
+}
+function speakSystemTTS(text) {
+  if (!window.speechSynthesis) return false;
   var voices = window.speechSynthesis.getVoices();
-  if (voices.length === 0) {
-    // 语音列表未就绪：等加载完成后只读一次，避免重复朗读
-    _pendingSpeak = text;
-    return;
-  }
+  if (voices.length === 0) return false;
   window.speechSynthesis.cancel();
   var u = new SpeechSynthesisUtterance(text);
-  // 显式选择第一个英语音色，避免默认音色缺失导致无声
   var enVoice = null;
   for (var i = 0; i < voices.length; i++) {
     if (voices[i].lang && voices[i].lang.toLowerCase().indexOf('en') === 0) { enVoice = voices[i]; break; }
   }
-  if (enVoice) { u.voice = enVoice; u.lang = enVoice.lang; }
+  if (enVoice) { try { u.voice = enVoice; u.lang = enVoice.lang; } catch(e) { u.lang = 'en-US'; } }
   else { u.lang = 'en-US'; }
   u.rate = 0.85;
   window.speechSynthesis.speak(u);
+  return true;
+}
+function speakWord(text) {
+  if (!text) return;
+  // 已确认系统 TTS 不可用 → 直接在线发音
+  if (_ttsFallback === true || !window.speechSynthesis) { playOnlineTTS(text); return; }
+  if (speakSystemTTS(text)) return;
+  // 系统 TTS 语音列表未就绪：等待加载，超时（1.5s）后降级在线发音
+  _pendingSpeak = text;
+  if (_ttsWaiting) return;
+  _ttsWaiting = true;
+  setTimeout(function() {
+    _ttsWaiting = false;
+    var t = _pendingSpeak; _pendingSpeak = null;
+    if (!t) return;
+    if (speakSystemTTS(t)) return;
+    _ttsFallback = true;
+    playOnlineTTS(t);
+  }, 1500);
 }
 // 页面加载时预加载语音列表；列表就绪后补读等待中的朗读
 if (window.speechSynthesis) {
