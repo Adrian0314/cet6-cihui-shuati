@@ -58,15 +58,15 @@ body{
   .header-row h1{font-size:1.35em}
   .header .subtitle{font-size:0.8em}
 }
-.header h1{font-size:1.6em;color:var(--accent);margin-bottom:6px}
-.header .subtitle{color:var(--text2);font-size:0.88em}
+.header h1{font-size:1.6em;color:var(--accent);margin-bottom:8px}
+.header .subtitle{color:var(--text2);font-size:0.88em;line-height:1.7;max-width:520px;margin:0 auto}
 
 .tabs{display:flex;gap:4px;margin-bottom:20px;background:var(--surface);border-radius:var(--radius);padding:4px;box-shadow:var(--shadow);border:1px solid var(--border)}
-.tab-btn{flex:1;padding:11px 14px;border:none;background:transparent;color:var(--text2);border-radius:calc(var(--radius) - 4px);cursor:pointer;font-size:0.88em;font-weight:500;transition:background 200ms,color 200ms}
+.tab-btn{flex:1;padding:11px 14px;border:none;background:transparent;color:var(--text2);border-radius:calc(var(--radius) - 4px);cursor:pointer;font-size:0.88em;font-weight:500;display:flex;align-items:center;justify-content:center;gap:5px;transition:background 200ms,color 200ms,box-shadow 200ms;white-space:nowrap}
 .tab-btn:hover{color:var(--text)}
-.tab-btn.active{background:var(--accent);color:#fff}
+.tab-btn.active{background:var(--accent);color:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.1)}
 
-.mode-row{display:flex;gap:8px;margin-bottom:16px;align-items:center;justify-content:center;flex-wrap:wrap}
+.mode-row{display:flex;gap:10px;margin-bottom:18px;align-items:center;justify-content:center;flex-wrap:wrap}
 .mode-row label{color:var(--text2);font-size:0.88em}
 .mode-btn{padding:10px 20px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:20px;cursor:pointer;font-size:0.88em;font-weight:500;transition:border-color 200ms,background 200ms}
 .mode-btn:hover{border-color:var(--accent)}
@@ -76,8 +76,9 @@ body{
 .saved-bar.show{display:flex}
 .saved-bar strong{color:var(--accent)}
 
-.quiz-card{background:var(--surface);border-radius:var(--radius);padding:32px;margin-bottom:20px;border:1px solid var(--border);box-shadow:var(--shadow);min-height:280px}
-.q-label{color:var(--accent);font-size:0.82em;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+.quiz-card{background:var(--surface);border-radius:var(--radius);padding:32px;margin-bottom:20px;border:1px solid var(--border);box-shadow:var(--shadow);min-height:280px;animation:cardIn 240ms cubic-bezier(0.4,0,0.2,1) both}
+@keyframes cardIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.q-label{color:var(--accent);font-size:0.82em;font-weight:600;letter-spacing:1px;margin-bottom:8px;display:inline-flex;align-items:center;gap:6px;background:rgba(124,58,237,0.08);padding:4px 10px;border-radius:14px}
 .q-word{font-size:2em;font-weight:700;margin-bottom:6px;word-break:break-word}
 .pos-badge{display:inline-block;font-size:0.44em;font-weight:500;color:var(--accent);background:rgba(124,58,237,0.08);padding:2px 8px;border-radius:4px;vertical-align:middle;margin-right:4px;letter-spacing:0.5px}
 .q-pron{color:var(--text2);font-size:0.95em;margin-bottom:20px;font-style:italic}
@@ -85,6 +86,8 @@ body{
 .opt-btn{padding:14px 18px;background:var(--surface2);border:2px solid transparent;border-radius:var(--radius-sm);color:var(--text);cursor:pointer;font-size:0.95em;text-align:left;display:flex;align-items:center;gap:10px;word-break:break-word;transition:border-color 150ms,background 150ms}
 .opt-btn:hover{border-color:var(--accent);background:rgba(124,58,237,0.06)}
 .opt-btn:active{transform:scale(0.96);transition:transform 80ms cubic-bezier(0.34,1.56,0.64,1)}
+#browseList [onclick*="speakWord"]:hover{background:rgba(124,58,237,0.12)}
+#jumpInput:focus{outline:none;border-color:var(--accent)!important;box-shadow:0 0 0 3px rgba(124,58,237,0.12)}
 .opt-btn .ol{font-weight:700;color:var(--accent2);min-width:24px;font-size:0.82em;flex-shrink:0}
 .opt-btn.correct{border-color:var(--green)!important;background:rgba(5,150,105,0.1)!important}
 .opt-btn.wrong{border-color:var(--red)!important;background:rgba(220,38,38,0.08)!important}
@@ -100,14 +103,19 @@ body{
 .feedback.fail{border:1px solid rgba(220,38,38,0.2);background:rgba(220,38,38,0.04)}
 .feedback.close{border:1px solid rgba(217,119,6,0.2);background:rgba(217,119,6,0.04)}
 .feedback h4{margin-bottom:8px;font-size:1.05em}
+.feedback.ok h4{color:var(--green)}
+.feedback.fail h4{color:var(--red)}
+.feedback.close h4{color:var(--orange)}
 .fb-mem{background:rgba(124,58,237,0.06);padding:12px 16px;border-radius:var(--radius-sm);margin:10px 0;border-left:3px solid var(--accent);line-height:1.6}
 .fb-mem strong{color:var(--accent)}
-.fb-conf{margin-top:10px}
+.fb-conf{margin-top:12px;padding-top:10px;border-top:1px dashed var(--border)}
 .fb-conf .ci{padding:5px 0;color:var(--text2);font-size:0.88em;border-bottom:1px solid var(--border)}
 .fb-conf .ci strong{color:var(--orange)}
 .fb-key{margin-top:10px;font-size:0.82em;color:var(--text2);line-height:1.8}
 .word-detail{margin-top:14px;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--surface)}
-.word-detail .wd-head{padding:10px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:0.9em;font-weight:600;background:var(--surface2);user-select:none}
+.word-detail .wd-head{padding:10px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:0.9em;font-weight:600;background:var(--surface2);user-select:none;transition:background 200ms,color 200ms}
+.word-detail .wd-head:hover{background:rgba(124,58,237,0.08);color:var(--accent)}
+.word-detail .wd-head:active{background:rgba(124,58,237,0.14)}
 .word-detail .wd-arrow{transition:transform 200ms;font-size:0.8em;color:var(--text2)}
 .word-detail.open .wd-arrow{transform:rotate(180deg)}
 .word-detail .wd-body{display:none;padding:12px 14px}
@@ -126,7 +134,9 @@ body{
 @keyframes toastOut{from{transform:translateY(0);opacity:1}to{transform:translateY(-100%);opacity:0}}
 @keyframes countdownBar{from{width:100%}to{width:0%}}
 
-.next-btn{display:none;margin-top:16px;padding:12px 32px;background:var(--accent);color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:1em;font-weight:600;transition:background 200ms,transform 180ms}
+.next-btn{display:none;margin-top:16px;padding:12px 32px;background:var(--accent);color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:1em;font-weight:600;transition:background 200ms,transform 180ms,box-shadow 200ms;box-shadow:0 2px 8px rgba(0,0,0,0.12)}
+.skip-btn{transition:border-color 200ms,color 200ms,background 200ms}
+.skip-btn:hover{border-color:var(--accent)!important;color:var(--accent)!important;background:rgba(124,58,237,0.06)!important}
 .next-btn:hover{background:var(--accent2)}
 .next-btn:active{transform:scale(0.96);transition:transform 80ms cubic-bezier(0.34,1.56,0.64,1)}
 .next-btn.show{display:inline-block}
@@ -142,10 +152,10 @@ body{
 .ctrl-btn.accent:hover{background:var(--accent2)}
 .ctrl-btn:disabled{opacity:0.4;pointer-events:none}
 
-.stats-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:10px;margin-bottom:16px}
-.sc{background:var(--surface);padding:14px 10px;border-radius:var(--radius-sm);text-align:center;border:1px solid var(--border);box-shadow:var(--shadow)}
-.sc .sv{font-size:1.4em;font-weight:700}
-.sc .sl{font-size:0.75em;color:var(--text2);margin-top:2px}
+.stats-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:12px;margin-bottom:16px}
+.sc{background:var(--surface);padding:14px 10px;border-radius:var(--radius-sm);text-align:center;border:1px solid var(--border);box-shadow:var(--shadow);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+.sc .sv{font-size:1.45em;font-weight:700;line-height:1.1}
+.sc .sl{font-size:0.75em;color:var(--text2);letter-spacing:0.2px}
 
 .empty{text-align:center;padding:50px 20px;color:var(--text2)}
 .empty .ei{font-size:2.5em;margin-bottom:10px}
@@ -158,7 +168,10 @@ body{
 .panel-b::-webkit-scrollbar{width:5px}
 .panel-b::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 
-.search-box{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:16px;font-size:0.82em;width:160px;outline:none;transition:border-color 200ms}
+.search-box{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 14px;border-radius:18px;font-size:0.85em;width:170px;outline:none;transition:border-color 200ms,box-shadow 200ms}
+.search-box:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(124,58,237,0.12)}
+#browseList > div{transition:background 200ms}
+#browseList > div:hover{background:var(--surface2)}
 .search-box:focus{border-color:var(--accent)}
 .search-box::placeholder{color:var(--text2)}
 
@@ -194,12 +207,12 @@ body{
 .info-callout.show{display:block}
 
 /* === POOL SELECTOR & FREQUENCY FILTER === */
-.pool-row{display:flex;gap:8px;margin-bottom:16px;align-items:center;justify-content:center;flex-wrap:wrap}
+.pool-row{display:flex;gap:10px;margin-bottom:18px;align-items:center;justify-content:center;flex-wrap:wrap}
 .pool-btn{padding:10px 22px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:20px;cursor:pointer;font-size:0.9em;font-weight:500;transition:border-color 200ms,background 200ms}
 .pool-btn:hover{border-color:var(--accent)}
 .pool-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
 
-.freq-filter-row{display:flex;gap:8px;margin-bottom:16px;align-items:center;justify-content:center;flex-wrap:wrap}
+.freq-filter-row{display:flex;gap:10px;margin-bottom:18px;align-items:center;justify-content:center;flex-wrap:wrap}
 .freq-filter-row{display:none}
 .freq-filter-row.show{display:flex}
 .freq-chip{padding:7px 16px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:20px;cursor:pointer;font-size:0.82em;font-weight:500;transition:border-color 200ms,background 200ms;white-space:nowrap}
@@ -376,7 +389,7 @@ body{
   <div class="mode-row">
     <label>学习方式：</label>
     <button class="mode-btn" id="memoryBtn" onclick="toggleMemoryMode()">🧠 记忆模式</button>
-    <span style="color:var(--text2);font-size:0.8em;">做完即删 · 错词隔天自动回来</span>
+    <span style="color:var(--text2);font-size:0.8em;margin-left:2px;">做完即删 · 错词隔天自动回来</span>
   </div>
 
   <div class="mode-row" id="typeRow">
@@ -388,7 +401,7 @@ body{
   <div class="pool-row" id="poolRow">
     <label style="color:var(--text2);font-size:0.9em;">词库：</label>
     <button class="pool-btn active" data-pool="core">📗 1500核心词</button>
-    <button class="pool-btn" data-pool="full">📚 全词汇 (<span id="fullVocabCount">5523</span>词)</button>
+    <button class="pool-btn" data-pool="full">📚 全词汇（<span id="fullVocabCount">5523</span> 词）</button>
   </div>
   <div class="freq-filter-row" id="freqFilterRow">
     <label style="color:var(--text2);font-size:0.85em;">频率筛选：</label>
@@ -3103,8 +3116,8 @@ function renderBrowse() {
     html += '<div style=\"padding:10px 14px;border-bottom:1px solid var(--border)\">' +
       '<div style=\"display:flex;justify-content:space-between;align-items:center\">' +
       '<span><strong>' + w.word + '</strong> <span style=\"color:var(--text2);font-size:0.85em\">' + (w.pronunciation || '') + '</span>' +
-      '<span onclick=\"speakWord(&quot;' + w.word + '&quot;)\" style=\"cursor:pointer;font-size:0.9em;margin-left:6px;display:inline-block;vertical-align:middle;\" title=\"朗读发音\">\u{1F50A}</span></span>' +
-      '<button class=\"ctrl-btn\" id=\"bdbtn-' + w.word + '\" style=\"padding:3px 10px;font-size:0.78em\" onclick=\"toggleBrowseDetail(&quot;' + w.word + '&quot;)\">\u67E5\u8BE2</button></div>' +
+      '<span onclick=\"speakWord(&quot;' + w.word + '&quot;)\" style=\"cursor:pointer;font-size:0.95em;margin-left:8px;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;vertical-align:middle;border-radius:50%;transition:background 200ms;\" title=\"朗读发音\">\u{1F50A}</span></span>' +
+      '<button class=\"ctrl-btn\" id=\"bdbtn-' + w.word + '\" style=\"padding:6px 14px;font-size:0.8em\" onclick=\"toggleBrowseDetail(&quot;' + w.word + '&quot;)\">\u67E5\u8BE2</button></div>' +
       '<div style=\"color:var(--text2);font-size:0.85em;margin-top:2px\">' + getPOS(w.meaning) + ' ' + cn + '</div>' +
       '<div id=\"bd-' + w.word + '\" style=\"display:none\"></div>' +
       '</div>';
