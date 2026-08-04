@@ -240,3 +240,46 @@ test('normalizeOCRText corrects via dictionary', async ({ page }) => {
   const r3 = await page.evaluate(() => normalizeOCRText('有害 的，不 利', 'chi_sim'));
   expect(r3).toBe('有害的，不利');
 });
+
+test('getChineseFull keeps all POS tags (display) while getChinese strips first (logic)', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    const m = 'v.快速增长 n.火箭';
+    return { full: getChineseFull(m), stripped: getChinese(m) };
+  });
+  expect(r.full).toBe('v.快速增长 n.火箭');
+  expect(r.stripped).toBe('快速增长 n.火箭'); // 原行为不变（供搜索/比较逻辑）
+  const r2 = await page.evaluate(() => getChineseFull("n.影响 /ɪm'pækt/ v.有影响"));
+  expect(r2).toBe('n.影响 v.有影响');
+  const r3 = await page.evaluate(() => getChineseFull('v./n. 辩论，讨论'));
+  expect(r3).toBe('v./n. 辩论，讨论');
+});
+
+test('feedback question line shows all POS tags for multi-POS word', async ({ page }) => {
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+  await page.waitForTimeout(400);
+
+  // 循环翻题直到遇到多词性单词（有界 30 次）
+  let found = false;
+  for (let i = 0; i < 30; i++) {
+    found = await page.evaluate(() => (splitMeaning(quizState.current.word.meaning).length > 1));
+    if (found) break;
+    await page.evaluate(() => { handleSkip(); });
+    await page.waitForSelector('.next-btn.show');
+    await page.click('.next-btn');
+    await page.waitForSelector('.opt-btn');
+    await page.waitForTimeout(350);
+  }
+  expect(found).toBe(true);
+
+  // 答错 → 反馈区「题目：」行应包含 ≥2 个词性标记
+  const wrongIdx = await page.evaluate(() => {
+    const ci = quizState.current.correctIndex;
+    return (ci + 1) % 4;
+  });
+  await page.click(`#opt-${wrongIdx}`);
+  await page.waitForSelector('.next-btn.show');
+  const qLine = await page.locator('.feedback.show div:has-text("题目：")').first().textContent();
+  const posCount = (qLine.match(/[a-z]+\./g) || []).length;
+  expect(posCount).toBeGreaterThanOrEqual(2);
+});
