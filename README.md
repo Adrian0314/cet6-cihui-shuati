@@ -2,7 +2,7 @@
 
 一个**单文件、完全离线可用**的 CET-6 词汇刷题网站，同时支持 PWA 安装到手机/电脑，像原生 App 一样全屏使用。
 
-> **在线体验**：https://adrian0314.github.io/cet6-quiz/cet6_quiz.html
+> **在线体验**：https://adrian0314.github.io/cet6-cihui-shuati/cet6_quiz.html
 
 ## ✨ 功能特色
 
