@@ -192,3 +192,50 @@ test('wrong answer shows picked word meaning with speak button', async ({ page }
   const pickText = await pickRow.textContent();
   expect(pickText.replace('你选的答案：', '').trim().length).toBeGreaterThan(0);
 });
+
+test('handwrite pad draws and recognizes into input with dict correction', async ({ page }) => {
+  await page.click('#typeRow .mode-btn[data-type="dictation"]');
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('#dictInput');
+  await page.waitForSelector('#handwriteBtn');
+
+  // 打开手写板
+  await page.click('#handwriteBtn');
+  await expect(page.locator('#hwOverlay')).toBeVisible();
+
+  // 在画布上画一笔
+  const box = await page.locator('#hwCanvas').boundingBox();
+  await page.mouse.move(box.x + 50, box.y + 60);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 180, box.y + 140, { steps: 20 });
+  await page.mouse.up();
+
+  // 注入 fake Tesseract：识别出 'detrimentul'（有拼写错误）
+  await page.evaluate(() => {
+    window.Tesseract = {
+      createWorker: (lang, oem, opts) => Promise.resolve({
+        recognize: () => Promise.resolve({ data: { text: 'detrimentul' } })
+      })
+    };
+  });
+
+  await page.click('#hwRecognizeBtn');
+  // 识别完成 → 弹层关闭、输入框回填（词库纠错为 detrimental）
+  await expect(page.locator('#hwOverlay')).toBeHidden();
+  const val = await page.locator('#dictInput').inputValue();
+  expect(val.toLowerCase()).toBe('detrimental');
+});
+
+test('normalizeOCRText corrects via dictionary', async ({ page }) => {
+  // 英文：编辑距离 ≤2 的词库纠错
+  const r1 = await page.evaluate(() => normalizeOCRText('detrimentul', 'eng'));
+  expect(r1.toLowerCase()).toBe('detrimental');
+  const r2 = await page.evaluate(() => normalizeOCRText('harmful  deteriorat', 'eng'));
+  expect(r2.toLowerCase()).toBe('harmful deteriorate');
+  // 距离 2 但长度差过大的短词不应误纠（poison 不在核心词库）
+  const r2b = await page.evaluate(() => normalizeOCRText('poisen', 'eng'));
+  expect(r2b.toLowerCase()).toBe('poisen');
+  // 中文：清理噪声，保留中文与标点
+  const r3 = await page.evaluate(() => normalizeOCRText('有害 的，不 利', 'chi_sim'));
+  expect(r3).toBe('有害的，不利');
+});
