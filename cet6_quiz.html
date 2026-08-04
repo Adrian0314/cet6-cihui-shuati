@@ -3102,7 +3102,8 @@ function renderBrowse() {
     var cn = getChinese(w.meaning);
     html += '<div style=\"padding:10px 14px;border-bottom:1px solid var(--border)\">' +
       '<div style=\"display:flex;justify-content:space-between;align-items:center\">' +
-      '<span><strong>' + w.word + '</strong> <span style=\"color:var(--text2);font-size:0.85em\">' + (w.pronunciation || '') + '</span></span>' +
+      '<span><strong>' + w.word + '</strong> <span style=\"color:var(--text2);font-size:0.85em\">' + (w.pronunciation || '') + '</span>' +
+      '<span onclick=\"speakWord(&quot;' + w.word + '&quot;)\" style=\"cursor:pointer;font-size:0.9em;margin-left:6px;display:inline-block;vertical-align:middle;\" title=\"朗读发音\">\u{1F50A}</span></span>' +
       '<button class=\"ctrl-btn\" id=\"bdbtn-' + w.word + '\" style=\"padding:3px 10px;font-size:0.78em\" onclick=\"toggleBrowseDetail(&quot;' + w.word + '&quot;)\">\u67E5\u8BE2</button></div>' +
       '<div style=\"color:var(--text2);font-size:0.85em;margin-top:2px\">' + getPOS(w.meaning) + ' ' + cn + '</div>' +
       '<div id=\"bd-' + w.word + '\" style=\"display:none\"></div>' +
