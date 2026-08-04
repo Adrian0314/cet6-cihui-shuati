@@ -3183,12 +3183,15 @@ function checkSpacedRepetition() {
     '<button class="ctrl-btn accent" id="reviewReminderGo">\u73B0\u5728\u590D\u4E60</button>' +
     '<button class="ctrl-btn" style="margin-left:8px;" id="reviewReminderLater">\u7A0D\u540E</button></div></div>';
   document.body.appendChild(modal);
+  var _rb = document.getElementById('reviewBar');
+  if (_rb) _rb.classList.remove('show'); // 弹窗打开时隐藏横幅，避免遮罩下半截提示
   document.getElementById('reviewReminderGo').addEventListener('click', function() {
     modal.remove(); // 关键修复：移除整个遮罩（含弹窗）
     startReview();
   });
   document.getElementById('reviewReminderLater').addEventListener('click', function() {
     modal.remove(); // 关键修复：移除整个遮罩（含弹窗）
+    if (_rb) _rb.classList.add('show'); // 恢复横幅显示
   });
 }
 
