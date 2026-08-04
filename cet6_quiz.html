@@ -490,7 +490,7 @@ body{
       <button class="ctrl-btn hm-range" data-days="365">全年</button>
     </div>
     <div style="position:relative;">
-      <canvas id="heatmapChart" height="180"></canvas>
+      <canvas id="heatmapChart" height="200"></canvas>
       <div id="heatmapTip" style="display:none;position:absolute;z-index:30;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:0.8em;box-shadow:0 4px 16px rgba(0,0,0,0.25);pointer-events:none;line-height:1.6;max-width:75vw;"></div>
     </div>
   </div>
@@ -2326,13 +2326,18 @@ function hitHeatCell(px, py) {
 function renderHeatmapChart() {
   var canvas = document.getElementById('heatmapChart');
   if (!canvas) return;
-  var ctx = canvas.getContext('2d');
+  // 高分屏适配：按 devicePixelRatio 放大画布物理像素，避免小字模糊
+  var dpr = window.devicePixelRatio || 1;
   var wrap = canvas.parentElement;
   var w = wrap.clientWidth;
   if (w < 200) w = 200;
-  canvas.width = w;
-  canvas.height = 180;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(200 * dpr);
+  canvas.style.width = w + 'px';
+  canvas.style.height = '200px';
+  var ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, 200);
   hideHeatmapTip();
 
   var dark = isDarkMode();
@@ -2352,7 +2357,7 @@ function renderHeatmapChart() {
   if (cellSize > maxCell) cellSize = maxCell;
 
   var weekdays = ['日','一','二','三','四','五','六'];
-  ctx.font = '9px sans-serif';
+  ctx.font = '10px sans-serif';
   for (var wi = 0; wi < 7; wi++) {
     var ly = 26 + wi * (cellSize + cellGap);
     ctx.fillStyle = labelColor;
@@ -2402,28 +2407,28 @@ function renderHeatmapChart() {
     _heatCells.push({ x: x, y: y, size: cellSize, date: key, count: count, correct: corr });
   }
 
-  // 底部图例：做题量档位 + 正确率圆点三色
+  // 底部图例：做题量档位 + 正确率圆点三色（与最后一行格子保持 4px+ 间距）
   ctx.fillStyle = labelColor;
-  ctx.font = '9px sans-serif';
-  ctx.fillText('做题量', 5, 164);
+  ctx.font = '10px sans-serif';
+  ctx.fillText('做题量', 5, 174);
   [{ c: emptyColor, t: '0' }, { c: '#bbf7d0', t: '少量' }, { c: '#4ade80', t: '中量' }, { c: '#16a34a', t: '达标' }].forEach(function(li, i) {
-    var lx = 36 + i * 46;
+    var lx = 36 + i * 48;
     ctx.fillStyle = li.c;
-    ctx.fillRect(lx, 154, 8, 8);
+    ctx.fillRect(lx, 166, 8, 8);
     ctx.strokeStyle = borderColor;
-    ctx.strokeRect(lx, 154, 8, 8);
-    ctx.fillStyle = labelColor;
-    ctx.fillText(li.t, lx + 11, 162);
-  });
-  ctx.fillText('正确率', 5, 176);
-  [{ c: '#22c55e', t: '≥80%' }, { c: '#eab308', t: '50-80%' }, { c: '#ef4444', t: '<50%' }].forEach(function(li, i) {
-    var lx = 36 + i * 56;
-    ctx.fillStyle = li.c;
-    ctx.beginPath();
-    ctx.arc(lx + 4, 170, 3.5, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.strokeRect(lx, 166, 8, 8);
     ctx.fillStyle = labelColor;
     ctx.fillText(li.t, lx + 11, 174);
+  });
+  ctx.fillText('正确率', 5, 194);
+  [{ c: '#22c55e', t: '≥80%' }, { c: '#eab308', t: '50-80%' }, { c: '#ef4444', t: '<50%' }].forEach(function(li, i) {
+    var lx = 36 + i * 60;
+    ctx.fillStyle = li.c;
+    ctx.beginPath();
+    ctx.arc(lx + 4, 186, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = labelColor;
+    ctx.fillText(li.t, lx + 11, 194);
   });
 
   // 交互绑定（一次性）：悬停/点按显示详情

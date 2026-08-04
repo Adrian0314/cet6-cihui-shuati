@@ -117,7 +117,7 @@ test('heatmap renders with range switch and tooltip', async ({ page }) => {
   await expect(canvas).toBeVisible();
   const dims = await canvas.evaluate(c => ({ w: c.width, h: c.height }));
   expect(dims.w).toBeGreaterThan(200);
-  expect(dims.h).toBe(180);
+  expect(dims.h).toBe(200);
 
   // 范围切换按钮工作
   await page.click('.hm-range[data-days="30"]');
