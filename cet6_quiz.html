@@ -1655,6 +1655,8 @@ function recordStat(word, mode, isCorrect, isClose, isDictation) {
 function handleDictationSubmit() {
   if (!quizActive || !quizState.current) return;
   if (isAnswered(quizState.pos)) return; // 已答题不可重复作答
+  var _skipBtn0 = document.getElementById('skipBtn');
+  if (_skipBtn0) _skipBtn0.style.display = 'none'; // 提交后隐藏"不会，跳过"
 
   var q = quizState.current;
   var word = q.word;
@@ -1769,6 +1771,8 @@ function handleDictationSubmit() {
 function handleAnswer(chosenIndex) {
   if (!quizActive || !quizState.current) return;
   if (isAnswered(quizState.pos)) return; // 已答题不可重复作答
+  var _skipBtn0 = document.getElementById('skipBtn');
+  if (_skipBtn0) _skipBtn0.style.display = 'none'; // 答题后隐藏"不会，跳过"
 
   var q = quizState.current;
   var word = q.word;
