@@ -365,6 +365,11 @@ body{
     <button class="mode-btn active" data-mode="cn2en">🇨🇳 看中文 → 选英文</button>
     <button class="mode-btn" data-mode="en2cn">🇬🇧 看英文 → 选中文</button>
   </div>
+  <div class="mode-row">
+    <label>学习方式：</label>
+    <button class="mode-btn" id="memoryBtn" onclick="toggleMemoryMode()">🧠 记忆模式</button>
+    <span style="color:var(--text2);font-size:0.8em;">做完即删 · 错词隔天自动回来</span>
+  </div>
 
   <div class="mode-row" id="typeRow">
     <label>题目类型：</label>
@@ -1135,6 +1140,17 @@ function generateOneQuestion(word) {
 
 function advanceQuestion() {
   if (!quizActive) return;
+  if (quizState.isMemory) {
+    if (quizState.pos < 0) { goToQuestion(0); return; } // 首次进入
+    // 记忆模式：做完当前题即从队列删除，下一题顶上（错词已由 recordStat 更新间隔，到期自动回来）
+    quizState.ids.splice(quizState.pos, 1);
+    if (quizState.ids.length === 0) { finishQuiz(); return; }
+    if (quizState.pos >= quizState.ids.length) quizState.pos = quizState.ids.length - 1;
+    quizState.questions.splice(quizState.pos, 1);
+    quizState.answers = {};
+    goToQuestion(quizState.pos);
+    return;
+  }
   if (quizState.pos >= quizState.ids.length - 1) { finishQuiz(); return; }
   goToQuestion(quizState.pos + 1);
 }
@@ -1189,6 +1205,11 @@ function finishQuiz() {
     var rate = done > 0 ? Math.round(rc / done * 100) : 0;
     card.innerHTML = '<div class="empty"><div class="ei">🧠</div><p>复习完成！共 ' + total + ' 题，已答 ' + done + ' 题，答对 ' + rc + ' 题（' + rate + '%）</p>' +
       '<p style="font-size:0.85em;color:var(--text2);margin-top:6px;">答对间隔翻倍，答错/跳过的单词明天会再次出现</p></div>';
+  } else if (quizState.isMemory) {
+    var mw = quizState.memWrong || 0;
+    var mc = done - mw;
+    card.innerHTML = '<div class="empty"><div class="ei">🧠</div><p>记忆模式完成！本次共学习 ' + quizState.memTotal + ' 词，答对 ' + mc + ' 词</p>' +
+      '<p style="font-size:0.85em;color:var(--text2);margin-top:6px;">答错 ' + mw + ' 词已加入间隔记忆：错词隔天再来，答对的间隔逐次翻倍（1→2→4→8→16→30天封顶）</p></div>';
   } else {
     card.innerHTML = '<div class="empty"><div class="ei">\u{1F389}</div><p>本轮题目全部完成！共 ' + total + ' 题，已答 ' + done + ' 题</p></div>';
   }
@@ -1197,6 +1218,7 @@ function finishQuiz() {
   document.getElementById('retryInfo').classList.remove('show');
   quizState.isRetry = false;
   quizState.isReview = false;
+  quizState.isMemory = false;
   renderAll();
   saveState();
 }
@@ -1215,6 +1237,63 @@ function getDueWordIds() {
     if (wa.lastTime + (wa.interval || 1) * REVIEW_DAY <= now) due.push(Number(ids[i]));
   }
   return due;
+}
+
+// ============ MEMORY MODE (记忆模式：做完即删 + 错词间隔回来) ============
+function toggleMemoryMode() {
+  var btn = document.getElementById('memoryBtn');
+  if (!btn) return;
+  var on = btn.classList.toggle('active');
+  if (on) showImportMsg('\u{1F9E0} \u8BB0\u5FC6\u6A21\u5F0F\u5DF2\u5F00\u542F\uFF1A\u505A\u5B8C\u4E00\u9898\u5373\u5220\u9664\uFF0C\u7B54\u9519\u7684\u8BCD\u9694\u51E0\u5929\u81EA\u52A8\u56DE\u6765', 'ok');
+  else showImportMsg('\u5DF2\u5173\u95ED\u8BB0\u5FC6\u6A21\u5F0F\uFF0C\u56DE\u5230\u666E\u901A\u505A\u9898', 'ok');
+  return on;
+}
+function memoryModeOn() {
+  var btn = document.getElementById('memoryBtn');
+  return btn ? btn.classList.contains('active') : false;
+}
+function startMemoryQuiz(mode) {
+  ensureFullWords();
+  var st = state.stats;
+  var learned = st.wordAttempts || {};
+  // 已学词集合（按拼写，兼容核心词/全词两套 id）
+  var learnedWords = {};
+  Object.keys(learned).forEach(function(id) {
+    var w = getWord(parseInt(id));
+    if (w) learnedWords[w.word.toLowerCase()] = true;
+  });
+  var pool = getActivePool();
+  var poolSet = {};
+  pool.forEach(function(w) { poolSet[w.word.toLowerCase()] = true; });
+  // 到期复习词优先（答错/跳过的词，间隔到期自动回来）
+  var dueWords = getDueWordIds().map(function(id) { return getWord(id); })
+    .filter(function(w) { return w && poolSet[w.word.toLowerCase()]; });
+  // 未学新词
+  var newWords = pool.filter(function(w) { return !learnedWords[w.word.toLowerCase()]; });
+  var ids = shuffle(dueWords.map(function(w) { return w.id; }))
+    .concat(shuffle(newWords.map(function(w) { return w.id; })));
+  if (ids.length === 0) {
+    alert('当前词库已全部学完，换个词库或等待复习词到期吧！');
+    return;
+  }
+  quizState = {
+    mode: mode,
+    isRetry: false,
+    isReview: false,
+    isMemory: true,
+    ids: ids,
+    pos: -1,
+    questions: [],
+    answers: {},
+    done: 0,
+    current: null,
+    poolType: currentPool,
+    memWrong: 0,
+    memTotal: ids.length
+  };
+  quizActive = true;
+  advanceQuestion();
+  renderAll();
 }
 
 function startReview() {
@@ -1370,10 +1449,10 @@ function renderQuizCard() {
   var qPron = (mode === 'en2cn' && word.pronunciation) ? word.pronunciation : '';
   var modeLabel = (mode === 'cn2en') ? '看中文选英文' : '看英文选中文';
   var typeLabel = (currentQuizType === 'dictation') ? ' · 默写' : '';
-  var prefix = quizState.isReview ? '🧠 [复习] ' : (quizState.isRetry ? '\u{1F504} [重做] ' : '');
+  var prefix = quizState.isMemory ? '🧠 [记忆] ' : (quizState.isReview ? '🧠 [复习] ' : (quizState.isRetry ? '\u{1F504} [重做] ' : ''));
 
-  // 导航条：上一题 / 题号跳转 / 下一题
-  var navBar =
+  // 导航条：记忆模式做完即删，不提供回看/跳转
+  var navBar = quizState.isMemory ? '' :
     '<div class="quiz-nav" style="display:flex;align-items:center;justify-content:center;gap:8px;margin:2px 0 12px;">' +
     '<button class="ctrl-btn" id="prevQBtn" onclick="prevQuestion()" ' + (pos <= 0 ? 'disabled style="opacity:0.4"' : '') + '>◀ 上一题</button>' +
     '<span style="color:var(--text2);font-size:0.85em;white-space:nowrap;">第 <input type="number" id="jumpInput" value="' + (pos + 1) + '" min="1" max="' + total + '" style="width:56px;padding:3px 4px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);text-align:center;font-size:0.9em;" onkeydown="if(event.key===\'Enter\'){jumpToQuestion(this.value);}"> / ' + total + ' 题</span>' +
@@ -1409,13 +1488,13 @@ function renderQuizCard() {
 
     card.innerHTML =
       '<button class="toggle-fs-btn" id="toggleFsBtn" onclick="(function(e){e.stopPropagation();toggleFullscreen();})(event)">⛶ 全屏</button>' +
-      '<div class="q-label">' + prefix + '第 ' + (pos + 1) + ' / ' + total + ' 题 · ' + modeLabel + typeLabel + '</div>' +
+      '<div class="q-label">' + prefix + (quizState.isMemory ? '剩余 ' + quizState.ids.length + ' 词' : '第 ' + (pos + 1) + ' / ' + total + ' 题') + ' · ' + modeLabel + typeLabel + '</div>' +
       navBar +
       '<div class="q-word" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qText + '</div>' +
       (qPron ? '<div class="q-pron" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qPron + ' <span onclick="speakWord(\'' + word.word.replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:1.2em;" title="朗读发音">\u{1F50A}</span></div>' : '') +
       (mode === 'en2cn' && !qPron ? '<div style="margin-bottom:16px"><span onclick="speakWord(\'' + word.word.replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:1.1em;padding:4px 10px;background:var(--surface2);border-radius:20px;border:1px solid var(--border);display:inline-block;" title="朗读发音">\u{1F50A} 朗读</span></div>' : '') +
       dictInputHTML +
-      '<button class="next-btn" id="nextBtn" onclick="advanceQuestion()" ' + (answered || isSkip ? 'class="next-btn show"' : 'class="next-btn"') + '>下一题 →</button>';
+      '<button class="next-btn" id="nextBtn" onclick="advanceQuestion()" ' + (answered || isSkip ? 'class="next-btn show"' : 'class="next-btn"') + '>' + (quizState.isMemory ? '继续学习 →' : '下一题 →') + '</button>';
 
     if (!answered && !isSkip) {
       setTimeout(function() {
@@ -1467,7 +1546,7 @@ function renderQuizCard() {
 
     card.innerHTML =
       '<button class="toggle-fs-btn" id="toggleFsBtn" onclick="(function(e){e.stopPropagation();toggleFullscreen();})(event)">⛶ 全屏</button>' +
-      '<div class="q-label">' + prefix + '第 ' + (pos + 1) + ' / ' + total + ' 题 · ' + modeLabel + '</div>' +
+      '<div class="q-label">' + prefix + (quizState.isMemory ? '剩余 ' + quizState.ids.length + ' 词' : '第 ' + (pos + 1) + ' / ' + total + ' 题') + ' · ' + modeLabel + '</div>' +
       navBar +
       '<div class="q-word" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qText + '</div>' +
       (qPron ? '<div class="q-pron" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qPron + '</div>' : '') +
@@ -1476,7 +1555,7 @@ function renderQuizCard() {
       (answered || isSkip ? '' : '<button class="skip-btn" id="skipBtn" onclick="handleSkip()" style="display:block;margin:12px auto 0;padding:8px 20px;background:transparent;border:1px dashed var(--border);color:var(--text2);border-radius:20px;cursor:pointer;font-size:0.85em;">不会，跳过</button>') +
       fbHTML +
       (answered || isSkip ? getWordDetailHTML(word) : '') +
-      '<button class="next-btn' + (answered || isSkip ? ' show' : '') + '" id="nextBtn" onclick="advanceQuestion()">下一题 →</button>';
+      '<button class="next-btn' + (answered || isSkip ? ' show' : '') + '" id="nextBtn" onclick="advanceQuestion()">' + (quizState.isMemory ? '继续学习 →' : '下一题 →') + '</button>';
 
     card.querySelectorAll('.opt-btn').forEach(function(btn) {
       btn.addEventListener('click', function() {
@@ -1610,6 +1689,7 @@ function handleDictationSubmit() {
   }
 
   quizState.done++;
+  if (quizState.isMemory && !isCorrect) quizState.memWrong++;
   quizState.answers[quizState.pos] = { text: userAnswer, correct: isCorrect, close: isClose };
   recordStat(word, mode, isCorrect, isClose, true);
 
@@ -1677,6 +1757,7 @@ function handleAnswer(chosenIndex) {
   var labels = ['A', 'B', 'C', 'D'];
 
   quizState.done++;
+  if (quizState.isMemory && !isCorrect) quizState.memWrong++;
   quizState.answers[quizState.pos] = chosenIndex;
   if (quizState.isReview) quizState.reviewCorrect = (quizState.reviewCorrect || 0) + (isCorrect ? 1 : 0);
 
@@ -1762,7 +1843,7 @@ function renderAll() {
 function renderReviewBar() {
   var bar = document.getElementById('reviewBar');
   if (!bar) return;
-  if (quizActive && quizState.isReview) { bar.classList.remove('show'); return; }
+  if (quizActive && (quizState.isReview || quizState.isMemory)) { bar.classList.remove('show'); return; }
   var n = getDueWordIds().length;
   if (n > 0) {
     document.getElementById('reviewInfo').textContent = '今天有 ' + n + ' 个单词到期复习';
@@ -2719,7 +2800,8 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
 });
 
 document.getElementById('startBtn').addEventListener('click', function() {
-  startNewQuiz(currentMode);
+  if (memoryModeOn()) startMemoryQuiz(currentMode);
+  else startNewQuiz(currentMode);
 });
 
 document.getElementById('retryQuizBtn').addEventListener('click', function() {
@@ -2921,6 +3003,7 @@ function handleSkip() {
   var mode = quizState.mode;
 
   quizState.done++;
+  if (quizState.isMemory) quizState.memWrong++;
   quizState.answers[quizState.pos] = 'skip';
   state.stats.totalSkip = (state.stats.totalSkip || 0) + 1;
   state.stats.dictation.skip = (state.stats.dictation.skip || 0) + 1;
@@ -2967,7 +3050,7 @@ document.addEventListener('keydown', function(e) {
     else if (e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); handleSkip(); }
     return;
   }
-  if (e.key === 'ArrowLeft') { e.preventDefault(); prevQuestion(); }
+  if (e.key === 'ArrowLeft') { if (!quizState.isMemory) { e.preventDefault(); prevQuestion(); } }
   else if (e.key === 'ArrowRight') { e.preventDefault(); advanceQuestion(); }
   else if (e.key >= '1' && e.key <= '4' && currentQuizType === 'choice') {
     var idx = parseInt(e.key) - 1;
