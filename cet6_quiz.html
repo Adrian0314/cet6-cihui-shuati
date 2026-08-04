@@ -1474,6 +1474,8 @@ function renderQuizCard() {
   var answerVal = quizState.answers[pos];
   var isSkip = answered && answerVal === 'skip';
   var correctHere = isAnsweredCorrectly(pos);
+  var isFS = card.classList.contains('fullscreen');
+  var fsText = isFS ? '⛶ 退出全屏' : '⛶ 全屏';
 
   var qTextRaw = (mode === 'cn2en') ? getChinese(word.meaning) : word.word;
   var qPOS = (mode === 'cn2en') ? getPOS(word.meaning) : '';
@@ -1522,7 +1524,7 @@ function renderQuizCard() {
       '<div class="quiz-scroll">' +
       '<div class="quiz-top-row">' +
       '<div class="q-label">' + prefix + (quizState.isMemory ? '剩余 ' + quizState.ids.length + ' 词' : '第 ' + (pos + 1) + ' / ' + total + ' 题') + ' · ' + modeLabel + typeLabel + '</div>' +
-      '<button class="toggle-fs-btn" id="toggleFsBtn" onclick="(function(e){e.stopPropagation();toggleFullscreen();})(event)">⛶ 全屏</button>' +
+      '<button class="toggle-fs-btn" id="toggleFsBtn" onclick="(function(e){e.stopPropagation();toggleFullscreen();})(event)">' + fsText + '</button>' +
       '</div>' +
       navBar +
       '<div class="q-word" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qText + '</div>' +
@@ -1586,7 +1588,7 @@ function renderQuizCard() {
       '<div class="quiz-scroll">' +
       '<div class="quiz-top-row">' +
       '<div class="q-label">' + prefix + (quizState.isMemory ? '剩余 ' + quizState.ids.length + ' 词' : '第 ' + (pos + 1) + ' / ' + total + ' 题') + ' · ' + modeLabel + '</div>' +
-      '<button class="toggle-fs-btn" id="toggleFsBtn" onclick="(function(e){e.stopPropagation();toggleFullscreen();})(event)">⛶ 全屏</button>' +
+      '<button class="toggle-fs-btn" id="toggleFsBtn" onclick="(function(e){e.stopPropagation();toggleFullscreen();})(event)">' + fsText + '</button>' +
       '</div>' +
       navBar +
       '<div class="q-word" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qText + '</div>' +
