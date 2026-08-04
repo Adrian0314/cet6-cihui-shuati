@@ -1461,6 +1461,15 @@ function speakBtnFor(word, mode) {
   if (mode !== 'cn2en' || !word || !word.word) return '';
   return '<span onclick="speakWord(&quot;' + word.word + '&quot;)" style="cursor:pointer;margin-left:8px;font-size:0.95em;display:inline-block;vertical-align:middle;" title="朗读发音">\u{1F50A}</span>';
 }
+// 答错时显示"你选的答案"：错误选项的中文释义 + 朗读（en2cn 模式下也读对应英文单词）
+function wrongPickAnswerHTML(q, mode, chosenIndex) {
+  if (typeof chosenIndex !== 'number' || chosenIndex === q.correctIndex) return '';
+  var o = q.options[chosenIndex];
+  if (!o) return '';
+  var speak = speakBtnFor(o, mode) ||
+    '<span onclick="speakWord(&quot;' + o.word + '&quot;)" style="cursor:pointer;margin-left:8px;font-size:0.95em;display:inline-block;vertical-align:middle;" title="朗读发音">\u{1F50A}</span>';
+  return '<div style="margin:6px 0;"><b>你选的答案：</b>' + getChinese(o.meaning) + speak + '</div>';
+}
 function getWordDetailHTML(word) {
   var parts = [];
   if (word.memo) parts.push(['\u{1F9E0}', '\u5DE7\u8BB0', word.memo, '']);
@@ -1612,6 +1621,7 @@ function renderQuizCard() {
       fbHTML = '<div class="feedback show ' + (isSkip ? 'close' : (correctHere ? 'ok' : 'fail')) + '">' +
         '<h4>' + (isSkip ? '\u{1F6AA} \u5DF2\u8DF3\u8FC7' : (correctHere ? '\u2705 \u56DE\u7B54\u6B63\u786E\uFF01' : '\u274C \u56DE\u7B54\u9519\u8BEF')) + '</h4>' +
         '<div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + ((mode === 'cn2en') ? word.word : getChinese(word.meaning)) + speakBtnFor(word, mode) + '</div>' +
+        wrongPickAnswerHTML(q, mode, answerVal) +
         confHTML + '</div>';
     }
 
@@ -1905,6 +1915,7 @@ function handleAnswer(chosenIndex) {
     '<h4>' + (isCorrect ? '✅ 回答正确！' : '❌ 回答错误') + '</h4>' +
     '<div style="margin:6px 0;"><b>题目：</b>' + (mode === 'cn2en' ? getChinese(word.meaning) : word.word) + '</div>' +
     '<div style="margin:6px 0;"><b>正确答案：</b>' + (mode === 'cn2en' ? word.word : getChinese(word.meaning)) + speakBtnFor(word, mode) + '</div>' +
+    wrongPickAnswerHTML(q, mode, chosenIndex) +
     confHTML +
     getWordDetailHTML(word);
 

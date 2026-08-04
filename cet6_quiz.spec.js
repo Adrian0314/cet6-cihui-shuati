@@ -167,3 +167,28 @@ test('multi-POS words render uniform POS badges', async ({ page }) => {
   });
   expect(badgeCount).toBeGreaterThan(1);
 });
+
+test('wrong answer shows picked word meaning with speak button', async ({ page }) => {
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+  await page.waitForTimeout(400); // 等选项入场动画
+
+  // 故意答错：点击正确选项之外的一项
+  const wrongIdx = await page.evaluate(() => {
+    const ci = quizState.current.correctIndex;
+    return (ci + 1) % 4;
+  });
+  await page.click(`#opt-${wrongIdx}`);
+  await page.waitForSelector('.next-btn.show');
+
+  const fb = page.locator('.feedback.show');
+  await expect(fb).toContainText('回答错误');
+  await expect(fb).toContainText('你选的答案');
+  // "你选的答案"行里有朗读按钮，且中文释义非空
+  const pickRow = fb.locator('div:has-text("你选的答案")').first();
+  await expect(pickRow).toBeVisible();
+  const speakCount = await pickRow.locator('span[onclick*="speakWord"]').count();
+  expect(speakCount).toBe(1);
+  const pickText = await pickRow.textContent();
+  expect(pickText.replace('你选的答案：', '').trim().length).toBeGreaterThan(0);
+});
