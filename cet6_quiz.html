@@ -2550,15 +2550,22 @@ function renderCoverageRing() {
   var masteredPct = totalWords > 0 ? Math.round(mastered / totalWords * 100) : 0;
 
   var dark = isDarkMode();
+  // 高分屏适配：按 devicePixelRatio 放大画布物理像素，避免文字模糊
+  var dpr = window.devicePixelRatio || 1;
+  var cw = canvas.parentElement.clientWidth - 40;
+  if (cw < 200) cw = 200;
+  canvas.width = Math.round(cw * dpr);
+  canvas.height = Math.round(220 * dpr);
+  canvas.style.width = cw + 'px';
+  canvas.style.height = '220px';
   var ctx = canvas.getContext('2d');
-  canvas.width = canvas.parentElement.clientWidth - 40;
-  canvas.height = 220;
-  var cx = canvas.width / 2;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  var cx = cw / 2;
   var cy = 110;
   var radius = 80;
   var lineWidth = 18;
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0, 0, cw, 220);
 
   // Gray background ring
   ctx.beginPath();
