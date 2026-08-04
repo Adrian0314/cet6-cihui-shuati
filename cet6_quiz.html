@@ -145,6 +145,8 @@ body{
 
 .ctrl-row{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;justify-content:center}
 .ctrl-btn{padding:9px 18px;border:2px solid var(--border);background:transparent;color:var(--text);border-radius:20px;cursor:pointer;font-size:0.88em;transition:border-color 200ms,background 200ms}
+.hm-range{padding:5px 12px;font-size:0.8em}
+.hm-range.active{border-color:var(--accent,#7c3aed);background:var(--accent,#7c3aed);color:#fff}
 .ctrl-btn:hover{border-color:var(--accent);background:rgba(124,58,237,0.06)}
 .ctrl-btn.danger{border-color:var(--red);color:var(--red)}
 .ctrl-btn.danger:hover{background:rgba(220,38,38,0.06)}
@@ -480,7 +482,18 @@ body{
   <div class="stats-sec"><h2>🎯 词汇掌握情况</h2><div class="sg" id="masteryStats"></div></div>
   <div class="stats-sec" id="dictStatsSec"><h2>✍️ 默写题统计</h2><div class="sg" id="dictStats"></div></div>
   <div class="stats-sec" id="freqStatsSec"><h2>📊 频率分级统计</h2><div class="freq-stats-grid" id="freqStatsGrid"></div></div>
-  <div class="stats-sec"><h2>📈 学习热力图（近90天）</h2><canvas id="heatmapChart" height="160"></canvas></div>
+  <div class="stats-sec"><h2>📈 学习热力图</h2>
+    <div style="display:flex;gap:6px;justify-content:center;margin:10px 0 6px;" id="heatmapRange">
+      <button class="ctrl-btn hm-range" data-days="30">30天</button>
+      <button class="ctrl-btn hm-range active" data-days="90">90天</button>
+      <button class="ctrl-btn hm-range" data-days="180">半年</button>
+      <button class="ctrl-btn hm-range" data-days="365">全年</button>
+    </div>
+    <div style="position:relative;">
+      <canvas id="heatmapChart" height="180"></canvas>
+      <div id="heatmapTip" style="display:none;position:absolute;z-index:30;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:0.8em;box-shadow:0 4px 16px rgba(0,0,0,0.25);pointer-events:none;line-height:1.6;max-width:75vw;"></div>
+    </div>
+  </div>
   <div class="stats-sec chart-row">
     <div class="chart-half"><h2>🎯 考频掌握雷达</h2><canvas id="radarChart"></canvas></div>
     <div class="chart-half"><h2>💍 词汇覆盖</h2><canvas id="coverageRing"></canvas></div>
@@ -2214,14 +2227,84 @@ function setDailyGoal() {
   }
 }
 
+var _heatDays = 90;  // 热力图时间范围（30/90/180/365）
+var _heatCells = []; // 格子命中检测记录
+var _heatTipDate = null; // 固定显示的 tooltip 日期（点按模式）
+
+function heatStreakFrom(dateKey) {
+  var n = 0;
+  var d = new Date(dateKey + 'T12:00:00');
+  var dh = state.stats.dailyHistory || {};
+  while (true) {
+    var k = d.toISOString().split('T')[0];
+    var e = dh[k];
+    if (e && (e.attempts || 0) > 0) { n++; d.setDate(d.getDate() - 1); }
+    else break;
+  }
+  return n;
+}
+
+function showHeatmapTip(cell, px, py, pin) {
+  var tip = document.getElementById('heatmapTip');
+  if (!tip || !cell) return;
+  var dh = state.stats.dailyHistory || {};
+  var dd = dh[cell.date] || { attempts: 0, correct: 0, wrong: 0 };
+  var at = dd.attempts || 0;
+  var co = dd.correct || 0;
+  var wr = dd.wrong || 0;
+  var goal = state.dailyGoal || 30;
+  var rate = at > 0 ? Math.round(100 * co / at) : 0;
+  var met = at >= goal;
+  var d = new Date(cell.date + 'T12:00:00');
+  var wd = ['日','一','二','三','四','五','六'][d.getDay()];
+  var rateColor = rate >= 80 ? '#16a34a' : (rate >= 50 ? '#d97706' : '#dc2626');
+  var rateFace = rate >= 80 ? '👍' : (rate >= 50 ? '👌' : '💪');
+  tip.innerHTML =
+    '<b>' + (d.getMonth() + 1) + '月' + d.getDate() + '日 周' + wd + '</b><br>' +
+    '做题 ' + at + ' 题（答对 ' + co + ' · 答错 ' + wr + '）<br>' +
+    '正确率 ' + rate + '%' + (at > 0 ? ' <span style="color:' + rateColor + '">' + rateFace + '</span>' : '') + '<br>' +
+    (met ? '<span style="color:#16a34a">✓ 已达标</span>' : '<span style="color:var(--text2)">未达标（' + at + ' / ' + goal + '）</span>') +
+    ' · 连续打卡 <b>' + heatStreakFrom(cell.date) + '</b> 天';
+  tip.style.display = 'block';
+  var wrap = tip.parentElement;
+  var tw = tip.offsetWidth;
+  var th = tip.offsetHeight;
+  var x = px + 10;
+  if (x + tw > wrap.clientWidth - 4) x = px - tw - 10;
+  if (x < 4) x = 4;
+  var y = py - 10;
+  if (y + th > wrap.clientHeight - 4) y = wrap.clientHeight - th - 4;
+  if (y < 4) y = 4;
+  tip.style.left = x + 'px';
+  tip.style.top = y + 'px';
+  if (pin) _heatTipDate = cell.date;
+}
+
+function hideHeatmapTip() {
+  var tip = document.getElementById('heatmapTip');
+  if (tip) tip.style.display = 'none';
+  _heatTipDate = null;
+}
+
+function hitHeatCell(px, py) {
+  for (var i = 0; i < _heatCells.length; i++) {
+    var c = _heatCells[i];
+    if (px >= c.x && px <= c.x + c.size && py >= c.y && py <= c.y + c.size) return c;
+  }
+  return null;
+}
+
 function renderHeatmapChart() {
   var canvas = document.getElementById('heatmapChart');
   if (!canvas) return;
   var ctx = canvas.getContext('2d');
-  var w = canvas.parentElement.clientWidth - 48;
+  var wrap = canvas.parentElement;
+  var w = wrap.clientWidth;
+  if (w < 200) w = 200;
   canvas.width = w;
-  canvas.height = 160;
+  canvas.height = 180;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  hideHeatmapTip();
 
   var dark = isDarkMode();
   var labelColor = dark ? '#94a3b8' : '#888';
@@ -2229,38 +2312,42 @@ function renderHeatmapChart() {
   var borderColor = dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
 
   var today = new Date();
-  var days = 90;
+  var days = _heatDays;
   var cols = Math.ceil(days / 7);
-  var cellSize = Math.floor((canvas.width - 40) / cols);
   var cellGap = 2;
-  if (cellSize < 8) cellSize = 8;
+  var startX = 30;
+  var availW = w - startX - 8;
+  var cellSize = Math.floor((availW - (cols - 1) * cellGap) / cols);
+  if (cellSize < 4) cellSize = 4;
+  var maxCell = Math.floor((158 - 26) / 7); // 高度上限：底部图例区之前
+  if (cellSize > maxCell) cellSize = maxCell;
 
   var weekdays = ['日','一','二','三','四','五','六'];
-
-  // Draw weekday labels
   ctx.font = '9px sans-serif';
   for (var wi = 0; wi < 7; wi++) {
-    var y = 30 + wi * (cellSize + cellGap);
+    var ly = 26 + wi * (cellSize + cellGap);
     ctx.fillStyle = labelColor;
-    ctx.fillText(weekdays[wi], 5, y + cellSize - 2);
+    ctx.fillText(weekdays[wi], 5, ly + cellSize - 2);
   }
 
-  var startX = 30;
+  var goal = state.dailyGoal || 30;
+  var dh = state.stats.dailyHistory || {};
+  _heatCells = [];
+
   for (var d = days - 1; d >= 0; d--) {
     var dt = new Date(today);
     dt.setDate(dt.getDate() - d);
     var key = dt.toISOString().split('T')[0];
-    var dd = state.stats.dailyHistory[key] || { attempts: 0 };
+    var dd = dh[key] || { attempts: 0, correct: 0, wrong: 0 };
     var count = dd.attempts || 0;
+    var corr = dd.correct || 0;
 
     var col = Math.floor((days - 1 - d) / 7);
     var row = dt.getDay(); // 0=Sun
-
     var x = startX + col * (cellSize + cellGap);
-    var y = 30 + row * (cellSize + cellGap);
+    var y = 26 + row * (cellSize + cellGap);
 
     // 颜色档位跟随每日目标：0 / 未达1/3 / 未达标 / 达标（深绿）
-    var goal = state.dailyGoal || 30;
     var color = emptyColor;
     if (count > 0) color = '#bbf7d0';
     if (count >= Math.ceil(goal / 3)) color = '#4ade80';
@@ -2270,19 +2357,72 @@ function renderHeatmapChart() {
     ctx.fillRect(x, y, cellSize, cellSize);
     ctx.strokeStyle = borderColor;
     ctx.strokeRect(x, y, cellSize, cellSize);
+
+    // 正确率圆点：绿≥80% / 黄50-80% / 红<50%；格子太小或纯复习（无答题记录）则省略
+    if (cellSize >= 7 && count > 0 && corr > 0) {
+      var rate = corr / count;
+      var dotC = '#ef4444';
+      if (rate >= 0.8) dotC = '#22c55e';
+      else if (rate >= 0.5) dotC = '#eab308';
+      ctx.fillStyle = dotC;
+      ctx.beginPath();
+      ctx.arc(x + cellSize - Math.max(2, cellSize * 0.22), y + Math.max(2, cellSize * 0.22), Math.max(1.5, cellSize * 0.14), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    _heatCells.push({ x: x, y: y, size: cellSize, date: key, count: count, correct: corr });
   }
 
-  // Legend
-  var legendX = startX + cols * (cellSize + cellGap) + 10;
-  var legendY = 30;
+  // 底部图例：做题量档位 + 正确率圆点三色
   ctx.fillStyle = labelColor;
   ctx.font = '9px sans-serif';
-  ctx.fillText('少', legendX, legendY + 8);
-  [{c:emptyColor},{c:'#bbf7d0'},{c:'#4ade80'},{c:'#16a34a'}].forEach(function(li, i) {
+  ctx.fillText('做题量', 5, 164);
+  [{ c: emptyColor, t: '0' }, { c: '#bbf7d0', t: '少量' }, { c: '#4ade80', t: '中量' }, { c: '#16a34a', t: '达标' }].forEach(function(li, i) {
+    var lx = 36 + i * 46;
     ctx.fillStyle = li.c;
-    ctx.fillRect(legendX + 12 + i * (cellSize + 2), legendY, cellSize, cellSize);
+    ctx.fillRect(lx, 154, 8, 8);
+    ctx.strokeStyle = borderColor;
+    ctx.strokeRect(lx, 154, 8, 8);
+    ctx.fillStyle = labelColor;
+    ctx.fillText(li.t, lx + 11, 162);
   });
-  ctx.fillText('多', legendX + 16 + 4 * (cellSize + 2), legendY + 8);
+  ctx.fillText('正确率', 5, 176);
+  [{ c: '#22c55e', t: '≥80%' }, { c: '#eab308', t: '50-80%' }, { c: '#ef4444', t: '<50%' }].forEach(function(li, i) {
+    var lx = 36 + i * 56;
+    ctx.fillStyle = li.c;
+    ctx.beginPath();
+    ctx.arc(lx + 4, 170, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = labelColor;
+    ctx.fillText(li.t, lx + 11, 174);
+  });
+
+  // 交互绑定（一次性）：悬停/点按显示详情
+  if (!canvas._hmBound) {
+    canvas._hmBound = true;
+    canvas.addEventListener('mousemove', function(e) {
+      var r = canvas.getBoundingClientRect();
+      var cell = hitHeatCell(e.clientX - r.left, e.clientY - r.top);
+      if (cell) showHeatmapTip(cell, e.clientX - r.left, e.clientY - r.top, false);
+      else if (!_heatTipDate) hideHeatmapTip();
+    });
+    canvas.addEventListener('mouseleave', function() { if (!_heatTipDate) hideHeatmapTip(); });
+    canvas.addEventListener('click', function(e) {
+      var r = canvas.getBoundingClientRect();
+      var cell = hitHeatCell(e.clientX - r.left, e.clientY - r.top);
+      if (cell) showHeatmapTip(cell, e.clientX - r.left, e.clientY - r.top, true);
+    });
+    canvas.addEventListener('touchstart', function(e) {
+      var t = e.touches[0];
+      var r = canvas.getBoundingClientRect();
+      var cell = hitHeatCell(t.clientX - r.left, t.clientY - r.top);
+      if (cell) showHeatmapTip(cell, t.clientX - r.left, t.clientY - r.top, true);
+      else hideHeatmapTip();
+    }, { passive: true });
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest || !e.target.closest('#heatmapChart')) hideHeatmapTip();
+    });
+  }
 }
 
 function renderRadarChart() {
@@ -2846,6 +2986,16 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     });
     if (tab === 'browse') { _browsePage = 0; renderBrowse(); }
     else renderAll();
+  });
+});
+
+// 热力图时间范围切换（30/90/180/365 天）
+document.querySelectorAll('.hm-range').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.hm-range').forEach(function(b) { b.classList.remove('active'); });
+    this.classList.add('active');
+    _heatDays = parseInt(this.dataset.days) || 90;
+    renderHeatmapChart();
   });
 });
 

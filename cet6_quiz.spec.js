@@ -94,3 +94,57 @@ test('fullscreen button text stays correct after re-render', async ({ page }) =>
   await expect(page.locator('#toggleFsBtn')).toContainText('全屏');
   await expect(page.locator('#quizCard')).not.toHaveClass(/fullscreen/);
 });
+
+test('heatmap renders with range switch and tooltip', async ({ page }) => {
+  // 注入一天学习数据（今天：10题，9对，达标）
+  await page.evaluate(() => {
+    const k = 'cet6_quiz_app_v2';
+    let st = {};
+    try { st = JSON.parse(localStorage.getItem(k) || '{}'); } catch (e) {}
+    st.stats = st.stats || {};
+    st.stats.dailyHistory = st.stats.dailyHistory || {};
+    const today = new Date().toISOString().split('T')[0];
+    st.stats.dailyHistory[today] = { attempts: 10, correct: 9, wrong: 1 };
+    st.dailyGoal = 10; // 与注入的 10 题匹配，让今天达标
+    localStorage.setItem(k, JSON.stringify(st));
+  });
+  await page.reload();
+  await page.waitForLoadState('domcontentloaded');
+
+  await page.click('button[data-tab="stats-page"]');
+  await page.waitForTimeout(300);
+  const canvas = page.locator('#heatmapChart');
+  await expect(canvas).toBeVisible();
+  const dims = await canvas.evaluate(c => ({ w: c.width, h: c.height }));
+  expect(dims.w).toBeGreaterThan(200);
+  expect(dims.h).toBe(180);
+
+  // 范围切换按钮工作
+  await page.click('.hm-range[data-days="30"]');
+  await expect(page.locator('.hm-range.active')).toHaveAttribute('data-days', '30');
+  await page.click('.hm-range[data-days="365"]');
+  await expect(page.locator('.hm-range.active')).toHaveAttribute('data-days', '365');
+  await page.click('.hm-range[data-days="90"]');
+  await expect(page.locator('.hm-range.active')).toHaveAttribute('data-days', '90');
+
+  // 点击今天格子 → tooltip 显示：做题数/正确率/达标/连续打卡
+  const box = await canvas.boundingBox();
+  const pos = await canvas.evaluate(() => {
+    const today = new Date().toISOString().split('T')[0];
+    for (const cell of _heatCells) {
+      if (cell.date === today) return { x: cell.x + cell.size / 2, y: cell.y + cell.size / 2 };
+    }
+    return null;
+  });
+  expect(pos).not.toBeNull();
+  await page.mouse.click(box.x + pos.x, box.y + pos.y);
+  await expect(page.locator('#heatmapTip')).toBeVisible();
+  await expect(page.locator('#heatmapTip')).toContainText('做题 10 题');
+  await expect(page.locator('#heatmapTip')).toContainText('正确率 90%');
+  await expect(page.locator('#heatmapTip')).toContainText('已达标');
+  await expect(page.locator('#heatmapTip')).toContainText('连续打卡 1 天');
+
+  // 点击 canvas 外部（标题）→ tooltip 隐藏
+  await page.locator('h2:has-text("学习热力图")').click();
+  await expect(page.locator('#heatmapTip')).toBeHidden();
+});
