@@ -1430,6 +1430,11 @@ function discardSaved() {
 }
 
 // ============ WORD DETAIL (助记/例句/派生词 板块) ============
+// 反馈区"正确答案"为英文单词时，右侧附朗读按钮
+function speakBtnFor(word, mode) {
+  if (mode !== 'cn2en' || !word || !word.word) return '';
+  return '<span onclick="speakWord(&quot;' + word.word + '&quot;)" style="cursor:pointer;margin-left:8px;font-size:0.95em;display:inline-block;vertical-align:middle;" title="朗读发音">\u{1F50A}</span>';
+}
 function getWordDetailHTML(word) {
   var parts = [];
   if (word.memo) parts.push(['\u{1F9E0}', '\u5DE7\u8BB0', word.memo, '']);
@@ -1497,13 +1502,13 @@ function renderQuizCard() {
         '<div class="feedback show ' + (answerVal.correct ? 'ok' : (answerVal.close ? 'close' : 'fail')) + '">' +
         '<h4>' + (answerVal.correct ? '\u2705 \u6B63\u786E\uFF01' : (answerVal.close ? '\uD83D\uDFE1 \u63A5\u8FD1\u6B63\u786E' : '\u274C \u9519\u8BEF')) + '</h4>' +
         '<div style="margin:6px 0;"><b>\u4F60\u7684\u7B54\u6848\uFF1A</b>' + answerVal.text + '</div>' +
-        '<div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + ((mode === 'cn2en') ? word.word : getChinese(word.meaning)) + '</div>' +
+        '<div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + ((mode === 'cn2en') ? word.word : getChinese(word.meaning)) + speakBtnFor(word, mode) + '</div>' +
         '</div>' +
         getWordDetailHTML(word);
     } else if (isSkip) {
       dictInputHTML =
         '<input type="text" class="dict-input result-orange" value="' + ((mode === 'cn2en') ? word.word : getChinese(word.meaning)) + '" disabled style="opacity:0.9">' +
-        '<div class="feedback show close"><h4>\u{1F6AA} \u5DF2\u8DF3\u8FC7</h4><div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + ((mode === 'cn2en') ? word.word : getChinese(word.meaning)) + '</div></div>' +
+        '<div class="feedback show close"><h4>\u{1F6AA} \u5DF2\u8DF3\u8FC7</h4><div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + ((mode === 'cn2en') ? word.word : getChinese(word.meaning)) + speakBtnFor(word, mode) + '</div></div>' +
         getWordDetailHTML(word);
     } else {
       dictInputHTML =
@@ -1569,7 +1574,7 @@ function renderQuizCard() {
       }
       fbHTML = '<div class="feedback show ' + (isSkip ? 'close' : (correctHere ? 'ok' : 'fail')) + '">' +
         '<h4>' + (isSkip ? '\u{1F6AA} \u5DF2\u8DF3\u8FC7' : (correctHere ? '\u2705 \u56DE\u7B54\u6B63\u786E\uFF01' : '\u274C \u56DE\u7B54\u9519\u8BEF')) + '</h4>' +
-        '<div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + ((mode === 'cn2en') ? word.word : getChinese(word.meaning)) + '</div>' +
+        '<div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + ((mode === 'cn2en') ? word.word : getChinese(word.meaning)) + speakBtnFor(word, mode) + '</div>' +
         confHTML + '</div>';
     }
 
@@ -1771,7 +1776,7 @@ function handleDictationSubmit() {
   fb.innerHTML =
     '<h4>' + resultLabel + '</h4>' +
     '<div style="margin:6px 0;"><b>\u4F60\u7684\u7B54\u6848\uFF1A</b>' + userAnswer + '</div>' +
-    '<div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + correctAnswerText + '</div>' +
+    '<div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + correctAnswerText + speakBtnFor(word, mode) + '</div>' +
     (isClose ? '<div style="margin:6px 0;color:var(--text2);">\u63D0\u793A\uFF1A\u62FC\u5199\u63A5\u8FD1\uFF0C\u7EE7\u7EED\u52A0\u6CB9\uFF01</div>' : '') +
     getWordDetailHTML(word);
 
@@ -1858,7 +1863,7 @@ function handleAnswer(chosenIndex) {
   fb.innerHTML =
     '<h4>' + (isCorrect ? '✅ 回答正确！' : '❌ 回答错误') + '</h4>' +
     '<div style="margin:6px 0;"><b>题目：</b>' + (mode === 'cn2en' ? getChinese(word.meaning) : word.word) + '</div>' +
-    '<div style="margin:6px 0;"><b>正确答案：</b>' + (mode === 'cn2en' ? word.word : getChinese(word.meaning)) + '</div>' +
+    '<div style="margin:6px 0;"><b>正确答案：</b>' + (mode === 'cn2en' ? word.word : getChinese(word.meaning)) + speakBtnFor(word, mode) + '</div>' +
     confHTML +
     getWordDetailHTML(word);
 
@@ -3064,13 +3069,13 @@ function handleSkip() {
     var correctBtn = document.getElementById('opt-' + q.correctIndex);
     if (correctBtn) correctBtn.classList.add('correct');
     document.getElementById('feedback').className = 'feedback show close';
-    document.getElementById('feedback').innerHTML = '<h4>\u{1F6AA} \u5DF2\u8DF3\u8FC7</h4><div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + correctText + '</div>' + getWordDetailHTML(word);
+    document.getElementById('feedback').innerHTML = '<h4>\u{1F6AA} \u5DF2\u8DF3\u8FC7</h4><div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + correctText + speakBtnFor(word, mode) + '</div>' + getWordDetailHTML(word);
   } else {
     var dictInp = document.getElementById('dictInput');
     if (dictInp) { dictInp.disabled = true; dictInp.value = correctText; dictInp.classList.add('result-orange'); }
     document.getElementById('dictSubmitBtn').disabled = true;
     document.getElementById('feedback').className = 'feedback show close';
-    document.getElementById('feedback').innerHTML = '<h4>\u{1F6AA} \u5DF2\u8DF3\u8FC7</h4><div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + correctText + '</div>' + getWordDetailHTML(word);
+    document.getElementById('feedback').innerHTML = '<h4>\u{1F6AA} \u5DF2\u8DF3\u8FC7</h4><div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + correctText + speakBtnFor(word, mode) + '</div>' + getWordDetailHTML(word);
   }
   document.getElementById('nextBtn').classList.add('show');
   saveState();
