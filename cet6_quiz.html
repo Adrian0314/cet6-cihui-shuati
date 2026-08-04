@@ -1461,14 +1461,24 @@ function speakBtnFor(word, mode) {
   if (mode !== 'cn2en' || !word || !word.word) return '';
   return '<span onclick="speakWord(&quot;' + word.word + '&quot;)" style="cursor:pointer;margin-left:8px;font-size:0.95em;display:inline-block;vertical-align:middle;" title="朗读发音">\u{1F50A}</span>';
 }
-// 答错时显示"你选的答案"：错误选项的中文释义 + 朗读（en2cn 模式下也读对应英文单词）
-function wrongPickAnswerHTML(q, mode, chosenIndex) {
-  if (typeof chosenIndex !== 'number' || chosenIndex === q.correctIndex) return '';
-  var o = q.options[chosenIndex];
-  if (!o) return '';
-  var speak = speakBtnFor(o, mode) ||
-    '<span onclick="speakWord(&quot;' + o.word + '&quot;)" style="cursor:pointer;margin-left:8px;font-size:0.95em;display:inline-block;vertical-align:middle;" title="朗读发音">\u{1F50A}</span>';
-  return '<div style="margin:6px 0;"><b>你选的答案：</b>' + getChinese(o.meaning) + speak + '</div>';
+// 答错/跳过后显示"其余选项"：ABCD 中除正确项外的三个，每行 编号+单词+释义+朗读，选错项标注"← 你选的"
+function wrongOptionsHTML(q, mode, chosenIndex) {
+  var labels = ['A', 'B', 'C', 'D'];
+  var rows = '';
+  for (var i = 0; i < q.options.length; i++) {
+    if (i === q.correctIndex) continue;
+    var o = q.options[i];
+    if (!o) continue;
+    var speak = speakBtnFor(o, mode) ||
+      '<span onclick="speakWord(&quot;' + o.word + '&quot;)" style="cursor:pointer;margin-left:8px;font-size:0.95em;display:inline-block;vertical-align:middle;" title="朗读发音">\u{1F50A}</span>';
+    var picked = (typeof chosenIndex === 'number' && i === chosenIndex)
+      ? ' <span style="color:var(--red);font-size:0.85em;margin-left:6px;">← 你选的</span>' : '';
+    var text = (mode === 'cn2en')
+      ? '<strong>' + o.word + '</strong>' + (o.pronunciation ? ' <span style="color:var(--text2);font-size:0.85em;">' + o.pronunciation + '</span>' : '') + ' ' + getChinese(o.meaning)
+      : getChinese(o.meaning);
+    rows += '<div style="margin:4px 0;"><span style="display:inline-block;min-width:20px;font-weight:700;color:var(--text2);">' + labels[i] + '.</span> ' + text + speak + picked + '</div>';
+  }
+  return rows ? '<div style="margin:8px 0 2px;"><b>其余选项：</b></div>' + rows : '';
 }
 function getWordDetailHTML(word) {
   var parts = [];
@@ -1624,7 +1634,7 @@ function renderQuizCard() {
       fbHTML = '<div class="feedback show ' + (isSkip ? 'close' : (correctHere ? 'ok' : 'fail')) + '">' +
         '<h4>' + (isSkip ? '\u{1F6AA} \u5DF2\u8DF3\u8FC7' : (correctHere ? '\u2705 \u56DE\u7B54\u6B63\u786E\uFF01' : '\u274C \u56DE\u7B54\u9519\u8BEF')) + '</h4>' +
         '<div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + ((mode === 'cn2en') ? word.word : getChinese(word.meaning)) + speakBtnFor(word, mode) + '</div>' +
-        wrongPickAnswerHTML(q, mode, answerVal) +
+        (correctHere ? '' : wrongOptionsHTML(q, mode, answerVal)) +
         confHTML + '</div>';
     }
 
@@ -1918,7 +1928,7 @@ function handleAnswer(chosenIndex) {
     '<h4>' + (isCorrect ? '✅ 回答正确！' : '❌ 回答错误') + '</h4>' +
     '<div style="margin:6px 0;"><b>题目：</b>' + (mode === 'cn2en' ? getChinese(word.meaning) : word.word) + '</div>' +
     '<div style="margin:6px 0;"><b>正确答案：</b>' + (mode === 'cn2en' ? word.word : getChinese(word.meaning)) + speakBtnFor(word, mode) + '</div>' +
-    wrongPickAnswerHTML(q, mode, chosenIndex) +
+    (isCorrect ? '' : wrongOptionsHTML(q, mode, chosenIndex)) +
     confHTML +
     getWordDetailHTML(word);
 

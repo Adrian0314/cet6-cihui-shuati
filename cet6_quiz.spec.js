@@ -168,7 +168,7 @@ test('multi-POS words render uniform POS badges', async ({ page }) => {
   expect(badgeCount).toBeGreaterThan(1);
 });
 
-test('wrong answer shows picked word meaning with speak button', async ({ page }) => {
+test('wrong answer lists other options with labels and picked mark', async ({ page }) => {
   await page.click('button:has-text("开始做题")');
   await page.waitForSelector('.opt-btn');
   await page.waitForTimeout(400); // 等选项入场动画
@@ -183,14 +183,15 @@ test('wrong answer shows picked word meaning with speak button', async ({ page }
 
   const fb = page.locator('.feedback.show');
   await expect(fb).toContainText('回答错误');
-  await expect(fb).toContainText('你选的答案');
-  // "你选的答案"行里有朗读按钮，且中文释义非空
-  const pickRow = fb.locator('div:has-text("你选的答案")').first();
-  await expect(pickRow).toBeVisible();
-  const speakCount = await pickRow.locator('span[onclick*="speakWord"]').count();
-  expect(speakCount).toBe(1);
-  const pickText = await pickRow.textContent();
-  expect(pickText.replace('你选的答案：', '').trim().length).toBeGreaterThan(0);
+  // 其余选项列表：标题 + 三个错误选项（每个有朗读按钮）
+  await expect(fb).toContainText('其余选项');
+  const rows = fb.locator('div:has-text("你选的")');
+  await expect(rows.first()).toContainText('← 你选的');
+  const speakCount = await fb.locator('span[onclick*="speakWord"]').count();
+  expect(speakCount).toBeGreaterThanOrEqual(3); // 正确答案 1 + 三个错误选项各 1
+  // 三个错误选项都有编号标签（A./B./C./D.）
+  const labelCount = await fb.locator('span:has-text(".")').count();
+  expect(labelCount).toBeGreaterThanOrEqual(3);
 });
 
 test('handwrite pad draws and recognizes into input with dict correction', async ({ page }) => {
