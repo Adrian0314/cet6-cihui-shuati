@@ -1582,9 +1582,9 @@ function wrongOptionsHTML(q, mode, chosenIndex) {
     var picked = (typeof chosenIndex === 'number' && i === chosenIndex)
       ? ' <span style="color:var(--red);font-size:0.85em;margin-left:6px;">← 你选的</span>' : '';
     var text = (mode === 'cn2en')
-      ? '<strong>' + o.word + '</strong>' + (o.pronunciation ? ' <span style="color:var(--text2);font-size:0.85em;">' + o.pronunciation + '</span>' : '') + ' ' + getChineseFull(o.meaning)
+      ? '<strong>' + o.word + '</strong>' + (o.pronunciation ? ' <span style="color:var(--text2);font-size:0.85em;">' + o.pronunciation + '</span>' : '') + speak + ' <span style="color:var(--text2);">' + getChineseFull(o.meaning) + '</span>'
       : getChineseFull(o.meaning);
-    rows += '<div style="margin:4px 0;"><span style="display:inline-block;min-width:20px;font-weight:700;color:var(--text2);">' + labels[i] + '.</span> ' + text + speak + picked + '</div>';
+    rows += '<div style="margin:4px 0;"><span style="display:inline-block;min-width:20px;font-weight:700;color:var(--text2);">' + labels[i] + '.</span> ' + text + (mode === 'en2cn' ? speak : '') + picked + '</div>';
   }
   return rows ? '<div style="margin:8px 0 2px;"><b>其余选项：</b></div>' + rows : '';
 }
