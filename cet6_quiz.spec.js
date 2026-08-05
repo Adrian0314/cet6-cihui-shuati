@@ -283,3 +283,49 @@ test('feedback question line shows all POS tags for multi-POS word', async ({ pa
   const posCount = (qLine.match(/[a-z]+\./g) || []).length;
   expect(posCount).toBeGreaterThanOrEqual(2);
 });
+
+test('next question scrolls back to question top', async ({ page }) => {
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+  await page.waitForTimeout(400);
+
+  // 答题后把页面滚到底部（模拟用户在看详解）
+  await page.locator('.opt-btn').first().click();
+  await page.waitForSelector('.next-btn.show');
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+
+  await page.click('.next-btn');
+  await page.waitForSelector('.opt-btn');
+  await page.waitForTimeout(300);
+
+  const pos = await page.evaluate(() => {
+    const card = document.getElementById('quizCard');
+    return { scrollY: window.scrollY, cardTop: card.offsetTop };
+  });
+  // 题目卡片回到视口上部（页面变矮时 scrollTo 会被 clamp，允许卡片顶部距离视口顶 < 200px）
+  expect(pos.scrollY).toBeLessThan(pos.cardTop);
+  expect(pos.cardTop - pos.scrollY).toBeLessThan(200);
+});
+
+test('fullscreen next question scrolls quiz-scroll back to top', async ({ page }) => {
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+  await page.waitForTimeout(400);
+  await page.click('#toggleFsBtn'); // 进入全屏
+  await page.waitForTimeout(300);
+
+  // 答一题并把 quiz-scroll 滚到底
+  await page.locator('.opt-btn').first().click();
+  await page.waitForSelector('.next-btn.show');
+  await page.evaluate(() => {
+    const el = document.querySelector('.quiz-card .quiz-scroll');
+    el.scrollTop = el.scrollHeight;
+  });
+
+  await page.click('.next-btn');
+  await page.waitForSelector('.opt-btn');
+  await page.waitForTimeout(300);
+
+  const top = await page.evaluate(() => document.querySelector('.quiz-card .quiz-scroll').scrollTop);
+  expect(top).toBe(0);
+});

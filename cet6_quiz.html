@@ -1676,6 +1676,16 @@ function renderQuizCard() {
   }
 
   document.getElementById('startBtn').style.display = 'none';
+
+  // 翻题/切题后回到题目顶部，避免停留在上一题的滚动位置
+  try {
+    var scrollEl = card.querySelector('.quiz-scroll');
+    if (card.classList.contains('fullscreen') && scrollEl) {
+      scrollEl.scrollTop = 0;
+    } else {
+      window.scrollTo(0, Math.max(0, card.offsetTop - 12));
+    }
+  } catch (e) {}
 }
 
 function recordStat(word, mode, isCorrect, isClose, isDictation) {
