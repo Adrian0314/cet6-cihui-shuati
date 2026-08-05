@@ -1639,11 +1639,11 @@ function groupMapSVG(word) {
     }
   } catch (e) {}
   if (!members || members.length < 2) return '';
-  // 按 seq 与当前词的接近程度排序，取前后共 12 个（含当前词）
+  // 按 seq 与当前词的接近程度排序，取前后共 9 个（含当前词，节点稀疏避免文字重叠）
   members.sort(function(a, b) {
     return Math.abs((a.seq || 0) - (word.seq || 0)) - Math.abs((b.seq || 0) - (word.seq || 0));
   });
-  members = members.slice(0, 11);
+  members = members.slice(0, 8);
   members.push(word);
   members.sort(function(a, b) { return (a.seq || 0) - (b.seq || 0); });
   var n = members.length;
@@ -1667,9 +1667,10 @@ function groupMapSVG(word) {
     var x2 = cx + R * Math.cos(ang2), y2 = cy + R * Math.sin(ang2);
     var tx = cx + textR * Math.cos(ang2), ty = cy + textR * Math.sin(ang2);
     var isCur = (w.word.toLowerCase() === word.word.toLowerCase());
-    var wordText = String(w.word).slice(0, 9);
+    var wordText = String(w.word).slice(0, 11);
+    // 当前词：白字+紫色描边（圆外浅色背景上也清晰），其他词：深字
     svg += '<circle cx="' + x2 + '" cy="' + y2 + '" r="' + (isCur ? 18 : 14) + '" style="fill:' + (isCur ? 'var(--accent)' : 'var(--surface2)') + ';stroke:var(--accent);cursor:pointer" stroke-width="1.8" onclick="speakWord(\'' + String(w.word).replace(/'/g, "\\'") + '\')"/>' +
-      '<text x="' + tx + '" y="' + ty + '" text-anchor="middle" dominant-baseline="middle" font-size="' + (isCur ? 12 : 10.5) + '" font-weight="' + (isCur ? 700 : 500) + '" style="fill:' + (isCur ? 'var(--accent)' : 'var(--text)') + '">' + wordText + '</text>';
+      '<text x="' + tx + '" y="' + ty + '" text-anchor="middle" dominant-baseline="middle" font-size="' + (isCur ? 12.5 : 10.5) + '" font-weight="' + (isCur ? 700 : 500) + '" paint-order="stroke" style="fill:' + (isCur ? '#ffffff' : 'var(--text)') + ';stroke:' + (isCur ? 'var(--accent)' : 'none') + ';stroke-width:' + (isCur ? '2.5' : '0') + '">' + wordText + '</text>';
   }
   svg += '</svg>';
   return '<div style="margin:10px 0 2px;font-size:0.85em;color:var(--text2);text-align:center;">🗺️ 词群导图（点击单词朗读）</div>' + svg;
