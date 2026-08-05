@@ -1647,8 +1647,8 @@ function groupMapSVG(word) {
   members.push(word);
   members.sort(function(a, b) { return (a.seq || 0) - (b.seq || 0); });
   var n = members.length;
-  var cx = 170, cy = 100, R = 52, textR = 78;
-  var svg = '<svg viewBox="0 0 340 200" style="width:100%;max-width:360px;height:auto;display:block;margin:8px auto;">';
+  var cx = 180, cy = 125, R = 58, textR = 114;
+  var svg = '<svg viewBox="0 0 360 250" style="width:100%;max-width:360px;height:auto;display:block;margin:8px auto;">';
   // 连线（颜色用 style，CSS 变量在 attribute 中不生效）
   for (var i = 0; i < n; i++) {
     var ang = (2 * Math.PI * i / n) - Math.PI / 2;
@@ -1660,17 +1660,17 @@ function groupMapSVG(word) {
   svg += '<circle cx="' + cx + '" cy="' + cy + '" r="36" style="fill:var(--accent);opacity:0.15"/>' +
     '<circle cx="' + cx + '" cy="' + cy + '" r="36" fill="none" stroke-width="1.8" style="stroke:var(--accent)"/>' +
     '<text x="' + cx + '" y="' + cy + '" text-anchor="middle" dominant-baseline="middle" font-size="14" font-weight="700" style="fill:var(--text)">' + gname + '</text>';
-  // 节点：圆在圆周上，单词标注在圆外沿径向延伸（可读性优先），颜色用 style 保证 CSS 变量生效
+  // 节点：所有圆大小统一（避免当前词大圆压到相邻圆），单词一律标注在圆外沿径向延伸，与圆完全分离（可读性优先），颜色用 style 保证 CSS 变量生效
   for (var j = 0; j < n; j++) {
     var w = members[j];
     var ang2 = (2 * Math.PI * j / n) - Math.PI / 2;
     var x2 = cx + R * Math.cos(ang2), y2 = cy + R * Math.sin(ang2);
     var tx = cx + textR * Math.cos(ang2), ty = cy + textR * Math.sin(ang2);
     var isCur = (w.word.toLowerCase() === word.word.toLowerCase());
-    var wordText = String(w.word).slice(0, 11);
-    // 当前词：白字+紫色描边（圆外浅色背景上也清晰），其他词：深字
-    svg += '<circle cx="' + x2 + '" cy="' + y2 + '" r="' + (isCur ? 18 : 14) + '" style="fill:' + (isCur ? 'var(--accent)' : 'var(--surface2)') + ';stroke:var(--accent);cursor:pointer" stroke-width="1.8" onclick="speakWord(\'' + String(w.word).replace(/'/g, "\\'") + '\')"/>' +
-      '<text x="' + tx + '" y="' + ty + '" text-anchor="middle" dominant-baseline="middle" font-size="' + (isCur ? 12.5 : 10.5) + '" font-weight="' + (isCur ? 700 : 500) + '" paint-order="stroke" style="fill:' + (isCur ? '#ffffff' : 'var(--text)') + ';stroke:' + (isCur ? 'var(--accent)' : 'none') + ';stroke-width:' + (isCur ? '2.5' : '0') + '">' + wordText + '</text>';
+    var wordText = String(w.word).slice(0, 10);
+    // 当前词：实心紫圆+粗边表示位置，文字同样放圆外（白字紫描边保证浅底清晰），与圆零重叠
+    svg += '<circle cx="' + x2 + '" cy="' + y2 + '" r="14" style="fill:' + (isCur ? 'var(--accent)' : 'var(--surface2)') + ';stroke:var(--accent);cursor:pointer" stroke-width="' + (isCur ? 2.4 : 1.6) + '" onclick="speakWord(\'' + String(w.word).replace(/'/g, "\\'") + '\')"/>' +
+      '<text x="' + tx + '" y="' + ty + '" text-anchor="middle" dominant-baseline="middle" font-size="10.5" font-weight="' + (isCur ? 700 : 500) + '" paint-order="stroke" style="fill:' + (isCur ? '#ffffff' : 'var(--text)') + ';stroke:' + (isCur ? 'rgba(0,0,0,0.6)' : 'none') + ';stroke-width:' + (isCur ? '2.5' : '0') + '">' + wordText + '</text>';
   }
   svg += '</svg>';
   return '<div style="margin:10px 0 2px;font-size:0.85em;color:var(--text2);text-align:center;">🗺️ 词群导图（点击单词朗读）</div>' + svg;
