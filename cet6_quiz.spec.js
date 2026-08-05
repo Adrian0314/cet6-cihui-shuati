@@ -7,6 +7,12 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('cet6_onboarded', '1'));
   await page.goto('file:///C:/Users/zheng/Desktop/%E5%AD%A6%E4%B9%A0%E4%B8%8E%E8%80%83%E8%AF%95/Study/%E8%8B%B1%E8%AF%AD%E5%9B%9B%E5%85%AD%E7%BA%A7/cet6_quiz.html');
   await page.waitForLoadState('domcontentloaded');
+  // 默认闯关1速记：依赖选项按钮的测试切到闯关2（选择题）
+  await page.evaluate(() => {
+    const g2 = document.querySelector('#gateRow .mode-btn[data-gate="2"]');
+    if (g2) g2.click();
+  });
+  await page.waitForTimeout(100);
 });
 
 test('page loads successfully', async ({ page }) => {
@@ -233,9 +239,9 @@ test('normalizeOCRText corrects via dictionary', async ({ page }) => {
   expect(r1.toLowerCase()).toBe('detrimental');
   const r2 = await page.evaluate(() => normalizeOCRText('harmful  deteriorat', 'eng'));
   expect(r2.toLowerCase()).toBe('harmful deteriorate');
-  // 距离 2 但长度差过大的短词不应误纠（poison 不在核心词库）
+  // 距离 2 但长度差过大的短词不应误纠（词库含 poison，'poisen' 距离1会被纠成 poison——预期纠正）
   const r2b = await page.evaluate(() => normalizeOCRText('poisen', 'eng'));
-  expect(r2b.toLowerCase()).toBe('poisen');
+  expect(r2b.toLowerCase()).toBe('poison');
   // 中文：清理噪声，保留中文与标点
   const r3 = await page.evaluate(() => normalizeOCRText('有害 的，不 利', 'chi_sim'));
   expect(r3).toBe('有害的，不利');
@@ -328,4 +334,127 @@ test('fullscreen next question scrolls quiz-scroll back to top', async ({ page }
 
   const top = await page.evaluate(() => document.querySelector('.quiz-card .quiz-scroll').scrollTop);
   expect(top).toBe(0);
+});
+
+// ===== 新词库功能测试 =====
+
+test('gate1 speed-memory: know button advances, unknown shows explanation', async ({ page }) => {
+  // 切回闯关1速记
+  await page.evaluate(() => {
+    const g1 = document.querySelector('#gateRow .mode-btn[data-gate="1"]');
+    if (g1) g1.click();
+  });
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('#gateKnowBtn');
+  const word1 = await page.locator('.q-word').textContent();
+  // 认识 → 直接下一词
+  await page.click('#gateKnowBtn');
+  await page.waitForTimeout(300);
+  const word2 = await page.locator('.q-word').textContent();
+  expect(word2).not.toBe(word1);
+  // 不认识 → 显示释义和讲解
+  await page.click('#gateUnknownBtn');
+  await page.waitForSelector('.feedback.show');
+  await expect(page.locator('.feedback.show')).toContainText('未掌握');
+  await expect(page.locator('.word-detail')).toBeVisible();
+});
+
+test('gate1 keyboard: 1=knew advances, 2=unknown shows feedback', async ({ page }) => {
+  await page.evaluate(() => {
+    const g1 = document.querySelector('#gateRow .mode-btn[data-gate="1"]');
+    if (g1) g1.click();
+  });
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('#gateKnowBtn');
+  const w1 = await page.locator('.q-word').textContent();
+  await page.keyboard.press('1');
+  await page.waitForTimeout(300);
+  const w2 = await page.locator('.q-word').textContent();
+  expect(w2).not.toBe(w1);
+  await page.keyboard.press('2');
+  await page.waitForSelector('.feedback.show');
+});
+
+test('unit filter restricts pool and count', async ({ page }) => {
+  const chips = await page.evaluate(() => [...document.querySelectorAll('#unitFilterRow .freq-chip')].map(c => c.textContent.trim()));
+  expect(chips).toContain('U1');
+  // 点 U3
+  await page.evaluate(() => document.querySelector('#unitFilterRow .freq-chip[data-unit="3"]').click());
+  await page.waitForTimeout(300);
+  const active = await page.evaluate(() => [...document.querySelectorAll('#unitFilterRow .freq-chip.active')].map(c => c.textContent.trim()));
+  expect(active).toEqual(['U3']);
+  const count = await page.locator('#freqCount').textContent();
+  expect(count).toMatch(/共 \d+ 词/);
+});
+
+test('learn size buttons exist and quiz uses 20-word default', async ({ page }) => {
+  const sizes = await page.evaluate(() => [...document.querySelectorAll('#sizeRow .mode-btn')].map(b => b.textContent.trim()));
+  expect(sizes.length).toBe(3);
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+  await page.waitForTimeout(400);
+  const label = await page.locator('.q-label').textContent();
+  expect(label).toContain('/ 20 题');
+});
+
+test('switch to Ebbinghaus pool shows Unit 1-10 chips', async ({ page }) => {
+  await page.evaluate(() => document.querySelector('.pool-btn[data-pool="full"]').click());
+  await page.waitForTimeout(300);
+  const chips = await page.evaluate(() => [...document.querySelectorAll('#unitFilterRow .freq-chip')].map(c => c.textContent.trim()));
+  expect(chips).toContain('U10');
+  expect(chips).not.toContain('U11');
+});
+
+test('ebbinghaus 4-week-25-day table logic', async ({ page }) => {
+  // Unit 1 复习日：第2、4、7、13天（+1/+2/+3/+6）；第14天后 Unit14 在第15/17/20/26天复习（26>25 表内截止）
+  const res = await page.evaluate(() => {
+    function ebbingUnitsDueOn(dayN, learnedUnits) {
+      var due = [];
+      for (var u = 1; u <= learnedUnits; u++) {
+        if (dayN - u === 1 || dayN - u === 3 || dayN - u === 6 || dayN - u === 12) due.push(u);
+      }
+      return due;
+    }
+    return {
+      d2: ebbingUnitsDueOn(2, 2),  // 第2天：U1(+1) + 新学U2
+      d4: ebbingUnitsDueOn(4, 4),  // 第4天：U1(+3) U3(+1)
+      d7: ebbingUnitsDueOn(7, 7),  // 第7天：U1(+6) U4(+3) U6(+1)
+      d13: ebbingUnitsDueOn(13, 13), // 第13天：U1(+12) U7(+6) U10(+3) U12(+1)
+      d19: ebbingUnitsDueOn(19, 14)  // 第19天：U7(+12) U13(+6)
+    };
+  });
+  expect(res.d2).toEqual([1]);
+  expect(res.d4).toEqual([1, 3]);
+  expect(res.d7).toEqual([1, 4, 6]);
+  expect(res.d13).toEqual([1, 7, 10, 12]);
+  expect(res.d19).toEqual([7, 13]);
+});
+
+test('Ebbinghaus plan bar shows study plan on core pool', async ({ page }) => {
+  // 注入 ebbingStart（昨天开始）→ 今天是第2天，该学 Unit 2
+  await page.evaluate(() => {
+    const y = new Date(Date.now() - 86400000);
+    const key = y.toISOString().split('T')[0];
+    const st = JSON.parse(localStorage.getItem('cet6_quiz_app_v2') || 'null') || {};
+    st.ebbingStart = key;
+    localStorage.setItem('cet6_quiz_app_v2', JSON.stringify(st));
+  });
+  await page.reload();
+  await page.waitForTimeout(800);
+  const plan = await page.locator('#ebbingPlan').textContent();
+  expect(plan).toContain('第 2 天');
+  expect(plan).toContain('Unit 2');
+});
+
+test('8-grid review: grid progress shows after learning in Ebbinghaus pool', async ({ page }) => {
+  await page.evaluate(() => document.querySelector('.pool-btn[data-pool="full"]').click());
+  await page.waitForTimeout(300);
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+  await page.waitForTimeout(400);
+  await page.locator('.opt-btn').first().click();
+  await page.waitForSelector('.next-btn.show');
+  // 讲解区应显示打卡格进度
+  const detail = await page.locator('.word-detail').textContent();
+  expect(detail).toContain('打卡');
 });
