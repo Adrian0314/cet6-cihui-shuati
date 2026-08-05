@@ -1623,36 +1623,53 @@ function getWordDetailHTML(word) {
 
 // 词群导图：同词群单词的放射状关系图（中心=词群主题，节点=词）
 function groupMapSVG(word) {
-  if (!word || !word.group_id) return '';
+  // 导图内容：同 Unit+Lesson 中序号（seq）最接近当前词的词（书中相邻词群关系更准确）
+  if (!word || (!word.group_id && !word.lesson)) return '';
   var members = null;
   try {
     var pool = getActivePool();
-    members = pool.filter(function(w) { return w.group_id === word.group_id; });
+    members = pool.filter(function(w) {
+      return w.unit === word.unit && w.lesson === word.lesson && w.seq > 0 && w.word !== word.word;
+    });
+    // 同 Lesson 词不足时补同 Unit 的词
+    if (members.length < 11) {
+      members = pool.filter(function(w) {
+        return w.unit === word.unit && w.seq > 0 && w.word !== word.word;
+      });
+    }
   } catch (e) {}
   if (!members || members.length < 2) return '';
+  // 按 seq 与当前词的接近程度排序，取前后共 12 个（含当前词）
+  members.sort(function(a, b) {
+    return Math.abs((a.seq || 0) - (word.seq || 0)) - Math.abs((b.seq || 0) - (word.seq || 0));
+  });
+  members = members.slice(0, 11);
+  members.push(word);
+  members.sort(function(a, b) { return (a.seq || 0) - (b.seq || 0); });
   var n = members.length;
-  var cx = 160, cy = 80, R = 58, rOuter = 62;
-  var svg = '<svg viewBox="0 0 320 160" style="width:100%;max-width:340px;height:auto;display:block;margin:8px auto;">';
-  // 连线
+  var cx = 170, cy = 100, R = 52, textR = 78;
+  var svg = '<svg viewBox="0 0 340 200" style="width:100%;max-width:360px;height:auto;display:block;margin:8px auto;">';
+  // 连线（颜色用 style，CSS 变量在 attribute 中不生效）
   for (var i = 0; i < n; i++) {
     var ang = (2 * Math.PI * i / n) - Math.PI / 2;
     var x = cx + R * Math.cos(ang), y = cy + R * Math.sin(ang);
-    svg += '<line x1="' + cx + '" y1="' + cy + '" x2="' + x + '" y2="' + y + '" stroke="var(--border)" stroke-width="1"/>';
+    svg += '<line x1="' + cx + '" y1="' + cy + '" x2="' + x + '" y2="' + y + '" stroke-width="1.2" style="stroke:var(--border)"/>';
   }
-  // 中心圆
-  var gname = String(word.group_name || '词群' + word.group_id).slice(0, 8);
-  svg += '<circle cx="' + cx + '" cy="' + cy + '" r="34" fill="var(--accent)" opacity="0.15"/>' +
-    '<circle cx="' + cx + '" cy="' + cy + '" r="34" fill="none" stroke="var(--accent)" stroke-width="1.5"/>' +
-    '<text x="' + cx + '" y="' + cy + '" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="var(--text)">' + gname + '</text>';
-  // 节点
+  // 中心圆 + 词群主题
+  var gname = String(word.group_name || '词群' + word.group_id).slice(0, 7);
+  svg += '<circle cx="' + cx + '" cy="' + cy + '" r="36" style="fill:var(--accent);opacity:0.15"/>' +
+    '<circle cx="' + cx + '" cy="' + cy + '" r="36" fill="none" stroke-width="1.8" style="stroke:var(--accent)"/>' +
+    '<text x="' + cx + '" y="' + cy + '" text-anchor="middle" dominant-baseline="middle" font-size="14" font-weight="700" style="fill:var(--text)">' + gname + '</text>';
+  // 节点：圆在圆周上，单词标注在圆外沿径向延伸（可读性优先），颜色用 style 保证 CSS 变量生效
   for (var j = 0; j < n; j++) {
     var w = members[j];
     var ang2 = (2 * Math.PI * j / n) - Math.PI / 2;
     var x2 = cx + R * Math.cos(ang2), y2 = cy + R * Math.sin(ang2);
+    var tx = cx + textR * Math.cos(ang2), ty = cy + textR * Math.sin(ang2);
     var isCur = (w.word.toLowerCase() === word.word.toLowerCase());
-    var wordText = String(w.word).slice(0, 12);
-    svg += '<circle cx="' + x2 + '" cy="' + y2 + '" r="' + (isCur ? 16 : 13) + '" fill="' + (isCur ? 'var(--accent)' : 'var(--surface2)') + '" stroke="var(--accent)" stroke-width="1.5" onclick="speakWord(\'' + String(w.word).replace(/'/g, "\\'") + '\')" style="cursor:pointer;"/>' +
-      '<text x="' + x2 + '" y="' + y2 + '" text-anchor="middle" dominant-baseline="middle" font-size="' + (isCur ? 7.5 : 6.5) + '" fill="' + (isCur ? '#fff' : 'var(--text)') + '">' + wordText + '</text>';
+    var wordText = String(w.word).slice(0, 9);
+    svg += '<circle cx="' + x2 + '" cy="' + y2 + '" r="' + (isCur ? 18 : 14) + '" style="fill:' + (isCur ? 'var(--accent)' : 'var(--surface2)') + ';stroke:var(--accent);cursor:pointer" stroke-width="1.8" onclick="speakWord(\'' + String(w.word).replace(/'/g, "\\'") + '\')"/>' +
+      '<text x="' + tx + '" y="' + ty + '" text-anchor="middle" dominant-baseline="middle" font-size="' + (isCur ? 12 : 10.5) + '" font-weight="' + (isCur ? 700 : 500) + '" style="fill:' + (isCur ? 'var(--accent)' : 'var(--text)') + '">' + wordText + '</text>';
   }
   svg += '</svg>';
   return '<div style="margin:10px 0 2px;font-size:0.85em;color:var(--text2);text-align:center;">🗺️ 词群导图（点击单词朗读）</div>' + svg;
