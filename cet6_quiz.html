@@ -1448,10 +1448,10 @@ function startMemoryQuiz(mode) {
   // 到期复习词优先（答错/跳过的词，间隔到期自动回来）
   var dueWords = getDueWordIds().map(function(id) { return getWord(id); })
     .filter(function(w) { return w && poolSet[w.word.toLowerCase()]; });
-  // 未学新词
+  // 未学新词（保持词库顺序：按 Unit→Lesson→序号 从前往后推进，不从随机位置开始）
   var newWords = pool.filter(function(w) { return !learnedWords[w.word.toLowerCase()]; });
   var ids = shuffle(dueWords.map(function(w) { return w.id; }))
-    .concat(shuffle(newWords.map(function(w) { return w.id; })));
+    .concat(newWords.map(function(w) { return w.id; }));
   if (ids.length === 0) {
     alert('当前词库已全部学完，换个词库或等待复习词到期吧！');
     return;
