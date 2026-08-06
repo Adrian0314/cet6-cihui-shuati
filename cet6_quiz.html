@@ -1795,8 +1795,14 @@ function getWordDetailHTML(word) {
   if (word.memo) parts.push(['\u{1F9E0}', '\u5DE7\u8BB0', word.memo, '']);
   if (word.example) {
     var ex = word.example;
-    var exP = ex.split('。');
-    if (exP.length > 1) { parts.push(['\u{1F4AC}', '\u4F8B\u53E5', exP[0], 'en']); parts.push(['', '', exP.slice(1).join('。'), 'cn']); }
+    // 例句格式:「英文句子 + 空格 + 中文翻译」,以首个中文字符/全角标点为界切分,英文中文各占一行
+    var cnBd = /[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\uff01-\uff5e\u201c\u201d\u2018\u2019\u300a\u300b]/;
+    var cut = -1;
+    for (var ci = 0; ci < ex.length; ci++) { if (cnBd.test(ex[ci])) { cut = ci; break; } }
+    if (cut > 0) {
+      parts.push(['\u{1F4AC}', '\u4F8B\u53E5', ex.slice(0, cut).replace(/\s+$/, ''), 'en']);
+      parts.push(['', '', ex.slice(cut).replace(/^\s+/, ''), 'cn']);
+    }
     else { parts.push(['\u{1F4AC}', '\u4F8B\u53E5', ex, 'en']); }
   }
   if (word.derivative) parts.push(['\u{1F331}', '\u6D3E\u751F\u8BCD', word.derivative, '']);
