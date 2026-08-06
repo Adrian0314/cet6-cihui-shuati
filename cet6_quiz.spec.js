@@ -557,3 +557,80 @@ test('page nav: retry mode hides page info', async ({ page }) => {
   await page.waitForTimeout(300);
   await expect(page.locator('.page-nav')).toHaveCount(0);
 });
+
+test.describe('back-to-top', () => {
+  // 确保每次从顶部开始验证滚动
+  test.beforeEach(async ({ page }) => {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(100);
+  });
+
+  test('hidden at top, appears on scroll, smooth scrolls up', async ({ page }) => {
+    const btn = page.locator('#backToTopBtn');
+    await expect(btn).not.toBeVisible();
+    const maxScroll = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+    expect(maxScroll).toBeGreaterThan(300);
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await page.waitForTimeout(300);
+    await expect(btn).toHaveClass(/show/);
+    await expect(btn).toBeVisible();
+    await btn.click();
+    await page.waitForFunction(() => window.scrollY === 0, null, { timeout: 5000 });
+    await page.waitForTimeout(200);
+    await expect(btn).not.toBeVisible();
+  });
+
+  test.describe('fullscreen', () => {
+    // 小视口模拟手机,确保 quiz-scroll 有真实滚动空间
+    test.use({ viewport: { width: 1280, height: 420 } });
+
+    // 进入全屏后作答进入详解,内容才溢出 quiz-scroll 产生滚动
+    async function enterFullscreenDetail(page) {
+      await page.click('button:has-text("开始做题")');
+      await page.waitForSelector('.opt-btn');
+      await page.click('#toggleFsBtn');
+      await page.waitForTimeout(200);
+      await page.locator('.opt-btn').first().click();
+      await page.waitForSelector('.next-btn.show');
+      await page.waitForTimeout(300);
+    }
+
+    test('appears on quiz-scroll scroll and smooth scrolls up', async ({ page }) => {
+      await enterFullscreenDetail(page);
+      const btn = page.locator('#backToTopBtn');
+      const scrollable = await page.evaluate(() => {
+        const sc = document.querySelector('.quiz-card.fullscreen .quiz-scroll');
+        return sc ? sc.scrollHeight - sc.clientHeight : 0;
+      });
+      expect(scrollable).toBeGreaterThan(300);
+      await page.evaluate(() => {
+        const sc = document.querySelector('.quiz-card.fullscreen .quiz-scroll');
+        if (sc) sc.scrollTop = sc.scrollHeight;
+      });
+      await page.waitForTimeout(300);
+      await expect(btn).toHaveClass(/show/);
+      await btn.click();
+      await page.waitForFunction(() => {
+        const sc = document.querySelector('.quiz-card.fullscreen .quiz-scroll');
+        return sc && sc.scrollTop === 0;
+      }, null, { timeout: 5000 });
+    });
+
+    test('hides again after exiting fullscreen at top', async ({ page }) => {
+      await enterFullscreenDetail(page);
+      const btn = page.locator('#backToTopBtn');
+      await page.evaluate(() => {
+        const sc = document.querySelector('.quiz-card.fullscreen .quiz-scroll');
+        if (sc) sc.scrollTop = sc.scrollHeight;
+      });
+      await page.waitForTimeout(300);
+      await expect(btn).toHaveClass(/show/);
+      await page.click('#toggleFsBtn');
+      await page.waitForTimeout(300);
+      await expect(btn).toHaveClass(/show/);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForTimeout(300);
+      await expect(btn).not.toBeVisible();
+    });
+  });
+});
