@@ -619,6 +619,23 @@ function applyWordDetail(words) {
 }
 applyWordDetail(ALL_WORDS);
 
+// 补全缺失释义:ALL_WORDS 中 meaning 为空的词,从 data-full-words 数据块按词匹配回填(两套词库同词含义相同)
+(function fillMissingMeanings() {
+  try {
+    var fullBlock = JSON.parse(document.getElementById('data-full-words').textContent);
+    var fullByWord = {};
+    for (var i = 0; i < fullBlock.length; i++) {
+      var fw = fullBlock[i];
+      if (fw.meaning && fw.meaning !== '' && !fullByWord[fw.word.toLowerCase()])
+        fullByWord[fw.word.toLowerCase()] = fw.meaning;
+    }
+    for (var j = 0; j < ALL_WORDS.length; j++) {
+      var w = ALL_WORDS[j];
+      if (!w.meaning) w.meaning = fullByWord[w.word.toLowerCase()] || '';
+    }
+  } catch (e) {}
+})();
+
 // ============ THEME TOGGLE (深浅色切换) ============
 var THEME_KEY = 'cet6_theme';
 function applyTheme(t) {
@@ -1613,8 +1630,25 @@ function getWordDetailHTML(word) {
   }
   if (parts.length === 0) return groupInfo;
   var html = groupInfo + '<div class="word-detail open"><div class="wd-head" onclick="this.parentElement.classList.toggle(\'open\')">\u{1F4D6} \u5355\u8BCD\u8BE6\u89E3 <span class="wd-arrow">\u25BE</span></div><div class="wd-body">';
+  // 派生词渲染辅助:解析"单词+音标"序列,在音标后插入朗读按钮(🔊,点击朗读单词)
+  // 变体词如 stabilise/-ize 统一为主形式;无音标词不加按钮;解析失败原样输出
+  function derivativeHtml(t) {
+    if (!t) return '';
+    var esc = function(s) { return s.replace(/'/g, "\\'"); };
+    // 变体词主形式:stabilise/-ize → stabilise(斜杠变体会破坏音标配对)
+    t = t.replace(/([A-Za-z][A-Za-z'\-]*)\/-([A-Za-z][A-Za-z'\-]*)/g, '$1');
+    return t.replace(/([A-Za-z][A-Za-z'\-]*)(\s*\/[^\/\r\n]+\/\s*)/g, function(m, w, ipa) {
+      return w + ipa.replace(/\s+$/, '') +
+        '<span onclick="speakWord(\'' + esc(w) + '\')" style="cursor:pointer;margin-left:5px;font-size:0.95em;display:inline-block;vertical-align:middle;" title="朗读发音">\u{1F50A}</span> ';
+    });
+  }
   parts.forEach(function(p) {
-    if (p[1]) html += '<div class="wd-row"><span class="wd-tag">' + p[0] + ' ' + p[1] + '</span><span class="wd-txt' + (p[3] ? ' ' + p[3] : '') + '">' + p[2] + '</span></div>';
+    if (p[1]) {
+      var body = p[2];
+      // 派生词行:在每个"单词+音标"的音标后插入朗读按钮
+      if (p[0] === '\u{1F331}') body = derivativeHtml(body);
+      html += '<div class="wd-row"><span class="wd-tag">' + p[0] + ' ' + p[1] + '</span><span class="wd-txt' + (p[3] ? ' ' + p[3] : '') + '">' + body + '</span></div>';
+    }
     else html += '<div class="wd-row"><span class="wd-txt cn">' + p[2] + '</span></div>';
   });
   html += '</div></div>';
@@ -1705,6 +1739,12 @@ function renderQuizCard() {
     qText = posEntries.length > 0
       ? posEntries.map(function(e) { return (e.pos ? '<span class="pos-badge">' + e.pos + '</span>' : '') + e.cn; }).join(' ')
       : getChineseFull(word.meaning);
+    // 释义仍缺失时用巧记(memo)兜底,避免题干空白
+    if (!qText || !qText.replace(/<[^>]*>/g, '').trim()) {
+      qText = word.memo
+        ? '<span style="color:var(--text2);">' + word.memo + '</span>'
+        : '<span style="color:var(--text2);">(释义待补充)</span>';
+    }
   }
   var qPron = (mode === 'en2cn' && word.pronunciation) ? word.pronunciation : '';
   var modeLabel = (mode === 'cn2en') ? '看中文选英文' : '看英文选中文';
@@ -1820,7 +1860,7 @@ function renderQuizCard() {
     var delays = [0, 60, 120, 180];
     for (var i = 0; i < q.options.length; i++) {
       var o = q.options[i];
-      var txt = (mode === 'cn2en') ? o.word : getChineseFull(o.meaning);
+      var txt = (mode === 'cn2en') ? o.word : (getChineseFull(o.meaning) || (o.memo ? o.memo : '(释义待补充)'));
       var extra = (mode === 'cn2en' && o.pronunciation) ? ' <span style="color:var(--text2);font-size:0.85em;">' + o.pronunciation + '</span>' : '';
       var cls = 'opt-btn';
       if (answered || isSkip) {
