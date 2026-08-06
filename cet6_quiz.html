@@ -877,6 +877,96 @@ function getActivePool() {
   return pool.filter(function(w) { return unitSet[w.unit]; });
 }
 
+// ============ PAGE NAV (页导航：每个 Unit 内独立编页，20词/页) ============
+var PAGE_SIZE = 20;
+var PAGE_KEY = 'cet6_page_progress_v1';
+
+// 当前范围是否为单一 Unit（完整页导航启用条件；「全部」/多选时仅作位置参考）
+function isSingleUnitRange() {
+  return selectedUnits.length === 1 && selectedUnits[0] !== 0;
+}
+
+// 当前词库某 Unit 的全部词（保持数据数组顺序，Unit 分组在数组内连续）
+function getUnitWordList(unit) {
+  var pool = (currentPool === 'core') ? ALL_WORDS : (ensureFullWords(), FULL_WORDS);
+  return pool.filter(function(w) { return w.unit === unit; });
+}
+
+// 词 → 所属 Unit 内的页信息（page/inPage 从 1 起）；unit 缺失时返回 null
+function pageOfWord(word) {
+  if (!word || typeof word.id === 'undefined' || typeof word.unit === 'undefined') return null;
+  var words = getUnitWordList(word.unit);
+  for (var i = 0; i < words.length; i++) {
+    if (words[i].id === word.id) {
+      return {
+        unit: word.unit,
+        page: Math.floor(i / PAGE_SIZE) + 1,
+        totalPages: Math.ceil(words.length / PAGE_SIZE),
+        inPage: (i % PAGE_SIZE) + 1,
+        totalWords: words.length
+      };
+    }
+  }
+  return null;
+}
+
+// 续刷起始页：按「词库+范围」存（单 Unit 用该 Unit；其余用 all）
+function pageProgressKey() {
+  return currentPool + '_u' + (isSingleUnitRange() ? selectedUnits[0] : 'all');
+}
+function getSavedPageStart() {
+  try {
+    var d = JSON.parse(localStorage.getItem(PAGE_KEY) || 'null');
+    if (d && d.k === pageProgressKey() && d.page >= 1) return Math.floor(d.page);
+  } catch (e) {}
+  return 1;
+}
+function savePageStart(page) {
+  try {
+    localStorage.setItem(PAGE_KEY, JSON.stringify({ k: pageProgressKey(), page: page }));
+  } catch (e) {}
+}
+
+// 本轮从 startPage 起实际覆盖的页数（finishQuiz 推进续刷用）
+function roundPagesCovered(startPage, roundWords) {
+  var words = getUnitWordList(selectedUnits[0]);
+  var startIndex = (startPage - 1) * PAGE_SIZE;
+  var covered = Math.min(roundWords, words.length - startIndex);
+  return Math.max(1, Math.ceil(covered / PAGE_SIZE));
+}
+
+// 页码导航条 HTML（showControls=false 时只显示位置与进度，用于记忆模式）
+function pageNavHTML(pageInfo, showControls) {
+  if (!pageInfo) return '';
+  var unitLabel = (pageInfo.unit === 0) ? '补充词' : ('Unit ' + pageInfo.unit);
+  var pct = Math.round(pageInfo.inPage / PAGE_SIZE * 100);
+  var html =
+    '<div class="page-nav" style="display:flex;align-items:center;justify-content:center;gap:10px;margin:0 0 12px;flex-wrap:wrap;">' +
+    '<span style="color:var(--accent2);font-size:0.85em;font-weight:600;white-space:nowrap;">\u{1F4D6} ' + unitLabel + ' · 第 ' + pageInfo.page + '/' + pageInfo.totalPages + ' 页</span>' +
+    '<div title="本页第 ' + pageInfo.inPage + ' / ' + pageInfo.totalWords + ' 词" style="width:96px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;">' +
+    '<div style="width:' + pct + '%;height:100%;background:var(--accent2);border-radius:3px;transition:width 200ms;"></div></div>';
+  if (showControls) {
+    html +=
+      '<button class="ctrl-btn" onclick="pageGo(-1)" ' + (pageInfo.page <= 1 ? 'disabled' : '') + ' style="padding:3px 14px;font-size:0.8em;">◀ 上一页</button>' +
+      '<button class="ctrl-btn" onclick="pageGo(1)" ' + (pageInfo.page >= pageInfo.totalPages ? 'disabled' : '') + ' style="padding:3px 14px;font-size:0.8em;">下一页 ▶</button>';
+  }
+  html += '</div>';
+  return html;
+}
+
+// 跳页：保存目标起始页后重新开始本轮（放弃当前轮）
+function pageGo(delta) {
+  if (!quizActive || !quizState.current) return;
+  var pi = pageOfWord(quizState.current.word);
+  if (!pi) return;
+  var target = pi.page + delta;
+  if (target < 1) target = 1;
+  if (target > pi.totalPages) target = pi.totalPages;
+  if (target === pi.page) return;
+  savePageStart(target);
+  startNewQuiz(currentMode);
+}
+
 function getFullWordById(id) {
   // Look up in FULL_WORDS by ID (for full pool mode)
   for (var fwi = 0; fwi < FULL_WORDS.length; fwi++) {
@@ -1163,7 +1253,17 @@ function buildQuiz(mode, wordPool) {
   ids = ids.filter(function(id) { return getWord(id) !== null; });
   // 学习量：闯关3=测整个选中范围；重做=全部错题乱序；新学=按书序取前 learnSize 词（1页≈20词）
   var limit = (gateLevel === 3) ? ids.length : learnSize;
-  var ordered = ids.slice(0, limit);
+  var ordered;
+  var pageStart = 0;
+  // 页导航：单一 Unit 且非重做时，从续刷起始页取词（每页20词，起始页与学习量正交）
+  if (!wordPool && isSingleUnitRange()) {
+    pageStart = getSavedPageStart();
+    var startIndex = (pageStart - 1) * PAGE_SIZE;
+    if (startIndex >= ids.length) { startIndex = 0; pageStart = 1; } // 防御：续刷页越界回第1页
+    ordered = ids.slice(startIndex, startIndex + limit);
+  } else {
+    ordered = ids.slice(0, limit);
+  }
   var finalIds = (!!wordPool) ? shuffle(ordered) : ordered;
   quizState = {
     mode: mode,
@@ -1176,7 +1276,8 @@ function buildQuiz(mode, wordPool) {
     done: 0,
     current: null,
     poolType: currentPool,
-    gate: gateLevel
+    gate: gateLevel,
+    pageStart: pageStart
   };
   quizActive = true;
   document.getElementById('retryInfo').classList.toggle('show', quizState.isRetry);
@@ -1323,6 +1424,14 @@ function finishQuiz() {
       '<p style="font-size:0.85em;color:var(--text2);margin-top:6px;">答错 ' + mw + ' 词已加入记忆调度：错词按当前词库的书中记忆规律（4周25天打卡表 / 8格周期）自动排期回来</p></div>';
   } else {
     card.innerHTML = '<div class="empty"><div class="ei">\u{1F389}</div><p>本轮题目全部完成！共 ' + total + ' 题，已答 ' + done + ' 题</p></div>';
+    // 页导航：本轮完成后推进续刷起始页（学完该 Unit 最后一页自动回第 1 页）
+    if (quizState.pageStart && isSingleUnitRange()) {
+      var pgWords = getUnitWordList(selectedUnits[0]);
+      var pgTotal = Math.ceil(pgWords.length / PAGE_SIZE);
+      var pgNext = quizState.pageStart + roundPagesCovered(quizState.pageStart, quizState.ids.length);
+      if (pgNext > pgTotal) pgNext = 1;
+      savePageStart(pgNext);
+    }
   }
   document.getElementById('startBtn').style.display = 'inline-block';
   document.getElementById('startBtn').textContent = '▶ 再来一轮';
@@ -1516,7 +1625,8 @@ function saveSuspendedQuiz() {
     done: quizState.done,
     reviewCorrect: quizState.reviewCorrect || 0,
     poolType: quizState.poolType || currentPool,
-    currentId: quizState.current ? quizState.current.word.id : null
+    currentId: quizState.current ? quizState.current.word.id : null,
+    pageStart: quizState.pageStart || 0
   };
   saveState();
   quizActive = false;
@@ -1568,7 +1678,8 @@ function resumeQuiz() {
     reviewCorrect: sq.reviewCorrect || 0,
     poolType: sq.poolType || 'core',
     memWrong: sq.memWrong || 0,
-    memTotal: sq.memTotal || sq.ids.length
+    memTotal: sq.memTotal || sq.ids.length,
+    pageStart: sq.pageStart || 0
   };
   quizActive = true;
   state.suspendedQuiz = null;
@@ -1640,7 +1751,8 @@ function autoSaveProgress() {
     poolType: q.poolType || currentPool,
     currentId: q.current ? q.current.word.id : null,
     memWrong: q.memWrong || 0,
-    memTotal: q.memTotal || q.ids.length
+    memTotal: q.memTotal || q.ids.length,
+    pageStart: q.pageStart || 0
   };
   saveState();
 }
@@ -1826,6 +1938,10 @@ function renderQuizCard() {
   var isFS = card.classList.contains('fullscreen');
   var fsText = isFS ? '⛶ 退出全屏' : '⛶ 全屏';
 
+  // 页导航：位置信息（重做/错题不显示页码）；单 Unit 才可跳页，记忆/全部/多选只显示位置
+  var pageInfo = quizState.isRetry ? null : pageOfWord(word);
+  var pageNav = pageInfo ? pageNavHTML(pageInfo, !quizState.isMemory && isSingleUnitRange()) : '';
+
   // 题目：多词性单词的每个词性统一用 badge 渲染（如 [n.]股份 [v.]分享）
   var qText = word.word;
   if (mode === 'cn2en') {
@@ -1864,6 +1980,7 @@ function renderQuizCard() {
       '<button class="toggle-fs-btn" id="toggleFsBtn" onclick="(function(e){e.stopPropagation();toggleFullscreen();})(event)">' + fsText + '</button>' +
       '</div>' +
       navBar +
+      pageNav +
       (gGroupName ? '<div style="font-size:0.82em;color:var(--accent2);margin-bottom:10px;text-align:center;">📁 ' + gGroupName + '</div>' : '') +
       '<div class="q-word" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + word.word + '</div>' +
       (word.pronunciation ? '<div class="q-pron" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + word.pronunciation + ' <span onclick="speakWord(\'' + word.word.replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:1.2em;" title="朗读发音">\u{1F50A}</span></div>' : '') +
@@ -1927,6 +2044,7 @@ function renderQuizCard() {
       '<button class="toggle-fs-btn" id="toggleFsBtn" onclick="(function(e){e.stopPropagation();toggleFullscreen();})(event)">' + fsText + '</button>' +
       '</div>' +
       navBar +
+      pageNav +
       '<div class="q-word" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qText + '</div>' +
       (qPron ? '<div class="q-pron" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qPron + ' <span onclick="speakWord(\'' + word.word.replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:1.2em;" title="朗读发音">\u{1F50A}</span></div>' : '') +
       (mode === 'en2cn' && !qPron ? '<div style="margin-bottom:16px"><span onclick="speakWord(\'' + word.word.replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:1.1em;padding:4px 10px;background:var(--surface2);border-radius:20px;border:1px solid var(--border);display:inline-block;" title="朗读发音">\u{1F50A} 朗读</span></div>' : '') +
@@ -1992,6 +2110,7 @@ function renderQuizCard() {
       '<button class="toggle-fs-btn" id="toggleFsBtn" onclick="(function(e){e.stopPropagation();toggleFullscreen();})(event)">' + fsText + '</button>' +
       '</div>' +
       navBar +
+      pageNav +
       '<div class="q-word" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qText + '</div>' +
       (qPron ? '<div class="q-pron" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qPron + '</div>' : '') +
       (mode === 'en2cn' ? '<div style="margin-bottom:16px"><span onclick="speakWord(\'' + word.word.replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:1.05em;padding:4px 12px;background:var(--surface2);border-radius:20px;border:1px solid var(--border);display:inline-block;" title="朗读发音">\u{1F50A} 朗读</span></div>' : '') +
