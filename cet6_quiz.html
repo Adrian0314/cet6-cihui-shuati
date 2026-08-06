@@ -1689,11 +1689,38 @@ function groupMapSVG(word) {
     var x = cx + R * Math.cos(ang), y = cy + R * Math.sin(ang);
     svg += '<line x1="' + cx + '" y1="' + cy + '" x2="' + x + '" y2="' + y + '" stroke-width="1.2" style="stroke:var(--border)"/>';
   }
-  // 中心圆 + 词群主题
-  var gname = String(word.group_name || '词群' + word.group_id).slice(0, 7);
+  // 中心圆 + 词群主题：短名单行；长名按显示宽度均衡断为两行（优先在空格/斜杠处断、避免字符被截碎，超两行容量截断），任一行不溢出中心圆(半径36)被节点圆遮挡
+  var gname = String(word.group_name || '词群' + word.group_id);
+  var gFS = 14, gMaxW = 56;
+  function gCW(ch) { return (ch.charCodeAt(0) > 255 ? 1 : 0.55) * gFS; }
+  function gW(s) { var r = 0; for (var k = 0; k < s.length; k++) r += gCW(s[k]); return r; }
+  var gLines;
+  if (gW(gname) <= gMaxW) {
+    gLines = [gname];
+  } else {
+    var cut = 0;
+    while (cut < gname.length && gW(gname.slice(0, cut + 1)) <= gMaxW * 2) cut++;
+    var head = gname.slice(0, Math.max(cut, 1));
+    var best = -1, bestScore = Infinity, bCut = -1, bScore = Infinity;
+    for (var gk = 1; gk < head.length; gk++) {
+      var lw = gW(head.slice(0, gk)), rw = gW(head.slice(gk));
+      if (lw > gMaxW || rw > gMaxW) continue;
+      var isB = (head[gk - 1] === ' ' || head[gk - 1] === '/' || head[gk] === ' ' || head[gk] === '/');
+      var d = Math.abs(lw - rw);
+      if (isB && d < bScore) { bScore = d; bCut = gk; }
+      if (d < bestScore) { bestScore = d; best = gk; }
+    }
+    var pk = (bCut > 0) ? bCut : (best > 0 ? best : Math.ceil(head.length / 2));
+    gLines = [head.slice(0, pk).trim(), head.slice(pk).trim()];
+  }
+  var centerText = '<text text-anchor="middle" dominant-baseline="middle" font-size="' + gFS + '" font-weight="700" style="fill:var(--text)">';
+  var gY0 = cy - (gLines.length - 1) * 9;
+  for (var gl = 0; gl < gLines.length; gl++) {
+    centerText += '<tspan x="' + cx + '" y="' + (gY0 + gl * 18) + '">' + gLines[gl] + '</tspan>';
+  }
+  centerText += '</text>';
   svg += '<circle cx="' + cx + '" cy="' + cy + '" r="36" style="fill:var(--accent);opacity:0.15"/>' +
-    '<circle cx="' + cx + '" cy="' + cy + '" r="36" fill="none" stroke-width="1.8" style="stroke:var(--accent)"/>' +
-    '<text x="' + cx + '" y="' + cy + '" text-anchor="middle" dominant-baseline="middle" font-size="14" font-weight="700" style="fill:var(--text)">' + gname + '</text>';
+    '<circle cx="' + cx + '" cy="' + cy + '" r="36" fill="none" stroke-width="1.8" style="stroke:var(--accent)"/>' + centerText;
   // 节点：所有圆大小统一（避免当前词大圆压到相邻圆），单词一律标注在圆外沿径向延伸，与圆完全分离（可读性优先），颜色用 style 保证 CSS 变量生效
   for (var j = 0; j < n; j++) {
     var w = members[j];
