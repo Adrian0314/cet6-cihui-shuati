@@ -343,7 +343,7 @@ body{
     <h1>🎓 英语六级词汇 · 刷题系统</h1>
     <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()" title="切换深浅色模式" aria-label="切换深浅色模式">🌙</button>
   </div>
-  <p class="subtitle">《你还在背单词吗》刘晓燕 · 艾宾浩斯抗遗忘打卡 · 词群记忆 · 智能混淆项 · 错题本 · 详细统计</p>
+  <p class="subtitle">《你还在背单词吗》刘晓艳 · 艾宾浩斯抗遗忘打卡 · 词群记忆 · 智能混淆项 · 错题本 · 详细统计</p>
 </div>
 
 <div class="tabs">
@@ -359,7 +359,7 @@ body{
   <div class="rules-card" id="rulesCard">
     <h3 onclick="document.getElementById('rulesCard').classList.toggle('collapsed')">📖 使用指南 / Rules <span class="arrow">▼</span></h3>
     <div class="rules-body">
-      <div class="rb"><strong>📗 《你还在背单词吗》刘晓燕：</strong>词库内容严格取自刘晓燕主编的《英语六级你还在背单词吗》（东北师范大学出版社）。第一部分「词以群记·抓核心」（Unit 1-10）：核心词按词群分类排序，每个词含记忆方法（联想/构词/对照/谐音）、经典例句及扩展词；第二部分「词以序记·刷基础」（Unit 11-14）：按字母序排列的大纲基础词。按书中 Unit 顺序学习，可手动切换 Unit 与学习页数。</div>
+      <div class="rb"><strong>📗 《你还在背单词吗》刘晓艳：</strong>词库内容严格取自刘晓艳主编的《英语六级你还在背单词吗》（东北师范大学出版社）。第一部分「词以群记·抓核心」（Unit 1-10）：核心词按词群分类排序，每个词含记忆方法（联想/构词/对照/谐音）、经典例句及扩展词；第二部分「词以序记·刷基础」（Unit 11-14）：按字母序排列的大纲基础词。按书中 Unit 顺序学习，可手动切换 Unit 与学习页数。</div>
       <div class="rb"><strong>📚 《六级英语核心词·艾宾浩斯抗遗忘打卡》：</strong>词库严格取自刘晓艳主编的《六级英语核心词 艾宾浩斯抗遗忘打卡》（开明出版社）。全书 10 个 Unit、40 个 Lesson，每个单词带 8 格打卡（首次学习 + 5分/30分/12时 + 1天/2天/4天/7天），带 * 号为书中派生词。</div>
       <div class="rb"><strong>📅 记忆规律（严格按书）：</strong>核心词库按《你还在背单词吗》书末「艾宾浩斯抗遗忘复习打卡表」（4周25天）调度——每天学习一个新 Unit，按 +1天/+2天/+3天/+6天 的间隔复习之前学过的 Unit；打卡词库按书内每词 8 格记忆周期（5分/30分/12时/1天/2天/4天/7天）调度复习。短周期（5分/30分）在学习会话内提醒，12小时及以后到期的词在打开网页时提醒。</div>
       <div class="rb"><strong>🏰 闯关模式：</strong>严格对应书中使用指南——闯关1「词群速记」：结合词群导图快速检测，认识/不认识直接判断；闯关2「选择检测」：对应书中学完一个 Lesson 后的检测（选择题/默写题）；闯关3「Unit综合测」：学完一个 Unit 后的综合检测（覆盖整个 Unit）。</div>
@@ -410,7 +410,7 @@ body{
 
   <div class="pool-row" id="poolRow">
     <label style="color:var(--text2);font-size:0.9em;">词库：</label>
-    <button class="pool-btn active" data-pool="core">📗 你还在背单词吗（刘晓燕）</button>
+    <button class="pool-btn active" data-pool="core">📗 你还在背单词吗（刘晓艳）</button>
     <button class="pool-btn" data-pool="full">📚 艾宾浩斯打卡（<span id="fullVocabCount">0</span> 词）</button>
   </div>
   <div class="mode-row" id="gateRow">
@@ -438,7 +438,7 @@ body{
     🔄 <strong>重做错题模式</strong> — 正在重做之前做错的题目，答对自动从错题库移除
   </div>
   <div class="quiz-card" id="quizCard">
-    <div class="empty"><div class="ei">🎯</div><p>点击下方按钮开始刷题</p><p style="font-size:0.8em;margin-top:4px;color:var(--text2);">《你还在背单词吗》刘晓燕 · 艾宾浩斯打卡 · 智能混淆项 · 即时反馈</p></div>
+    <div class="empty"><div class="ei">🎯</div><p>点击下方按钮开始刷题</p><p style="font-size:0.8em;margin-top:4px;color:var(--text2);">《你还在背单词吗》刘晓艳 · 艾宾浩斯打卡 · 智能混淆项 · 即时反馈</p></div>
   </div>
   <div class="ctrl-row">
     <button class="ctrl-btn accent" id="startBtn" style="font-size:1.05em;padding:13px 36px;">▶ 开始做题</button>
@@ -799,7 +799,7 @@ function getDefaultState() {
     },
     suspendedQuiz: null,
     dailyGoal: 30,
-    ebbingStart: null,       // 刘晓燕词库 4周25天打卡起始日（UTC 日期字符串）
+    ebbingStart: null,       // 刘晓艳词库 4周25天打卡起始日（UTC 日期字符串）
     ebbingUnitLog: {}        // dateKey → [当天已复习完成的 Unit 数组]
   };
 }
@@ -813,11 +813,11 @@ var gateLevel = 1;              // 闯关模式：1速记 / 2选择 / 3 Unit综�
 
 // 词库元信息：pool → {name, units:[...]}
 var POOL_META = {
-  core: { name: '你还在背单词吗（刘晓燕）', units: [1,2,3,4,5,6,7,8,9,10,11,12,13,14] },
+  core: { name: '你还在背单词吗（刘晓艳）', units: [1,2,3,4,5,6,7,8,9,10,11,12,13,14] },
   full: { name: '艾宾浩斯打卡', units: [1,2,3,4,5,6,7,8,9,10] }
 };
 
-// 刘晓燕书末「艾宾浩斯抗遗忘复习打卡表」（4周25天）：每天学一个新Unit，复习间隔 +1/+2/+3/+6 天
+// 刘晓艳书末「艾宾浩斯抗遗忘复习打卡表」（4周25天）：每天学一个新Unit，复习间隔 +1/+2/+3/+6 天
 // 第N天学 Unit min(N,14)；Unit U 的复习日为 第 U+1、U+3、U+6、U+12 天
 var EBING_UNITS = 14;
 function ebbingUnitsDueOn(dayN, learnedUnits) {
@@ -1335,7 +1335,7 @@ function finishQuiz() {
 
 // ============ SPACED REPETITION (REVIEW) ============
 // 双书记忆规律：
-// - 核心词库（刘晓燕）：书末「艾宾浩斯抗遗忘复习打卡表」4周25天，Unit 级调度（每天学1个新Unit，+1/+2/+3/+6天复习）
+// - 核心词库（刘晓艳）：书末「艾宾浩斯抗遗忘复习打卡表」4周25天，Unit 级调度（每天学1个新Unit，+1/+2/+3/+6天复习）
 // - 打卡词库（艾宾浩斯）：书内每词 8 格记忆周期（首次学习 + 5分/30分/12时 + 1天/2天/4天/7天）
 var REVIEW_DAY = 86400000;
 var GRID_OFFSETS = [5 * 60000, 30 * 60000, 12 * 3600000, 1 * REVIEW_DAY, 2 * REVIEW_DAY, 4 * REVIEW_DAY, 7 * REVIEW_DAY];
@@ -1527,7 +1527,7 @@ function checkSuspendedQuiz() {
   var remaining = sq ? (sq.ids || (sq.remaining || [])).length : 0;
   if (sq && remaining > 0) {
     document.getElementById('savedInfo').textContent =
-      '暂存的做题进度 — ' + (sq.poolType === 'full' ? '艾宾浩斯打卡词库' : '你还在背单词吗(刘晓燕)') +
+      '暂存的做题进度 — ' + (sq.poolType === 'full' ? '艾宾浩斯打卡词库' : '你还在背单词吗(刘晓艳)') +
       ' · ' + (sq.mode === 'cn2en' ? '看中文选英文' : '看英文选中文') +
       (sq.isRetry ? '（重做模式）' : '') +
       ' — 已完成' + (sq.done || 0) + '题，剩余' + remaining + '题';
@@ -3514,7 +3514,7 @@ document.getElementById('importFileInput').addEventListener('change', function(e
 function showOnboarding() {
   if (localStorage.getItem('cet6_onboarded')) return;
   var steps = [
-    { title: '选择词库', desc: '在「你还在背单词吗（刘晓燕）」和「艾宾浩斯打卡」两个词库之间切换，可按书中 Unit 筛选、设置每次学习页数。' },
+    { title: '选择词库', desc: '在「你还在背单词吗（刘晓艳）」和「艾宾浩斯打卡」两个词库之间切换，可按书中 Unit 筛选、设置每次学习页数。' },
     { title: '闯关模式 & 开始', desc: '闯关1速记（认识/不认识快速检测）、闯关2选择（四选一/默写）、闯关3 Unit综合测；再选看中文选英文或看英文选中文即可开始。' },
     { title: '快捷键 & 跳过', desc: '数字键1-4选答案，空格跳过，回车下一题。按Esc取消输入焦点。' }
   ];
