@@ -553,6 +553,8 @@ body{
 
 // Load word data from JSON blocks (ALL_WORDS eagerly, FULL_WORDS lazily)
 var ALL_WORDS = JSON.parse(document.getElementById('data-all-words').textContent);
+// 剥离释义中 OCR 残留的 emoji（原书重点词标记被识别为 🔥，非书籍文字内容）。运行时清洗，数据块 JSON 保持原样可追溯；_wordMap 持有 ALL_WORDS 对象引用，故清洗对所有显示路径（选项/题干/详解/词库浏览）生效，同时避免前导 emoji 挡住 POS 词性检测
+ALL_WORDS.forEach(function(w) { if (w.meaning) w.meaning = String(w.meaning).replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/gu, '').trim(); });
 var FREQ_INDEX = JSON.parse(document.getElementById('data-freq-index').textContent);
 var FULL_WORDS = null; // Lazy-loaded on first access
 var _fullWordsLoaded = false;
