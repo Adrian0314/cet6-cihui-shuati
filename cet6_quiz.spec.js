@@ -406,7 +406,7 @@ test('switch to Ebbinghaus pool shows Unit 1-10 chips', async ({ page }) => {
 });
 
 test('ebbinghaus 4-week-25-day table logic', async ({ page }) => {
-  // Unit 1 复习日：第2、4、7、13天（+1/+2/+3/+6）；第14天后 Unit14 在第15/17/20/26天复习（26>25 表内截止）
+  // Unit 1 复习日：第2、4、7、13天（+1/+3/+6/+12）；第14天后 Unit14 在第15/17/20/26天复习（26>25 表内截止）
   const res = await page.evaluate(() => {
     function ebbingUnitsDueOn(dayN, learnedUnits) {
       var due = [];
