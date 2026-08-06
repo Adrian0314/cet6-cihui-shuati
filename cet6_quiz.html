@@ -798,6 +798,7 @@ function getDefaultState() {
       totalSkip: 0
     },
     suspendedQuiz: null,
+    prefs: { pool: 'core', units: [0], size: 20, gate: 1, mode: 'cn2en', type: 'choice', memory: false },
     dailyGoal: 30,
     ebbingStart: null,       // 刘晓艳词库 4周25天打卡起始日（UTC 日期字符串）
     ebbingUnitLog: {}        // dateKey → [当天已复习完成的 Unit 数组]
@@ -1424,6 +1425,7 @@ function toggleMemoryMode() {
   var on = btn.classList.toggle('active');
   if (on) showImportMsg('\u{1F9E0} \u8BB0\u5FC6\u6A21\u5F0F\u5DF2\u5F00\u542F\uFF1A\u505A\u5B8C\u4E00\u9898\u5373\u5220\u9664\uFF0C\u7B54\u9519\u7684\u8BCD\u9694\u51E0\u5929\u81EA\u52A8\u56DE\u6765', 'ok');
   else showImportMsg('\u5DF2\u5173\u95ED\u8BB0\u5FC6\u6A21\u5F0F\uFF0C\u56DE\u5230\u666E\u901A\u505A\u9898', 'ok');
+  savePrefs();
   return on;
 }
 function memoryModeOn() {
@@ -1556,6 +1558,7 @@ function resumeQuiz() {
     mode: sq.mode,
     isRetry: sq.isRetry,
     isReview: !!sq.isReview,
+    isMemory: !!sq.isMemory,
     ids: sq.ids.slice(),
     pos: -1,
     questions: [],
@@ -1563,7 +1566,9 @@ function resumeQuiz() {
     done: sq.done || 0,
     current: null,
     reviewCorrect: sq.reviewCorrect || 0,
-    poolType: sq.poolType || 'core'
+    poolType: sq.poolType || 'core',
+    memWrong: sq.memWrong || 0,
+    memTotal: sq.memTotal || sq.ids.length
   };
   quizActive = true;
   state.suspendedQuiz = null;
@@ -1579,6 +1584,68 @@ function discardSaved() {
   saveState();
   document.getElementById('savedBar').classList.remove('show');
 }
+
+// ============ PREFS (做题模式持久化：词库/单元/闯关/模式/题型/记忆/学习量) ============
+function savePrefs() {
+  state.prefs = {
+    pool: currentPool,
+    units: selectedUnits.slice(),
+    size: learnSize,
+    gate: gateLevel,
+    mode: currentMode,
+    type: currentQuizType,
+    memory: memoryModeOn()
+  };
+  saveState();
+}
+function applyPrefs() {
+  var p = state.prefs || {};
+  if (p.pool) currentPool = p.pool;
+  if (p.units && p.units.length) selectedUnits = p.units;
+  if (p.size) learnSize = p.size;
+  if (p.gate) gateLevel = p.gate;
+  if (p.mode) currentMode = p.mode;
+  if (p.type) currentQuizType = p.type;
+  document.querySelectorAll('.mode-btn[data-mode]').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.mode === currentMode);
+  });
+  document.querySelectorAll('#typeRow .mode-btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.type === currentQuizType);
+  });
+  document.querySelectorAll('#gateRow .mode-btn').forEach(function(b) {
+    b.classList.toggle('active', parseInt(b.dataset.gate, 10) === gateLevel);
+  });
+  document.querySelectorAll('#sizeRow .mode-btn').forEach(function(b) {
+    b.classList.toggle('active', parseInt(b.dataset.size, 10) === learnSize);
+  });
+  var mBtn = document.getElementById('memoryBtn');
+  if (mBtn) mBtn.classList.toggle('active', !!p.memory);
+  if (p.pool) updatePoolUI();
+}
+
+// ============ AUTO-SAVE ON EXIT (退出页面自动保留做题进度，不打断当前做题) ============
+function autoSaveProgress() {
+  if (!quizActive) return;
+  var q = quizState;
+  state.suspendedQuiz = {
+    mode: q.mode,
+    isRetry: q.isRetry,
+    isReview: !!q.isReview,
+    isMemory: !!q.isMemory,
+    ids: q.ids.slice(),
+    pos: q.pos,
+    answers: Object.assign({}, q.answers),
+    done: q.done,
+    reviewCorrect: q.reviewCorrect || 0,
+    poolType: q.poolType || currentPool,
+    currentId: q.current ? q.current.word.id : null,
+    memWrong: q.memWrong || 0,
+    memTotal: q.memTotal || q.ids.length
+  };
+  saveState();
+}
+window.addEventListener('pagehide', autoSaveProgress);
+window.addEventListener('beforeunload', autoSaveProgress);
 
 // ============ WORD DETAIL (助记/例句/派生词 板块) ============
 // 反馈区"正确答案"为英文单词时，右侧附朗读按钮
@@ -3304,6 +3371,7 @@ function renderFreqStats() {
 function buildUnitChips() {
   var row = document.getElementById('unitFilterRow');
   if (!row) return;
+  row.classList.add('show');  // 单元筛选行始终可见（修复被 .freq-filter-row{display:none} 隐藏、且无 JS 加 .show 的 bug）
   var units = POOL_META[currentPool] ? POOL_META[currentPool].units : [];
   // 保留"全部"按钮，重建 Unit 按钮
   var allBtn = row.querySelector('[data-unit="0"]');
@@ -3353,6 +3421,7 @@ document.querySelectorAll('.mode-btn[data-mode]').forEach(function(btn) {
     this.classList.add('active');
     currentMode = newMode;
     checkSuspendedQuiz();
+    savePrefs();
   });
 });
 
@@ -3375,6 +3444,7 @@ document.querySelectorAll('#typeRow .mode-btn').forEach(function(btn) {
     this.classList.add('active');
     currentQuizType = newType;
     checkSuspendedQuiz();
+    savePrefs();
   });
 });
 
@@ -3442,6 +3512,7 @@ document.querySelectorAll('.pool-btn').forEach(function(btn) {
     currentPool = this.dataset.pool;
     updatePoolUI();
     checkSuspendedQuiz();
+    savePrefs();
   });
 });
 
@@ -3467,6 +3538,7 @@ if (unitFilterRow) {
       }
     }
     updatePoolUI();
+    savePrefs();
     if (quizActive) {
       // Restart quiz with new filter
       startNewQuiz(currentMode);
@@ -3482,6 +3554,7 @@ document.querySelectorAll('#sizeRow .mode-btn').forEach(function(btn) {
     document.querySelectorAll('#sizeRow .mode-btn').forEach(function(b) { b.classList.remove('active'); });
     this.classList.add('active');
     learnSize = sz;
+    savePrefs();
   });
 });
 document.querySelectorAll('#gateRow .mode-btn').forEach(function(btn) {
@@ -3498,6 +3571,7 @@ document.querySelectorAll('#gateRow .mode-btn').forEach(function(btn) {
     document.querySelectorAll('#gateRow .mode-btn').forEach(function(b) { b.classList.remove('active'); });
     this.classList.add('active');
     gateLevel = g;
+    savePrefs();
   });
 });
 
@@ -4076,6 +4150,7 @@ if (location.protocol !== 'file:') {
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('./sw.js').catch(function() {});
 }
+applyPrefs();  // 恢复上次做题模式（词库/单元/闯关/模式/题型/记忆/学习量）
 checkSuspendedQuiz();
 setTimeout(function() { showOnboarding(); }, 500);
 setTimeout(function() { checkSpacedRepetition(); }, 1200);
