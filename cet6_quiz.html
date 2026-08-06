@@ -410,8 +410,8 @@ body{
 
   <div class="pool-row" id="poolRow">
     <label style="color:var(--text2);font-size:0.9em;">词库：</label>
-    <button class="pool-btn active" data-pool="core">📗 你还在背单词吗（刘晓艳）</button>
-    <button class="pool-btn" data-pool="full">📚 艾宾浩斯打卡（<span id="fullVocabCount">0</span> 词）</button>
+    <button class="pool-btn active" data-pool="core">📗 你还在背单词吗</button>
+    <button class="pool-btn" data-pool="full">📚 艾宾浩斯打卡</button>
   </div>
   <div class="mode-row" id="gateRow">
     <label>闯关模式：</label>
@@ -3578,7 +3578,8 @@ document.querySelectorAll('#gateRow .mode-btn').forEach(function(btn) {
 // Set full vocab count in pool button (read from JSON tag to avoid lazy-load overhead)
 var fullDataEl = document.getElementById('data-full-words');
 if (fullDataEl) {
-  document.getElementById('fullVocabCount').textContent = (fullDataEl.textContent.match(/"id":/g) || []).length;
+  var _fullCountEl = document.getElementById('fullVocabCount');
+  if (_fullCountEl) _fullCountEl.textContent = (fullDataEl.textContent.match(/"id":/g) || []).length;
 }
 updatePoolUI();
 renderReviewBar();
