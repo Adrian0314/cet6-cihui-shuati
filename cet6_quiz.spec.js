@@ -742,3 +742,31 @@ test.describe('external data (full-words.js)', () => {
     expect(txt.trim().length).toBeGreaterThan(0);
   });
 });
+
+test.describe('theme toggle', () => {
+  test('switches data-theme and icon with circular reveal', async ({ page }) => {
+    const btn = page.locator('#themeBtn');
+    const initial = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    await btn.click();
+    await page.waitForFunction((prev) => {
+      const cur = document.documentElement.getAttribute('data-theme');
+      return cur !== prev && (cur === 'dark' || cur === 'light');
+    }, initial, { timeout: 5000 });
+    const after = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    expect(after === 'dark' || after === 'light').toBe(true);
+    expect(after).not.toBe(initial);
+    await page.waitForTimeout(700); // 等圆形扩散动画(450ms)结束
+    const icon = await btn.textContent();
+    expect(icon).toBe(after === 'dark' ? '☀️' : '🌙');
+  });
+
+  test('reduced-motion still switches theme', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const btn = page.locator('#themeBtn');
+    const initial = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    await btn.click();
+    await page.waitForFunction((prev) => document.documentElement.getAttribute('data-theme') !== prev, initial, { timeout: 5000 });
+    const after = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    expect(after === 'dark' || after === 'light').toBe(true);
+  });
+});
