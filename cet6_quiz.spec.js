@@ -770,3 +770,51 @@ test.describe('theme toggle', () => {
     expect(after === 'dark' || after === 'light').toBe(true);
   });
 });
+
+test.describe('hover gating (pointer media query)', () => {
+  test('desktop (pointer:fine): hover feedback works', async ({ page }) => {
+    const btn = page.locator('.tab-btn[data-tab="wrong"]'); // 非 active，hover 才有变化
+    const before = await btn.evaluate(el => getComputedStyle(el).color);
+    await btn.hover();
+    await page.waitForTimeout(300);
+    const after = await btn.evaluate(el => getComputedStyle(el).color);
+    expect(after).not.toBe(before); // hover 后颜色变(--text2 → --text)
+  });
+
+  test('stats pbar renders with scaleX transform', async ({ page }) => {
+    await page.click('button[data-tab="stats-page"]');
+    await page.waitForTimeout(800); // 等统计页渲染
+    const info = await page.evaluate(() => {
+      const fills = [...document.querySelectorAll('.pbar .fill')];
+      const vis = fills.filter(el => el.getBoundingClientRect().width > 0);
+      const zero = el => getComputedStyle(el).transform === 'matrix(0, 0, 0, 1, 0, 0)';
+      return {
+        visible: vis.length,
+        nonZeroScaleX: vis.filter(el => !zero(el)).length,
+        originLeft: vis[0] ? getComputedStyle(vis[0]).transformOrigin.split(' ')[0] : null,
+      };
+    });
+    expect(info.visible).toBeGreaterThan(0);
+    expect(info.nonZeroScaleX).toBe(info.visible);
+    expect(info.originLeft).toBe('0px');
+  });
+});
+
+test.describe('touch device simulation', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+
+  test('hover feedback suppressed (pointer:coarse)', async ({ page }) => {
+    const media = await page.evaluate(() => ({
+      hover: window.matchMedia('(hover: hover)').matches,
+      coarse: window.matchMedia('(pointer: coarse)').matches,
+    }));
+    expect(media.hover).toBe(false);
+    expect(media.coarse).toBe(true);
+    const btn = page.locator('.tab-btn[data-tab="wrong"]');
+    const before = await btn.evaluate(el => getComputedStyle(el).color);
+    await btn.hover();
+    await page.waitForTimeout(300);
+    const after = await btn.evaluate(el => getComputedStyle(el).color);
+    expect(after).toBe(before); // hover 不变色(@media 不匹配)
+  });
+});

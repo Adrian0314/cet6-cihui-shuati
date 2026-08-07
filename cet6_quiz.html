@@ -70,14 +70,14 @@ body{
 .header .subtitle{color:var(--text2);font-size:0.88em;line-height:1.7;max-width:520px;margin:0 auto}
 
 .tabs{display:flex;gap:4px;margin-bottom:20px;background:var(--surface);border-radius:var(--radius);padding:4px;box-shadow:var(--shadow);border:1px solid var(--border)}
-.tab-btn{flex:1;padding:11px 14px;border:none;background:transparent;color:var(--text2);border-radius:calc(var(--radius) - 4px);cursor:pointer;font-size:0.88em;font-weight:500;display:flex;align-items:center;justify-content:center;gap:5px;transition:background 200ms,color 200ms,box-shadow 200ms;white-space:nowrap}
-.tab-btn:hover{color:var(--text)}
+.tab-btn{flex:1;padding:11px 14px;border:none;background:transparent;color:var(--text2);border-radius:calc(var(--radius) - 4px);cursor:pointer;font-size:0.88em;font-weight:500;display:flex;align-items:center;justify-content:center;gap:5px;transition:background 200ms,color 200ms,box-shadow 200ms;white-space:nowrap}@media (hover: hover) and (pointer: fine){
+.tab-btn:hover{color:var(--text)}}
 .tab-btn.active{background:var(--accent);color:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.1)}
 
 .mode-row{display:flex;gap:10px;margin-bottom:18px;align-items:center;justify-content:center;flex-wrap:wrap}
 .mode-row label{color:var(--text2);font-size:0.88em}
-.mode-btn{padding:10px 20px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:20px;cursor:pointer;font-size:0.88em;font-weight:500;transition:border-color 200ms,background 200ms}
-.mode-btn:hover{border-color:var(--accent)}
+.mode-btn{padding:10px 20px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:20px;cursor:pointer;font-size:0.88em;font-weight:500;transition:border-color 200ms,background 200ms}@media (hover: hover) and (pointer: fine){
+.mode-btn:hover{border-color:var(--accent)}}
 .mode-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
 
 .saved-bar{background:rgba(124,58,237,0.06);border:1px solid var(--accent);padding:10px 16px;border-radius:var(--radius-sm);margin-bottom:16px;font-size:0.88em;display:none;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
@@ -91,10 +91,10 @@ body{
 .pos-badge{display:inline-block;font-size:0.44em;font-weight:500;color:var(--accent);background:rgba(124,58,237,0.08);padding:2px 8px;border-radius:4px;vertical-align:middle;margin-right:4px;letter-spacing:0.5px}
 .q-pron{color:var(--text2);font-size:0.95em;margin-bottom:20px;font-style:italic}
 .options{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.opt-btn{padding:14px 18px;background:var(--surface2);border:2px solid transparent;border-radius:var(--radius-sm);color:var(--text);cursor:pointer;font-size:0.95em;text-align:left;display:flex;align-items:center;gap:10px;word-break:break-word;transition:border-color 150ms,background 150ms}
-.opt-btn:hover{border-color:var(--accent);background:rgba(124,58,237,0.06)}
-.opt-btn:active{transform:scale(0.96);transition:transform 80ms cubic-bezier(0.34,1.56,0.64,1)}
-#browseList [onclick*="speakWord"]:hover{background:rgba(124,58,237,0.12)}
+.opt-btn{padding:14px 18px;background:var(--surface2);border:2px solid transparent;border-radius:var(--radius-sm);color:var(--text);cursor:pointer;font-size:0.95em;text-align:left;display:flex;align-items:center;gap:10px;word-break:break-word;transition:border-color 150ms,background 150ms}@media (hover: hover) and (pointer: fine){
+.opt-btn:hover{border-color:var(--accent);background:rgba(124,58,237,0.06)}}
+.opt-btn:active{transform:scale(0.96);transition:transform 80ms cubic-bezier(0.34,1.56,0.64,1)}@media (hover: hover) and (pointer: fine){
+#browseList [onclick*="speakWord"]:hover{background:rgba(124,58,237,0.12)}}
 #jumpInput:focus{outline:none;border-color:var(--accent)!important;box-shadow:0 0 0 3px rgba(124,58,237,0.12)}
 .opt-btn .ol{font-weight:700;color:var(--accent2);min-width:24px;font-size:0.82em;flex-shrink:0}
 .opt-btn.correct{border-color:var(--green)!important;background:rgba(5,150,105,0.1)!important}
@@ -121,8 +121,8 @@ body{
 .fb-conf .ci strong{color:var(--orange)}
 .fb-key{margin-top:10px;font-size:0.82em;color:var(--text2);line-height:1.8}
 .word-detail{margin-top:14px;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--surface)}
-.word-detail .wd-head{padding:10px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:0.9em;font-weight:600;background:var(--surface2);user-select:none;transition:background 200ms,color 200ms}
-.word-detail .wd-head:hover{background:rgba(124,58,237,0.08);color:var(--accent)}
+.word-detail .wd-head{padding:10px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:0.9em;font-weight:600;background:var(--surface2);user-select:none;transition:background 200ms,color 200ms}@media (hover: hover) and (pointer: fine){
+.word-detail .wd-head:hover{background:rgba(124,58,237,0.08);color:var(--accent)}}
 .word-detail .wd-head:active{background:rgba(124,58,237,0.14)}
 .word-detail .wd-arrow{transition:transform 200ms;font-size:0.8em;color:var(--text2)}
 .word-detail.open .wd-arrow{transform:rotate(180deg)}
@@ -143,9 +143,9 @@ body{
 @keyframes countdownBar{from{width:100%}to{width:0%}}
 
 .next-btn{display:none;margin-top:16px;padding:12px 32px;background:var(--accent);color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:1em;font-weight:600;transition:background 200ms,transform 180ms,box-shadow 200ms;box-shadow:0 2px 8px rgba(0,0,0,0.12)}
-.skip-btn{transition:border-color 200ms,color 200ms,background 200ms}
-.skip-btn:hover{border-color:var(--accent)!important;color:var(--accent)!important;background:rgba(124,58,237,0.06)!important}
-.next-btn:hover{background:var(--accent2)}
+.skip-btn{transition:border-color 200ms,color 200ms,background 200ms}@media (hover: hover) and (pointer: fine){
+.skip-btn:hover{border-color:var(--accent)!important;color:var(--accent)!important;background:rgba(124,58,237,0.06)!important}}@media (hover: hover) and (pointer: fine){
+.next-btn:hover{background:var(--accent2)}}
 .next-btn:active{transform:scale(0.96);transition:transform 80ms cubic-bezier(0.34,1.56,0.64,1)}
 .next-btn.show{display:inline-block}
 
@@ -154,12 +154,12 @@ body{
 .ctrl-row{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;justify-content:center}
 .ctrl-btn{padding:9px 18px;border:2px solid var(--border);background:transparent;color:var(--text);border-radius:20px;cursor:pointer;font-size:0.88em;transition:border-color 200ms,background 200ms}
 .hm-range{padding:5px 12px;font-size:0.8em}
-.hm-range.active{border-color:var(--accent,#7c3aed);background:var(--accent,#7c3aed);color:#fff}
-.ctrl-btn:hover{border-color:var(--accent);background:rgba(124,58,237,0.06)}
-.ctrl-btn.danger{border-color:var(--red);color:var(--red)}
-.ctrl-btn.danger:hover{background:rgba(220,38,38,0.06)}
-.ctrl-btn.accent{background:var(--accent);border-color:var(--accent);color:#fff}
-.ctrl-btn.accent:hover{background:var(--accent2)}
+.hm-range.active{border-color:var(--accent,#7c3aed);background:var(--accent,#7c3aed);color:#fff}@media (hover: hover) and (pointer: fine){
+.ctrl-btn:hover{border-color:var(--accent);background:rgba(124,58,237,0.06)}}
+.ctrl-btn.danger{border-color:var(--red);color:var(--red)}@media (hover: hover) and (pointer: fine){
+.ctrl-btn.danger:hover{background:rgba(220,38,38,0.06)}}
+.ctrl-btn.accent{background:var(--accent);border-color:var(--accent);color:#fff}@media (hover: hover) and (pointer: fine){
+.ctrl-btn.accent:hover{background:var(--accent2)}}
 .ctrl-btn:disabled{opacity:0.4;pointer-events:none}
 
 .stats-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:12px;margin-bottom:16px}
@@ -180,13 +180,13 @@ body{
 
 .search-box{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 14px;border-radius:18px;font-size:0.85em;width:170px;outline:none;transition:border-color 200ms,box-shadow 200ms}
 .search-box:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(124,58,237,0.12)}
-#browseList > div{transition:background 200ms}
-#browseList > div:hover{background:var(--surface2)}
+#browseList > div{transition:background 200ms}@media (hover: hover) and (pointer: fine){
+#browseList > div:hover{background:var(--surface2)}}
 .search-box:focus{border-color:var(--accent)}
 .search-box::placeholder{color:var(--text2)}
 
-.hi{padding:10px 12px;border-radius:var(--radius-sm);margin-bottom:6px;background:var(--surface2);font-size:0.83em;border-left:3px solid var(--red);transition:box-shadow 200ms}
-.hi:hover{box-shadow:var(--shadow)}
+.hi{padding:10px 12px;border-radius:var(--radius-sm);margin-bottom:6px;background:var(--surface2);font-size:0.83em;border-left:3px solid var(--red);transition:box-shadow 200ms}@media (hover: hover) and (pointer: fine){
+.hi:hover{box-shadow:var(--shadow)}}
 .hi.retry{border-left-color:var(--orange)}
 .hi.mastered{border-left-color:var(--green)}
 .hi .hw{font-weight:600;color:var(--accent)}
@@ -204,7 +204,7 @@ body{
 .sdc .sdv{font-size:1.3em;font-weight:700}
 .sdc .sdl{font-size:0.76em;color:var(--text2);margin-top:2px}
 .pbar{height:7px;background:var(--border);border-radius:4px;margin-top:8px;overflow:hidden}
-.pbar .fill{height:100%;border-radius:4px;transition:width 300ms cubic-bezier(0.4,0,0.2,1)}
+.pbar .fill{height:100%;border-radius:4px;transform-origin:left;transform:scaleX(0);transition:transform 300ms cubic-bezier(0.4,0,0.2,1)}
 .fill.g{background:var(--green)}.fill.r{background:var(--red)}.fill.b{background:var(--blue)}
 
 .retry-info{background:rgba(217,119,6,0.06);border:1px solid rgba(217,119,6,0.2);padding:12px 18px;border-radius:var(--radius-sm);margin-bottom:16px;font-size:0.9em;display:none}
@@ -218,15 +218,15 @@ body{
 
 /* === POOL SELECTOR & FREQUENCY FILTER === */
 .pool-row{display:flex;gap:10px;margin-bottom:18px;align-items:center;justify-content:center;flex-wrap:wrap}
-.pool-btn{padding:10px 22px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:20px;cursor:pointer;font-size:0.9em;font-weight:500;transition:border-color 200ms,background 200ms}
-.pool-btn:hover{border-color:var(--accent)}
+.pool-btn{padding:10px 22px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:20px;cursor:pointer;font-size:0.9em;font-weight:500;transition:border-color 200ms,background 200ms}@media (hover: hover) and (pointer: fine){
+.pool-btn:hover{border-color:var(--accent)}}
 .pool-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
 
 .freq-filter-row{display:flex;gap:10px;margin-bottom:18px;align-items:center;justify-content:center;flex-wrap:wrap}
 .freq-filter-row{display:none}
 .freq-filter-row.show{display:flex}
-.freq-chip{padding:7px 16px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:20px;cursor:pointer;font-size:0.82em;font-weight:500;transition:border-color 200ms,background 200ms;white-space:nowrap}
-.freq-chip:hover{border-color:var(--accent)}
+.freq-chip{padding:7px 16px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:20px;cursor:pointer;font-size:0.82em;font-weight:500;transition:border-color 200ms,background 200ms;white-space:nowrap}@media (hover: hover) and (pointer: fine){
+.freq-chip:hover{border-color:var(--accent)}}
 .freq-chip.active.f5{border-color:#dc2626;background:rgba(220,38,38,0.1);color:#dc2626}
 .freq-chip.active.f4{border-color:#d97706;background:rgba(217,119,6,0.1);color:#d97706}
 .freq-chip.active.f3{border-color:#059669;background:rgba(5,150,105,0.1);color:#059669}
@@ -234,10 +234,10 @@ body{
 .freq-chip.active.f1{border-color:#7c3aed;background:rgba(124,58,237,0.1);color:#7c3aed}
 .freq-chip .fc{color:var(--text2);font-size:0.78em}
 .freq-chip.active{border-color:var(--accent);background:var(--accent);color:#fff}
-.gate1-btn{padding:12px 30px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:24px;cursor:pointer;font-size:1em;font-weight:600;transition:transform 120ms cubic-bezier(0.34,1.56,0.64,1),border-color 200ms,background 200ms;min-width:120px}
-.gate1-btn:hover{transform:scale(1.04)}
-.gate1-btn.ok:hover{border-color:#22c55e;background:rgba(34,197,94,0.12);color:#22c55e}
-.gate1-btn.no:hover{border-color:#ef4444;background:rgba(239,68,68,0.12);color:#ef4444}
+.gate1-btn{padding:12px 30px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:24px;cursor:pointer;font-size:1em;font-weight:600;transition:transform 120ms cubic-bezier(0.34,1.56,0.64,1),border-color 200ms,background 200ms;min-width:120px}@media (hover: hover) and (pointer: fine){
+.gate1-btn:hover{transform:scale(1.04)}}@media (hover: hover) and (pointer: fine){
+.gate1-btn.ok:hover{border-color:#22c55e;background:rgba(34,197,94,0.12);color:#22c55e}}@media (hover: hover) and (pointer: fine){
+.gate1-btn.no:hover{border-color:#ef4444;background:rgba(239,68,68,0.12);color:#ef4444}}
 .freq-count{margin-left:8px;color:var(--text2);font-size:0.82em}
 
 /* Rules card */
@@ -267,8 +267,8 @@ body{
 .dict-input.result-green{border-color:var(--green)!important;box-shadow:0 0 0 3px rgba(5,150,105,0.2)!important;background:rgba(5,150,105,0.04)!important}
 .dict-input.result-red{border-color:var(--red)!important;box-shadow:0 0 0 3px rgba(220,38,38,0.2)!important;background:rgba(220,38,38,0.04)!important}
 .dict-input.result-orange{border-color:var(--orange)!important;box-shadow:0 0 0 3px rgba(217,119,6,0.2)!important;background:rgba(217,119,6,0.04)!important}
-.dict-submit-btn{margin-top:12px;padding:12px 32px;background:var(--accent);color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:1em;font-weight:600;transition:background 180ms,transform 80ms cubic-bezier(0.34,1.56,0.64,1)}
-.dict-submit-btn:hover{background:var(--accent2)}
+.dict-submit-btn{margin-top:12px;padding:12px 32px;background:var(--accent);color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:1em;font-weight:600;transition:background 180ms,transform 80ms cubic-bezier(0.34,1.56,0.64,1)}@media (hover: hover) and (pointer: fine){
+.dict-submit-btn:hover{background:var(--accent2)}}
 .dict-submit-btn:active{transform:scale(0.96)}
 
 @media(max-width:768px){
@@ -285,8 +285,8 @@ body{
 /* === QUIZ FULLSCREEN MODE === */
 .quiz-card{position:relative}
 .toggle-fs-btn{position:absolute;top:10px;right:10px;padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text2);cursor:pointer;font-size:0.78em;transition:transform 80ms cubic-bezier(0.34,1.56,0.64,1),border-color 150ms,background 150ms;z-index:10}
-.quiz-card:not(.fullscreen) .toggle-fs-btn{position:static;margin:0;flex-shrink:0}
-.toggle-fs-btn:hover{border-color:var(--accent);color:var(--accent)}
+.quiz-card:not(.fullscreen) .toggle-fs-btn{position:static;margin:0;flex-shrink:0}@media (hover: hover) and (pointer: fine){
+.toggle-fs-btn:hover{border-color:var(--accent);color:var(--accent)}}
 .toggle-fs-btn:active{transform:scale(0.96)}
 .quiz-top-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
 .quiz-top-row .q-label{margin-bottom:0;flex:1;min-width:0;word-break:break-word}
@@ -310,8 +310,8 @@ body{
 [aria-hidden=true]{speak:none}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .back-to-top{position:fixed;right:24px;bottom:calc(env(safe-area-inset-bottom,0px) + 24px);width:44px;height:44px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:44px;text-align:center;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.3);z-index:250;opacity:0;visibility:hidden;transform:translateY(10px);transition:opacity .2s,visibility .2s,transform .2s}
-.back-to-top.show{opacity:1;visibility:visible;transform:translateY(0)}
-.back-to-top:hover{filter:brightness(1.08)}
+.back-to-top.show{opacity:1;visibility:visible;transform:translateY(0)}@media (hover: hover) and (pointer: fine){
+.back-to-top:hover{filter:brightness(1.08)}}
 
 /* === CHART STYLES === */
 .chart-row{display:grid;grid-template-columns:1fr 1fr;gap:20px;background:transparent;border:none;box-shadow:none;padding:0}
@@ -977,7 +977,7 @@ function pageNavHTML(pageInfo, showControls) {
     '<div class="page-nav" style="display:flex;align-items:center;justify-content:center;gap:10px;margin:0 0 12px;flex-wrap:wrap;">' +
     '<span style="color:var(--accent2);font-size:0.85em;font-weight:600;white-space:nowrap;">\u{1F4D6} ' + unitLabel + ' · 第 ' + pageInfo.page + '/' + pageInfo.totalPages + ' 页</span>' +
     '<div title="本页第 ' + pageInfo.inPage + ' / ' + pageInfo.totalWords + ' 词" style="width:96px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;">' +
-    '<div style="width:' + pct + '%;height:100%;background:var(--accent2);border-radius:3px;transition:width 200ms;"></div></div>';
+    '<div style="transform:scaleX(' + (pct/100) + ');height:100%;background:var(--accent2);border-radius:3px;transform-origin:left;transition:transform 200ms;"></div></div>';
   if (showControls) {
     html +=
       '<button class="ctrl-btn" onclick="pageGo(-1)" ' + (pageInfo.page <= 1 ? 'disabled' : '') + ' style="padding:3px 14px;font-size:0.8em;">◀ 上一页</button>' +
@@ -2741,24 +2741,24 @@ function renderStatsPage() {
   document.getElementById('overallStats').innerHTML =
     '<div class="sdc"><div class="sdv" style="color:var(--accent2)">' + getActivePool().length + '</div><div class="sdl">当前词库</div></div>' +
     '<div class="sdc"><div class="sdv" style="color:var(--blue)">' + total + '</div><div class="sdl">总做题数</div></div>' +
-    '<div class="sdc"><div class="sdv" style="color:var(--green)">' + rate + '%</div><div class="sdl">总体正确率</div><div class="pbar"><div class="fill g" style="width:' + rate + '%"></div></div></div>' +
+    '<div class="sdc"><div class="sdv" style="color:var(--green)">' + rate + '%</div><div class="sdl">总体正确率</div><div class="pbar"><div class="fill g" style="transform:scaleX(' + ((rate)/100) + ')"></div></div></div>' +
     '<div class="sdc"><div class="sdv" style="color:var(--green)">' + correct + '</div><div class="sdl">正确数</div></div>' +
     '<div class="sdc"><div class="sdv" style="color:var(--red)">' + wrong + '</div><div class="sdl">错误数</div></div>' +
-    '<div class="sdc"><div class="sdv" style="color:var(--red)">' + (total > 0 ? Math.round(wrong/total*100) : 0) + '%</div><div class="sdl">错误率</div><div class="pbar"><div class="fill r" style="width:' + (total > 0 ? Math.round(wrong/total*100) : 0) + '%"></div></div></div>' +
+    '<div class="sdc"><div class="sdv" style="color:var(--red)">' + (total > 0 ? Math.round(wrong/total*100) : 0) + '%</div><div class="sdl">错误率</div><div class="pbar"><div class="fill r" style="transform:scaleX(' + (((total > 0 ? Math.round(wrong/total*100) : 0))/100) + ')"></div></div></div>' +
     '<div class="sdc"><div class="sdv" style="color:var(--orange)">' + state.wrongHistory.length + '</div><div class="sdl">累计错题记录</div></div>' +
     '<div class="sdc"><div class="sdv" style="color:var(--pink)">' + (cn2enW + en2cnW) + '</div><div class="sdl">待重做错词</div></div>' +
     '<div class="sdc"><div class="sdv">' + td.attempts + '</div><div class="sdl">今日做题</div></div>' +
-    '<div class="sdc"><div class="sdv" style="color:var(--green)">' + todayR + '%</div><div class="sdl">今日正确率</div><div class="pbar"><div class="fill g" style="width:' + todayR + '%"></div></div></div>' +
-    '<div class="sdc"><div class="sdv" style="color:var(--accent)">' + td.attempts + '/' + (state.dailyGoal || 30) + '</div><div class="sdl">今日目标</div><div class="pbar"><div class="fill" style="width:' + Math.min(100, td.attempts / (state.dailyGoal || 30) * 100) + '%;background:var(--accent)"></div></div></div>' +
+    '<div class="sdc"><div class="sdv" style="color:var(--green)">' + todayR + '%</div><div class="sdl">今日正确率</div><div class="pbar"><div class="fill g" style="transform:scaleX(' + ((todayR)/100) + ')"></div></div></div>' +
+    '<div class="sdc"><div class="sdv" style="color:var(--accent)">' + td.attempts + '/' + (state.dailyGoal || 30) + '</div><div class="sdl">今日目标</div><div class="pbar"><div class="fill" style="transform:scaleX(' + (Math.min(100, td.attempts / (state.dailyGoal || 30) * 100)/100) + ');background:var(--accent)"></div></div></div>' +
     '<div class="sdc"><div class="sdv" style="color:#a78bfa">' + st.streak.best + '</div><div class="sdl">最佳连对</div></div>' +
     '<div class="sdc"><div class="sdv">' + state.retryHistory.length + '</div><div class="sdl">重做总次数</div></div>';
 
   document.getElementById('modeStats').innerHTML =
     '<div class="sdc"><div class="sdv" style="color:var(--blue)">' + st.cn2en.attempts + '</div><div class="sdl">🇨🇳→🇬🇧 做题数</div></div>' +
-    '<div class="sdc"><div class="sdv" style="color:var(--green)">' + cn2enR + '%</div><div class="sdl">🇨🇳→🇬🇧 正确率</div><div class="pbar"><div class="fill g" style="width:' + cn2enR + '%"></div></div></div>' +
+    '<div class="sdc"><div class="sdv" style="color:var(--green)">' + cn2enR + '%</div><div class="sdl">🇨🇳→🇬🇧 正确率</div><div class="pbar"><div class="fill g" style="transform:scaleX(' + ((cn2enR)/100) + ')"></div></div></div>' +
     '<div class="sdc"><div class="sdv" style="color:var(--red)">' + cn2enW + '</div><div class="sdl">🇨🇳→🇬🇧 待重做</div></div>' +
     '<div class="sdc"><div class="sdv" style="color:var(--blue)">' + st.en2cn.attempts + '</div><div class="sdl">🇬🇧→🇨🇳 做题数</div></div>' +
-    '<div class="sdc"><div class="sdv" style="color:var(--green)">' + en2cnR + '%</div><div class="sdl">🇬🇧→🇨🇳 正确率</div><div class="pbar"><div class="fill g" style="width:' + en2cnR + '%"></div></div></div>' +
+    '<div class="sdc"><div class="sdv" style="color:var(--green)">' + en2cnR + '%</div><div class="sdl">🇬🇧→🇨🇳 正确率</div><div class="pbar"><div class="fill g" style="transform:scaleX(' + ((en2cnR)/100) + ')"></div></div></div>' +
     '<div class="sdc"><div class="sdv" style="color:var(--red)">' + en2cnW + '</div><div class="sdl">🇬🇧→🇨🇳 待重做</div></div>';
 
   // Weekly
@@ -2773,7 +2773,7 @@ function renderStatsPage() {
     weeklyHTML += '<div class="sdc"' + (isT ? ' style="border:1px solid var(--accent);"' : '') + '>' +
       '<div class="sdv" style="font-size:1.05em;">' + (isT ? '📌' : '') + key.slice(5) + ' 周' + dn + '</div>' +
       '<div class="sdl">' + ds.attempts + '题 | ✅' + ds.correct + ' ❌' + ds.wrong + ' | ' + dr + '%</div>' +
-      '<div class="pbar"><div class="fill ' + (dr >= 60 ? 'g' : 'r') + '" style="width:' + Math.max(dr, 5) + '%"></div></div></div>';
+      '<div class="pbar"><div class="fill ' + (dr >= 60 ? 'g' : 'r') + '" style="transform:scaleX(' + ((Math.max(dr, 5))/100) + ')"></div></div></div>';
   }
   document.getElementById('weeklyStats').innerHTML = weeklyHTML;
 
@@ -2815,7 +2815,7 @@ function renderStatsPage() {
     '<div class="sdc"><div class="sdv" style="color:var(--red)">' + struggling + '</div><div class="sdl">薄弱词汇（≥2错误）</div></div>' +
     '<div class="sdc"><div class="sdv" style="color:var(--blue)">' + touched + '</div><div class="sdl">已练习词数</div></div>' +
     '<div class="sdc"><div class="sdv" style="color:var(--text2)">' + untouched + '</div><div class="sdl">未练习词数</div></div>' +
-    '<div class="sdc"><div class="sdv" style="color:var(--accent2)">' + Math.round(touched / getActivePool().length * 100) + '%</div><div class="sdl">词库覆盖率</div><div class="pbar"><div class="fill b" style="width:' + Math.round(touched / getActivePool().length * 100) + '%"></div></div></div>';
+    '<div class="sdc"><div class="sdv" style="color:var(--accent2)">' + Math.round(touched / getActivePool().length * 100) + '%</div><div class="sdl">词库覆盖率</div><div class="pbar"><div class="fill b" style="transform:scaleX(' + ((Math.round(touched / getActivePool().length * 100))/100) + ')"></div></div></div>';
 
 
   // === Frequency-based statistics ===
@@ -2834,14 +2834,14 @@ function renderStatsPage() {
     if (d.attempts > 0) {
       dictContainer.innerHTML =
         '<div class="sdc"><div class="sdv" style="color:var(--blue)">' + d.attempts + '</div><div class="sdl">默写总题数</div></div>' +
-        '<div class="sdc"><div class="sdv" style="color:var(--green)">' + dRate + '%</div><div class="sdl">默写正确率</div><div class="pbar"><div class="fill g" style="width:' + dRate + '%"></div></div></div>' +
+        '<div class="sdc"><div class="sdv" style="color:var(--green)">' + dRate + '%</div><div class="sdl">默写正确率</div><div class="pbar"><div class="fill g" style="transform:scaleX(' + ((dRate)/100) + ')"></div></div></div>' +
         '<div class="sdc"><div class="sdv" style="color:var(--green)">' + d.correct + '</div><div class="sdl">完全正确</div></div>' +
         '<div class="sdc"><div class="sdv" style="color:var(--orange)">' + (d.close || 0) + '</div><div class="sdl">接近正确</div></div>' +
         '<div class="sdc"><div class="sdv" style="color:var(--red)">' + d.wrong + '</div><div class="sdl">错误</div></div>' +
         '<div class="sdc"><div class="sdv" style="color:var(--blue)">' + cd.attempts + '</div><div class="sdl">🇨🇳→EN 默写</div></div>' +
-        '<div class="sdc"><div class="sdv" style="color:var(--green)">' + cdR + '%</div><div class="sdl">🇨🇳→EN 正确率</div><div class="pbar"><div class="fill g" style="width:' + cdR + '%"></div></div></div>' +
+        '<div class="sdc"><div class="sdv" style="color:var(--green)">' + cdR + '%</div><div class="sdl">🇨🇳→EN 正确率</div><div class="pbar"><div class="fill g" style="transform:scaleX(' + ((cdR)/100) + ')"></div></div></div>' +
         '<div class="sdc"><div class="sdv" style="color:var(--blue)">' + ed.attempts + '</div><div class="sdl">EN→🇨🇳 默写</div></div>' +
-        '<div class="sdc"><div class="sdv" style="color:var(--green)">' + edR + '%</div><div class="sdl">EN→🇨🇳 正确率</div><div class="pbar"><div class="fill g" style="width:' + edR + '%"></div></div></div>';
+        '<div class="sdc"><div class="sdv" style="color:var(--green)">' + edR + '%</div><div class="sdl">EN→🇨🇳 正确率</div><div class="pbar"><div class="fill g" style="transform:scaleX(' + ((edR)/100) + ')"></div></div></div>';
       dictSec.style.display = 'block';
     } else {
       dictSec.style.display = 'none';
@@ -3593,7 +3593,7 @@ function renderFreqStats() {
       '<div class="fdv" style="color:' + c + '">Unit ' + u + '</div>' +
       '<div class="fdl">词数：' + us.words + ' | 练习：' + us.attempts + '题</div>' +
       '<div class="fdl">正确率：' + rate + '% | ✅' + us.correct + ' ❌' + us.wrong + '</div>' +
-      '<div class="pbar"><div class="fill" style="width:' + Math.max(rate, 3) + '%;background:' + c + '"></div></div>' +
+      '<div class="pbar"><div class="fill" style="transform:scaleX(' + (Math.max(rate, 3)/100) + ');background:' + c + '"></div></div>' +
       '</div>';
   });
   freqGrid.innerHTML = html;
