@@ -842,3 +842,41 @@ test('page load with saved full pool does not crash before async words ready', a
   const txt = await page.locator('#freqCount').textContent();
   expect(txt).toContain('2920');
 });
+
+test.describe('other options show english word on wrong answer', () => {
+  async function answerWrong(page) {
+    await page.evaluate(() => {
+      const g2 = document.querySelector('#gateRow .mode-btn[data-gate="2"]');
+      if (g2) g2.click();
+    });
+    await page.waitForTimeout(100);
+    await page.click('button:has-text("开始做题")');
+    await page.waitForSelector('.opt-btn');
+    await page.evaluate(() => {
+      const q = quizState.questions[quizState.pos];
+      const wrongIdx = q.options.findIndex((o, i) => i !== q.correctIndex);
+      document.querySelectorAll('.opt-btn')[wrongIdx].click();
+    });
+    await page.waitForSelector('.feedback.show.fail');
+    return page.evaluate(() => {
+      const fb = document.querySelector('.feedback.show');
+      const re = /([A-D])\.<\/span> <strong>([a-zA-Z]+)<\/strong>/g;
+      const found = [];
+      let mm;
+      while ((mm = re.exec(fb.innerHTML)) !== null) found.push({ label: mm[1], word: mm[2] });
+      return found;
+    });
+  }
+
+  test('en2cn: other options include english word', async ({ page }) => {
+    await page.click('.mode-btn[data-mode="en2cn"]');
+    const rows = await answerWrong(page);
+    expect(rows.length).toBe(3); // 其余选项 3 行
+    rows.forEach(r => expect(r.word).toMatch(/^[a-z]+$/i));
+  });
+
+  test('cn2en: other options still include english word (regression)', async ({ page }) => {
+    const rows = await answerWrong(page); // 默认 cn2en
+    expect(rows.length).toBe(3);
+  });
+});
