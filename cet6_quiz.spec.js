@@ -634,3 +634,80 @@ test.describe('back-to-top', () => {
     });
   });
 });
+
+test.describe('keep prefs on exit', () => {
+  // 全局 beforeEach 已把闯关切到 gate2 并持久化；reload 后快照 = 当前持久化模式（gate2）
+  test.beforeEach(async ({ page }) => {
+    await page.reload();
+    await page.waitForTimeout(300);
+  });
+
+  test('tab switch without pref change: no dialog, switches directly', async ({ page }) => {
+    await page.click('button[data-tab="stats-page"]');
+    await page.waitForTimeout(300);
+    await expect(page.locator('#keepPrefsBar')).toHaveCount(0);
+    await expect(page.locator('#tab-stats-page')).toBeVisible();
+  });
+
+  test('tab switch after pref change: dialog appears', async ({ page }) => {
+    await page.click('#gateRow .mode-btn[data-gate="3"]'); // 调整
+    await page.click('button[data-tab="stats-page"]');
+    await page.waitForSelector('#keepPrefsBar');
+    await expect(page.locator('#keepPrefsBar')).toContainText('本次调整了做题模式');
+    await expect(page.locator('#keepPrefsYes')).toBeVisible();
+    await expect(page.locator('#keepPrefsNo')).toBeVisible();
+  });
+
+  test('keep button: snapshot updated, switch proceeds, no repeat dialog', async ({ page }) => {
+    await page.click('#gateRow .mode-btn[data-gate="3"]');
+    await page.click('button[data-tab="stats-page"]');
+    await page.waitForSelector('#keepPrefsBar');
+    await page.click('#keepPrefsYes');
+    await page.waitForTimeout(300);
+    await expect(page.locator('#keepPrefsBar')).toHaveCount(0);
+    await expect(page.locator('#tab-stats-page')).toBeVisible();
+    await page.click('button[data-tab="quiz"]');
+    await page.waitForTimeout(200);
+    await page.click('button[data-tab="stats-page"]');
+    await page.waitForTimeout(300);
+    await expect(page.locator('#keepPrefsBar')).toHaveCount(0);
+  });
+
+  test('revert button: prefs restored to snapshot, UI syncs', async ({ page }) => {
+    await page.click('#gateRow .mode-btn[data-gate="3"]');
+    await page.click('button[data-tab="stats-page"]');
+    await page.waitForSelector('#keepPrefsBar');
+    await page.click('#keepPrefsNo');
+    await page.waitForTimeout(400);
+    const gate = await page.evaluate(() => JSON.parse(localStorage.getItem('cet6_quiz_app_v2')).prefs.gate);
+    expect(gate).toBe(2);
+    await page.click('button[data-tab="quiz"]');
+    await page.waitForTimeout(200);
+    await expect(page.locator('#gateRow .mode-btn[data-gate="2"]')).toHaveClass(/active/);
+  });
+
+  test('memory mode survives switching pool mid-quiz (isMemory persisted)', async ({ page }) => {
+    await page.click('#memoryBtn'); // 开记忆模式
+    await page.click('button:has-text("开始做题")');
+    await page.waitForSelector('.opt-btn');
+    page.once('dialog', d => d.accept());
+    await page.click('.pool-btn[data-pool="full"]');
+    await page.waitForTimeout(400);
+    const isMem = await page.evaluate(() => {
+      const st = JSON.parse(localStorage.getItem('cet6_quiz_app_v2'));
+      return st.suspendedQuiz ? !!st.suspendedQuiz.isMemory : null;
+    });
+    expect(isMem).toBe(true);
+  });
+
+  test('switching mode mid-quiz not reverted by checkSuspendedQuiz', async ({ page }) => {
+    await page.click('button:has-text("开始做题")');
+    await page.waitForSelector('.opt-btn');
+    page.once('dialog', d => d.accept());
+    await page.click('.mode-btn[data-mode="en2cn"]');
+    await page.waitForTimeout(400);
+    const mode = await page.evaluate(() => JSON.parse(localStorage.getItem('cet6_quiz_app_v2')).prefs.mode);
+    expect(mode).toBe('en2cn');
+    await expect(page.locator('.mode-btn[data-mode="en2cn"]')).toHaveClass(/active/);
+  });
+});

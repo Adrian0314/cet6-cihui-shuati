@@ -1445,6 +1445,17 @@ function finishQuiz() {
   quizState.isRetry = false;
   quizState.isReview = false;
   quizState.isMemory = false;
+  // 复习强制选择题，完成后恢复用户此前保存的题型
+  if (window._prevQuizTypeBeforeReview) {
+    currentQuizType = window._prevQuizTypeBeforeReview;
+    document.querySelectorAll('#typeRow .mode-btn').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.type === currentQuizType);
+    });
+    window._prevQuizTypeBeforeReview = null;
+    savePrefs();
+  }
+  // 完成一轮后，若本会话调整了做题模式，弹窗询问是否保留（没选择直接退出则默认保留；选「回到上次」即恢复快照）
+  if (typeof askKeepPrefs === 'function') askKeepPrefs(null);
   renderAll();
   saveState();
 }
@@ -1595,7 +1606,8 @@ function startReview() {
   ensureFullWords();
   var due = getDueWordIds();
   if (due.length === 0) { alert('今天没有到期的复习单词，去学点新词吧！'); return; }
-  // 复习固定为：看英文选中文 + 选择题（快速确认记忆）
+  // 复习固定为：看英文选中文 + 选择题（快速确认记忆）；记住用户此前题型，复习结束后恢复
+  window._prevQuizTypeBeforeReview = currentQuizType;
   currentQuizType = 'choice';
   document.querySelectorAll('[data-type]').forEach(function(b) {
     b.classList.toggle('active', b.dataset.type === 'choice');
@@ -1630,6 +1642,9 @@ function saveSuspendedQuiz() {
     answers: Object.assign({}, quizState.answers),
     done: quizState.done,
     reviewCorrect: quizState.reviewCorrect || 0,
+    isMemory: !!quizState.isMemory,
+    memWrong: quizState.memWrong || 0,
+    memTotal: quizState.memTotal || quizState.ids.length,
     poolType: quizState.poolType || currentPool,
     currentId: quizState.current ? quizState.current.word.id : null,
     pageStart: quizState.pageStart || 0
@@ -1650,10 +1665,7 @@ function checkSuspendedQuiz() {
       (sq.isRetry ? '（重做模式）' : '') +
       ' — 已完成' + (sq.done || 0) + '题，剩余' + remaining + '题';
     document.getElementById('savedBar').classList.add('show');
-    currentMode = sq.mode;
-    document.querySelectorAll('.mode-btn[data-mode]').forEach(function(b) {
-      b.classList.toggle('active', b.dataset.mode === sq.mode);
-    });
+    // 不覆盖 currentMode/模式按钮高亮——避免切换模式/题型/词库后被静默拨回挂起的旧模式(恢复做题时由 resumeQuiz 按挂起进度设置)
   }
 }
 
@@ -1670,6 +1682,10 @@ function resumeQuiz() {
   }
   currentPool = sq.poolType || 'core';
   updatePoolUI();
+  currentMode = sq.mode;
+  document.querySelectorAll('.mode-btn[data-mode]').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.mode === sq.mode);
+  });
   quizState = {
     mode: sq.mode,
     isRetry: sq.isRetry,
@@ -1689,9 +1705,16 @@ function resumeQuiz() {
   };
   quizActive = true;
   state.suspendedQuiz = null;
-  saveState();
+  savePrefs(); // 恢复挂起的词库/模式同步到 prefs，避免刷新后回退
   document.getElementById('savedBar').classList.remove('show');
   document.getElementById('retryInfo').classList.toggle('show', quizState.isRetry);
+  // 恢复被挂起的复习进度时，重新强制复习题型为选择题
+  if (quizState.isReview) {
+    currentQuizType = 'choice';
+    document.querySelectorAll('#typeRow .mode-btn').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.type === 'choice');
+    });
+  }
   goToQuestion(typeof sq.pos === 'number' ? sq.pos : 0);
   renderAll();
 }
@@ -1738,6 +1761,57 @@ function applyPrefs() {
   var mBtn = document.getElementById('memoryBtn');
   if (mBtn) mBtn.classList.toggle('active', !!p.memory);
   if (p.pool) updatePoolUI();
+}
+
+// ============ KEEP PREFS ON EXIT (退出做题模式时选择是否保留当前模式；没选择直接退出则默认保留) ============
+var _sessionPrefsSnapshot = null; // 本次会话「上次已保存」的模式快照（进入页面时记录）
+function prefsCopy(p) {
+  return JSON.parse(JSON.stringify(p || {}));
+}
+function prefsDiffer(a, b) {
+  a = a || {}; b = b || {};
+  return a.pool !== b.pool || a.size !== b.size || a.gate !== b.gate ||
+    a.mode !== b.mode || a.type !== b.type || !!a.memory !== !!b.memory ||
+    (a.units && b.units ? a.units.join(',') !== b.units.join(',') : a.units !== b.units);
+}
+function updatePrefsSnapshot() {
+  _sessionPrefsSnapshot = prefsCopy(state.prefs);
+}
+// 「回到上次已保存」：把内存与 state.prefs 恢复为进入本页时的快照
+function revertPrefsToSnapshot() {
+  if (!_sessionPrefsSnapshot) return;
+  state.prefs = prefsCopy(_sessionPrefsSnapshot);
+  currentPool = state.prefs.pool || currentPool;
+  selectedUnits = state.prefs.units ? state.prefs.units.slice() : selectedUnits;
+  learnSize = state.prefs.size || learnSize;
+  gateLevel = state.prefs.gate || gateLevel;
+  currentMode = state.prefs.mode || currentMode;
+  currentQuizType = state.prefs.type || currentQuizType;
+  applyPrefs();
+  saveState();
+}
+// 非阻塞底部提示条：「保留当前模式」/「回到上次已保存」；可忽略（×）＝默认保留当前模式
+function askKeepPrefs() {
+  var differ = _sessionPrefsSnapshot && prefsDiffer(state.prefs, _sessionPrefsSnapshot);
+  if (!differ) return;
+  if (document.getElementById('keepPrefsBar')) return;
+  var bar = document.createElement('div');
+  bar.id = 'keepPrefsBar';
+  bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:350;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;padding:10px 16px;background:var(--surface);border-top:1px solid var(--border);box-shadow:0 -4px 16px rgba(0,0,0,0.15);font-size:0.9em;';
+  bar.innerHTML = '<span style="color:var(--text2);">本次调整了做题模式，是否保留？</span>' +
+    '<button class="ctrl-btn accent" id="keepPrefsYes">✓ 保留当前模式</button>' +
+    '<button class="ctrl-btn" id="keepPrefsNo">↩ 回到上次已保存</button>' +
+    '<button class="ctrl-btn" id="keepPrefsClose" title="忽略（默认保留当前模式）">×</button>';
+  document.body.appendChild(bar);
+  document.getElementById('keepPrefsYes').addEventListener('click', function() {
+    bar.remove(); updatePrefsSnapshot(); // 保留当前 → 快照更新为本次调整后的模式
+  });
+  document.getElementById('keepPrefsNo').addEventListener('click', function() {
+    bar.remove(); revertPrefsToSnapshot(); // 回到上次已保存
+  });
+  document.getElementById('keepPrefsClose').addEventListener('click', function() {
+    bar.remove(); updatePrefsSnapshot(); // 忽略 → 默认保留当前模式（不再提示）
+  });
 }
 
 // ============ AUTO-SAVE ON EXIT (退出页面自动保留做题进度，不打断当前做题) ============
@@ -3354,7 +3428,9 @@ function exportAllData() {
     selectedUnits: selectedUnits,
     learnSize: learnSize,
     gateLevel: gateLevel,
-    currentMode: currentMode
+    currentMode: currentMode,
+    currentQuizType: currentQuizType,
+    memory: memoryModeOn()
   };
   var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' });
   var url = URL.createObjectURL(blob);
@@ -3429,7 +3505,9 @@ function handleImport(file) {
       if (data.gateLevel) gateLevel = data.gateLevel;
       if (data.currentMode) currentMode = data.currentMode;
 
-      saveState();
+      // 导入后应用导入的 prefs 到内存与 UI（含题型/记忆），避免与持久化脱节被后续保存覆盖
+      applyPrefs();
+      savePrefs();
       updatePoolUI();
       renderAll();
       showImportMsg('数据恢复成功！', 'ok');
@@ -3580,17 +3658,22 @@ document.querySelectorAll('#typeRow .mode-btn').forEach(function(btn) {
   });
 });
 
+function switchTab(tab, btn) {
+  document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  if (tab !== 'stats-page' && tab !== 'browse') destroyCharts();
+  ['quiz', 'wrong', 'retry', 'stats-page', 'browse'].forEach(function(t) {
+    document.getElementById('tab-' + t).style.display = (t === tab) ? 'block' : 'none';
+  });
+  if (tab === 'browse') { _browsePage = 0; renderBrowse(); }
+  else renderAll();
+}
 document.querySelectorAll('.tab-btn').forEach(function(btn) {
   btn.addEventListener('click', function() {
-    document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
-    this.classList.add('active');
     var tab = this.dataset.tab;
-    if (tab !== 'stats-page' && tab !== 'browse') destroyCharts();
-    ['quiz', 'wrong', 'retry', 'stats-page', 'browse'].forEach(function(t) {
-      document.getElementById('tab-' + t).style.display = (t === tab) ? 'block' : 'none';
-    });
-    if (tab === 'browse') { _browsePage = 0; renderBrowse(); }
-    else renderAll();
+    // 直接切换；离开做题页时若有模式调整，显示非阻塞保留提示条（可忽略＝默认保留当前模式）
+    switchTab(tab, this);
+    if (tab !== 'quiz' && typeof askKeepPrefs === 'function') askKeepPrefs();
   });
 });
 
@@ -4284,6 +4367,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('./sw.js').catch(function() {});
 }
 applyPrefs();  // 恢复上次做题模式（词库/单元/闯关/模式/题型/记忆/学习量）
+updatePrefsSnapshot();  // 记录「上次已保存」的模式快照，退出做题时据此询问是否保留
 checkSuspendedQuiz();
 setTimeout(function() { showOnboarding(); }, 500);
 setTimeout(function() { checkSpacedRepetition(); }, 1200);
