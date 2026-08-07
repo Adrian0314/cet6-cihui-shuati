@@ -818,3 +818,27 @@ test.describe('touch device simulation', () => {
     expect(after).toBe(before); // hover 不变色(@media 不匹配)
   });
 });
+
+test('page load with saved full pool does not crash before async words ready', async ({ page }) => {
+  // 模拟用户上次选了打卡词库：prefs.pool='full'
+  await page.addInitScript(() => {
+    const st = JSON.parse(localStorage.getItem('cet6_quiz_app_v2') || '{}');
+    st.prefs = st.prefs || {};
+    st.prefs.pool = 'full';
+    st.prefs.units = [0];
+    localStorage.setItem('cet6_quiz_app_v2', JSON.stringify(st));
+  });
+  let pageError = null;
+  page.on('pageerror', e => { pageError = e.message; });
+  await page.goto('file:///C:/Users/zheng/Desktop/%E5%AD%A6%E4%B9%A0%E4%B8%8E%E8%80%83%E8%AF%95/Study/%E8%8B%B1%E8%AF%AD%E5%9B%9B%E5%85%AD%E7%BA%A7/cet6_quiz.html');
+  await page.waitForLoadState('domcontentloaded');
+  // 页面加载瞬间(外部词库数据未到达)applyPrefs→updatePoolUI→updateFreqCount 不应崩溃
+  expect(pageError).toBeNull();
+  // 打卡词库异步加载完成
+  await page.waitForFunction(() => window.__FULL_WORDS_DATA__ && window.__FULL_WORDS_DATA__.length === 2920, null, { timeout: 10000 });
+  await page.waitForTimeout(300);
+  expect(pageError).toBeNull();
+  // 词数刷新为真实值
+  const txt = await page.locator('#freqCount').textContent();
+  expect(txt).toContain('2920');
+});

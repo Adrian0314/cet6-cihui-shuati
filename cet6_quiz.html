@@ -623,6 +623,8 @@ function ensureFullWords(cb) {
     else _fullWordsFailed = true;
     var w = _fullWordsWaiters.splice(0);
     w.forEach(function(f) { f(); });
+    // 打卡词库就绪后刷新词数（页面加载时 prefs.pool='full' 会在数据到达前渲染 0 词，数据到达后更新为真实词数）
+    if (currentPool === 'full' && typeof updateFreqCount === 'function') updateFreqCount();
   });
 }
 
@@ -901,7 +903,7 @@ function loadState() {
 
 // ============ POOL UTILS ============
 function getActivePool() {
-  var pool = (currentPool === 'core') ? ALL_WORDS : (ensureFullWords(), FULL_WORDS);
+  var pool = (currentPool === 'core') ? ALL_WORDS : (ensureFullWords(), (FULL_WORDS || []));
   // Filter by selected units
   var allUnits = (selectedUnits.length === 0 || selectedUnits.indexOf(0) !== -1);
   if (allUnits) return pool;
@@ -921,7 +923,7 @@ function isSingleUnitRange() {
 
 // 当前词库某 Unit 的全部词（保持数据数组顺序，Unit 分组在数组内连续）
 function getUnitWordList(unit) {
-  var pool = (currentPool === 'core') ? ALL_WORDS : (ensureFullWords(), FULL_WORDS);
+  var pool = (currentPool === 'core') ? ALL_WORDS : (ensureFullWords(), (FULL_WORDS || []));
   return pool.filter(function(w) { return w.unit === unit; });
 }
 
@@ -3636,7 +3638,7 @@ function updatePoolUI() {
 function updateFreqCount() {
   var countEl = document.getElementById('freqCount');
   if (!countEl) return;
-  var filtered = getActivePool();
+  var filtered = getActivePool() || [];
   countEl.textContent = '共 ' + filtered.length + ' 词';
 }
 
