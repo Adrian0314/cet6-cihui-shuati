@@ -1,8 +1,9 @@
 // CET-6 Quiz Service Worker — offline support (PWA)
-var CACHE_NAME = 'cet6-cihui-shuati-v1';
+var CACHE_NAME = 'cet6-cihui-shuati-v2';
 var ASSETS = [
   './cet6_quiz.html',
   './manifest.json',
+  './data/full-words.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png'

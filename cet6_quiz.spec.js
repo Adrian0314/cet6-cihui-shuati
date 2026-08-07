@@ -711,3 +711,34 @@ test.describe('keep prefs on exit', () => {
     await expect(page.locator('.mode-btn[data-mode="en2cn"]')).toHaveClass(/active/);
   });
 });
+
+test.describe('external data (full-words.js)', () => {
+  test('switch to Ebbinghaus pool loads external data and can quiz', async ({ page }) => {
+    await page.click('.pool-btn[data-pool="full"]');
+    await page.waitForFunction(() => window.__FULL_WORDS_DATA__ && window.__FULL_WORDS_DATA__.length === 2920);
+    await expect(page.locator('#unitFilterRow .freq-chip[data-unit="1"]')).toBeVisible();
+    await page.click('button:has-text("开始做题")');
+    await page.waitForSelector('.opt-btn', { timeout: 10000 });
+    expect(await page.locator('.opt-btn').count()).toBe(4);
+  });
+
+  test('core pool quiz shows detail from built-in word fields', async ({ page }) => {
+    await page.click('button:has-text("开始做题")');
+    await page.waitForSelector('.opt-btn');
+    await page.locator('.opt-btn').first().click();
+    await page.waitForSelector('.next-btn.show');
+    await expect(page.locator('.word-detail')).toBeVisible();
+  });
+
+  test('Ebbinghaus pool quiz shows merged detail from external data', async ({ page }) => {
+    await page.click('.pool-btn[data-pool="full"]');
+    await page.waitForFunction(() => window.__FULL_WORDS_DATA__ && window.__FULL_WORDS_DATA__.length === 2920);
+    await page.click('button:has-text("开始做题")');
+    await page.waitForSelector('.opt-btn', { timeout: 10000 });
+    await page.locator('.opt-btn').first().click();
+    await page.waitForSelector('.next-btn.show', { timeout: 10000 });
+    await expect(page.locator('.word-detail')).toBeVisible();
+    const txt = await page.locator('.wd-body').textContent();
+    expect(txt.trim().length).toBeGreaterThan(0);
+  });
+});
