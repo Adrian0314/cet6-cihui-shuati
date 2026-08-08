@@ -1034,4 +1034,42 @@ test.describe('group map (new: unit-maps.js data)', () => {
     expect(spot.relsOutside).toBe(true);
     expect(spot.minInnerGap).toBeGreaterThanOrEqual(4);  // 关系标签不贴中心圆（间距统一）
   });
+
+  test('click circle drills down, click word text speaks only', async ({ page }) => {
+    // 行为约定：节点圆圈=展开下钻（不发音）；节点单词文字=朗读发音（不下钻）
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const result = await page.evaluate(() => {
+      window.currentPool = 'core';
+      window.__spoke = [];
+      window.speakWord = function (t) { window.__spoke.push(t); };
+      const wrap = document.createElement('div');
+      wrap.id = 'regress-gmap3';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      wrap.innerHTML = window.groupMapSVG({ id: 'x', word: 'ambition', unit: 1, lesson: 1, seq: 1, group_id: 1, group_name: '雄心相关' });
+      // 1) 点击 aggressive 的单词文字：应只发音、不下钻
+      const words = [...wrap.querySelectorAll('text[onclick*="groupMapSpeak"]')].filter(t => t.textContent === 'aggressive');
+      const wordEl = words[0];
+      wordEl.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const spokeAfterWord = window.__spoke.slice();
+      const backAfterWord = !!wrap.querySelector('.gmap-back');
+      // 2) 重置后点击 aggressive 的圆圈：应只下钻、不发音
+      window.__spoke = [];
+      const circles = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"]')].filter(g => {
+        const title = g.querySelector('title');
+        return title && title.textContent.split(' ')[0] === 'aggressive';
+      });
+      circles[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const spokeAfterCircle = window.__spoke.slice();
+      const backAfterCircle = !!wrap.querySelector('.gmap-back');
+      wrap.remove();
+      return { spokeAfterWord, backAfterWord, spokeAfterCircle, backAfterCircle };
+    });
+    expect(result.spokeAfterWord).toEqual(['aggressive']);   // 点单词 → 发音
+    expect(result.backAfterWord).toBe(false);                 // 点单词 → 不下钻
+    expect(result.spokeAfterCircle).toEqual([]);              // 点圆圈 → 不发音
+    expect(result.backAfterCircle).toBe(true);                // 点圆圈 → 下钻
+  });
 });

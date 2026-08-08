@@ -2080,8 +2080,10 @@ function buildMapSVG(id, map, r, activeWord) {
     var hasCh = !!(w.children && w.children.length);
     var escW = String(w.word).replace(/'/g, "\\'");
     var tip = w.word + (w.phonetic ? ' ' + w.phonetic : '') + (w.meaning ? ' ' + w.meaning : '');
-    var onClick = 'groupMapDrill(\'' + id + '\',\'' + escW + '\',' + (hasCh ? 1 : 0) + ')';
-    svg += '<g onclick="' + onClick + '" style="cursor:pointer">' +
+    // 圆圈=展开下钻；单词文字=朗读发音
+    var drillClick = 'groupMapDrill(\'' + id + '\',\'' + escW + '\',' + (hasCh ? 1 : 0) + ')';
+    var speakClick = 'groupMapSpeak(\'' + id + '\',\'' + escW + '\')';
+    svg += '<g onclick="' + drillClick + '" style="cursor:pointer">' +
       '<title>' + tip + '</title>' +
       '<circle cx="' + x2 + '" cy="' + y2 + '" r="' + (isActive ? 17 : 15) + '" style="fill:' + (isActive ? 'var(--accent)' : 'var(--surface2)') + ';stroke:var(--accent)" stroke-width="' + (isActive ? 2.6 : 1.6) + '"/>' +
       (hasCh ? '<text x="' + x2 + '" y="' + (y2 - 11) + '" text-anchor="middle" font-size="9" style="fill:var(--accent2)">▾</text>' : '') +
@@ -2090,7 +2092,7 @@ function buildMapSVG(id, map, r, activeWord) {
     var tCol = isActive ? '#ffffff' : 'var(--text)';
     var tStk = isActive ? 'rgba(0,0,0,0.6)' : 'none';
     var tW = isActive ? '2.5' : '0';
-    svg += '<text x="' + tx + '" y="' + ty + '" text-anchor="middle" dominant-baseline="middle" font-size="10.5" font-weight="' + (isActive ? 700 : 500) + '" paint-order="stroke" style="fill:' + tCol + ';stroke:' + tStk + ';stroke-width:' + tW + ';cursor:pointer" onclick="' + onClick + '">' + wText + '</text>';
+    svg += '<text x="' + tx + '" y="' + ty + '" text-anchor="middle" dominant-baseline="middle" font-size="10.5" font-weight="' + (isActive ? 700 : 500) + '" paint-order="stroke" style="fill:' + tCol + ';stroke:' + tStk + ';stroke-width:' + tW + ';cursor:pointer" onclick="' + speakClick + '" title="点击朗读发音">' + wText + '</text>';
   }
   svg += '</svg>';
   return svg;
@@ -2101,19 +2103,23 @@ function renderGroupMap(id) {
   var map = window.__UNIT_MAPS_DATA__[st.unit][st.gid];
   var r = resolveMapPath(map, st.stack);
   var backBtn = st.stack.length ? '<button class="gmap-back" onclick="groupMapBack(\'' + id + '\')">← 返回上级</button>' : '';
-  var title = '<div class="gmap-title">🗺️ 词群导图：' + map.group_name + '（点击节点发音 · ▾ 可展开）</div>';
+  var title = '<div class="gmap-title">🗺️ 词群导图：' + map.group_name + '（点击圆圈展开 · 点击单词发音）</div>';
   return '<div class="gmap-wrap" id="' + id + '">' + title + backBtn + buildMapSVG(id, map, r, st.active) + '</div>';
 }
 
+// 点击节点圆圈：只展开下钻（不发音）
 function groupMapDrill(id, nodeWord, hasChildren) {
   var st = _gmapState[id];
   if (!st) return;
-  speakWord(nodeWord);
   if (hasChildren) {
     st.stack.push(nodeWord);
     var el = document.getElementById(id);
     if (el) el.innerHTML = renderGroupMap(id);
   }
+}
+// 点击节点单词文字：只朗读发音（不下钻）
+function groupMapSpeak(id, nodeWord) {
+  speakWord(nodeWord);
 }
 function groupMapBack(id) {
   var st = _gmapState[id];
