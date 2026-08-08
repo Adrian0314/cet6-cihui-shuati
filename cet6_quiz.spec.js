@@ -1016,16 +1016,22 @@ test.describe('group map (new: unit-maps.js data)', () => {
       const tspans = ctext ? [...ctext.querySelectorAll('tspan')] : [];
       const circle = svg.querySelector('circle');
       const cx = +circle.getAttribute('cx'), cy = +circle.getAttribute('cy'), r = +circle.getAttribute('r');
-      // 关系标签（font-size=9.5）都应位于中心圆之外
-      const relsOutside = [...svg.querySelectorAll('text')].filter(t => t.getAttribute('font-size') === '9.5').every(t => {
+      // 关系标签（font-size=9.5）：中心在圆外，且文字包围盒内侧不贴中心圆（统一环带，间距≥4px）
+      const rels = [...svg.querySelectorAll('text')].filter(t => t.getAttribute('font-size') === '9.5').map(t => {
         const rb = t.getBBox();
-        return Math.hypot(rb.x + rb.width / 2 - cx, rb.y + rb.height / 2 - cy) > r;
+        const centerD = Math.hypot(rb.x + rb.width / 2 - cx, rb.y + rb.height / 2 - cy);
+        const rad = Math.atan2(rb.y + rb.height / 2 - cy, rb.x + rb.width / 2 - cx);
+        const innerGap = centerD - r - rb.width / 2;   // 文字内侧到中心圆边的间隙
+        return { outside: centerD > r, innerGap };
       });
+      const relsOutside = rels.length > 0 && rels.every(x => x.outside);
+      const minInnerGap = rels.length ? Math.min(...rels.map(x => x.innerGap)) : Infinity;
       wrap.remove();
-      return { centerText: ctext ? ctext.textContent : '', lines: tspans.length, circleR: r, relsOutside };
+      return { centerText: ctext ? ctext.textContent : '', lines: tspans.length, circleR: r, relsOutside, minInnerGap };
     });
     expect(spot.centerText).toBe('subordinate');
     expect(spot.lines).toBe(1);   // 单行，不把单词拦腰折断
     expect(spot.relsOutside).toBe(true);
+    expect(spot.minInnerGap).toBeGreaterThanOrEqual(4);  // 关系标签不贴中心圆（间距统一）
   });
 });

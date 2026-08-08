@@ -2035,7 +2035,7 @@ function gmapCenterLayout(label, isWord) {
 
 function buildMapSVG(id, map, r, activeWord) {
   var nodes = r.nodes;
-  var cx = 200, cy = 140;
+  var cx = 200, cy = 150;
   var n = nodes.length;
   if (!n) {
     return '<div style="color:var(--text2);font-size:0.85em;padding:10px 0">末端词，无更多关联词</div>';
@@ -2045,9 +2045,10 @@ function buildMapSVG(id, map, r, activeWord) {
   var cText = isWord ? r.centerWord : (map.group_name || '词群');
   var L = gmapCenterLayout(cText, isWord);
   var centerR = L.r, cfs = L.fs, clines = L.lines, lh = L.lh;
-  // 节点环随中心圆外扩；关系标签放在中心圆与节点圆之间的空隙，避免被圆遮住
-  var R = centerR + 40, textR = R + 32, relD = (centerR + R - 15) / 2;
-  var svg = '<svg viewBox="0 0 400 280" style="width:100%;max-width:400px;height:auto;display:block;margin:4px auto;">';
+  // 统一环带节奏：中心圆边→关系标签中心=18px，标签中心→节点圆近边=18px（对称不贴圆）
+  // 节点圆/节点文字随中心圆外扩，视口同步放大避免边缘文字溢出
+  var R = centerR + 51, textR = R + 36, relD = centerR + 18;
+  var svg = '<svg viewBox="0 0 400 300" style="width:100%;max-width:400px;height:auto;display:block;margin:4px auto;">';
   // 连线 + 关系标签
   for (var i = 0; i < n; i++) {
     var ang = (2 * Math.PI * i / n) - Math.PI / 2;
