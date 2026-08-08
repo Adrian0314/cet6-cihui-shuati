@@ -1626,3 +1626,147 @@ test.describe('group map (new: unit-maps.js data · unit3)', () => {
     expect(has).toBe(true);
   });
 });
+
+// ============ unit4 词群导图 ============
+test.describe('group map (new: unit-maps.js data · unit4)', () => {
+  test('unit4 has 18 groups (incl 法律=g16) and covers all 232 core words', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const stats = await page.evaluate(() => {
+      const d = window.__UNIT_MAPS_DATA__[4];
+      if (!d) return null;
+      const ids = Object.keys(d).map(Number).sort((a, b) => a - b);
+      const words = JSON.parse(document.getElementById('data-all-words').textContent).filter(w => w.unit === 4);
+      const set = new Set();
+      const walk = ns => ns.forEach(n => { set.add(n.word.toLowerCase()); if (n.children) walk(n.children); });
+      Object.keys(d).forEach(g => walk(d[g].level1Nodes || []));
+      return { ids, missing: words.filter(w => !set.has(w.word.toLowerCase())).map(w => w.word), total: words.length };
+    });
+    expect(stats).not.toBeNull();
+    expect(stats.ids).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]);
+    expect(stats.missing).toEqual([]);
+    expect(stats.total).toBe(232);
+  });
+
+  test('every unit4 quiz word is visible in its map (incl 法律-group words)', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const missing = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const words = JSON.parse(document.getElementById('data-all-words').textContent).filter(w => w.unit === 4);
+      const bad = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'u4-visible';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      for (const w of words) {
+        wrap.innerHTML = window.groupMapSVG({ id: 'x', word: w.word, unit: 4, lesson: w.lesson, seq: w.seq, group_id: w.group_id, group_name: w.group_name });
+        let ctext = null;
+        for (const t of wrap.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+        const center = ctext ? ctext.textContent : '';
+        const inNodes = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0].toLowerCase() === w.word.toLowerCase());
+        if (!inNodes && center.toLowerCase() !== w.word.toLowerCase()) bad.push(w.word);
+      }
+      wrap.remove();
+      return bad;
+    });
+    expect(missing).toEqual([]);
+  });
+
+  test('unit4 layout safe: center in circle, node text not touching, no truncation', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const out = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const data = window.__UNIT_MAPS_DATA__[4];
+      const badCenter = [], badGap = [], badTrunc = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'u4-layout';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      const scan = () => {
+        const svg = wrap.querySelector('svg');
+        if (!svg) return;
+        const circle = svg.querySelector('circle');
+        const cx = +circle.getAttribute('cx'), cy = +circle.getAttribute('cy'), r = +circle.getAttribute('r');
+        let ctext = null;
+        for (const t of svg.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+        if (ctext) {
+          const corners = [...ctext.querySelectorAll('tspan')].flatMap(t => {
+            const b = t.getBBox();
+            return [Math.hypot(b.x - cx, b.y - cy), Math.hypot(b.x + b.width - cx, b.y - cy), Math.hypot(b.x - cx, b.y + b.height - cy), Math.hypot(b.x + b.width - cx, b.y + b.height - cy)];
+          });
+          if (Math.max(...corners) - r > 1) badCenter.push(ctext.textContent);
+        }
+        const circles = [...svg.querySelectorAll('g[onclick*="groupMapDrill"] circle')].map(c => {
+          const title = c.parentElement.querySelector('title');
+          return { cx: +c.getAttribute('cx'), cy: +c.getAttribute('cy'), r: +c.getAttribute('r'), word: title ? title.textContent.split(' ')[0] : '?' };
+        });
+        const circleWords = circles.map(c => c.word);
+        for (const t of svg.querySelectorAll('text')) {
+          const fs = t.getAttribute('font-size');
+          if (fs !== '10.5' && fs !== '9') continue;
+          const wrd = t.textContent;
+          if (wrd === '▾') continue;
+          if (wrd.includes('…')) { badTrunc.push(wrd); continue; }
+          if (!circleWords.includes(wrd)) { badTrunc.push(wrd + '(未匹配)'); continue; }
+          const b = t.getBBox();
+          const pair = circles.find(c => c.word === wrd);
+          if (!pair) continue;
+          const nx = Math.max(b.x, Math.min(pair.cx, b.x + b.width));
+          const ny = Math.max(b.y, Math.min(pair.cy, b.y + b.height));
+          if (Math.hypot(nx - pair.cx, ny - pair.cy) - pair.r < 6) badGap.push(wrd);
+        }
+      };
+      for (const gid of Object.keys(data)) {
+        const lv1 = data[gid].level1Nodes || [];
+        const lv1word = lv1[0] ? lv1[0].word : 'x';
+        const probe = { id: 'x', word: lv1word, unit: 4, lesson: 1, seq: 1, group_id: Number(gid), group_name: data[gid].group_name };
+        wrap.innerHTML = window.groupMapSVG({ ...probe });
+        scan();
+        const drillWords = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"]')].map(g => g.querySelector('title')?.textContent.split(' ')[0]).filter(Boolean);
+        for (const wrd of drillWords.slice(0, 12)) {
+          wrap.innerHTML = window.groupMapSVG({ ...probe });
+          for (const g of wrap.querySelectorAll('g[onclick*="groupMapDrill"]')) {
+            const title = g.querySelector('title');
+            if (title && title.textContent.split(' ')[0] === wrd) { g.dispatchEvent(new MouseEvent('click', { bubbles: true })); break; }
+          }
+          scan();
+        }
+      }
+      wrap.remove();
+      return { badCenter: [...new Set(badCenter)], badGap: [...new Set(badGap)], badTrunc: [...new Set(badTrunc)] };
+    });
+    expect(out.badCenter).toEqual([]);
+    expect(out.badGap).toEqual([]);
+    expect(out.badTrunc).toEqual([]);
+  });
+
+  test('browse tab: unit4 word shows its group map', async ({ page }) => {
+    await page.click('button[data-tab="browse"]');
+    await page.waitForSelector('#browseSearch');
+    await page.fill('#browseSearch', 'seminar');
+    await page.waitForFunction(() => {
+      const list = document.getElementById('browseList');
+      return list && list.innerHTML.indexOf('seminar') !== -1 && list.innerHTML.indexOf('导图') !== -1;
+    });
+    await page.evaluate(() => {
+      const list = document.getElementById('browseList');
+      for (const d of list.querySelectorAll(':scope > div')) {
+        if (d.textContent.indexOf('seminar') !== -1) {
+          const btn = [...d.querySelectorAll('button')].find(b => b.textContent.indexOf('导图') !== -1);
+          if (btn) { btn.click(); return true; }
+        }
+      }
+      return false;
+    });
+    await page.waitForFunction(() => !!document.querySelector('.gmap-wrap svg'));
+    const has = await page.evaluate(() => {
+      const wrap = document.querySelector('.gmap-wrap');
+      if (!wrap) return false;
+      return [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0] === 'seminar');
+    });
+    expect(has).toBe(true);
+  });
+});
