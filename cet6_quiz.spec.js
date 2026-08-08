@@ -944,4 +944,88 @@ test.describe('group map (new: unit-maps.js data)', () => {
     expect(stats.ids).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
     expect(stats.totalNodes).toBeGreaterThan(200);
   });
+
+  test('center word stays inside circle after drill (long words not covered)', async ({ page }) => {
+    // 回归：下钻后长中心词（如 subordinate/overwhelming）此前会被 r=30 的圆遮住。
+    // 现在中心文字单行、字号自适应、圆随宽度外扩，任何主题中心/一级下钻中心都应在圆内。
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const overflows = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const data = window.__UNIT_MAPS_DATA__[1];
+      const bad = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'regress-gmap';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '-9999px';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      const scan = () => {
+        const svg = wrap.querySelector('svg');
+        if (!svg) return;
+        const circle = svg.querySelector('circle');
+        const cx = +circle.getAttribute('cx'), cy = +circle.getAttribute('cy'), r = +circle.getAttribute('r');
+        let ctext = null;
+        for (const t of svg.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+        if (!ctext) return;
+        const corners = [...ctext.querySelectorAll('tspan')].flatMap(t => {
+          const b = t.getBBox();
+          return [Math.hypot(b.x - cx, b.y - cy), Math.hypot(b.x + b.width - cx, b.y - cy), Math.hypot(b.x - cx, b.y + b.height - cy), Math.hypot(b.x + b.width - cx, b.y + b.height - cy)];
+        });
+        const maxC = Math.max(...corners);
+        if (maxC - r > 1) bad.push({ center: ctext.textContent, r, over: Math.round((maxC - r) * 10) / 10 });
+      };
+      for (const gid of Object.keys(data)) {
+        const probe = { id: 'p', word: 'x', unit: 1, lesson: 1, seq: 1, group_id: Number(gid), group_name: data[gid].group_name };
+        wrap.innerHTML = window.groupMapSVG({ ...probe });
+        scan();
+        const drillWords = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"]')].map(g => g.querySelector('title')?.textContent.split(' ')[0]).filter(Boolean);
+        for (const wrd of drillWords.slice(0, 6)) {
+          wrap.innerHTML = window.groupMapSVG({ ...probe });
+          for (const g of wrap.querySelectorAll('g[onclick*="groupMapDrill"]')) {
+            const title = g.querySelector('title');
+            if (title && title.textContent.split(' ')[0] === wrd) { g.dispatchEvent(new MouseEvent('click', { bubbles: true })); break; }
+          }
+          scan();
+        }
+      }
+      wrap.remove();
+      return bad;
+    });
+    expect(overflows).toEqual([]);
+  });
+
+  test('long center word renders single-line and relation labels stay outside circle', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const spot = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const wrap = document.createElement('div');
+      wrap.id = 'regress-gmap2';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      wrap.innerHTML = window.groupMapSVG({ id: 'x', word: 'ordinary', unit: 1, lesson: 1, seq: 1, group_id: 3, group_name: 'ordinary 相关' });
+      // 下钻到 subordinate（11 个字符）
+      for (const g of wrap.querySelectorAll('g[onclick*="groupMapDrill"]')) {
+        const title = g.querySelector('title');
+        if (title && title.textContent.split(' ')[0] === 'subordinate') { g.dispatchEvent(new MouseEvent('click', { bubbles: true })); break; }
+      }
+      const svg = wrap.querySelector('svg');
+      let ctext = null;
+      for (const t of svg.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+      const tspans = ctext ? [...ctext.querySelectorAll('tspan')] : [];
+      const circle = svg.querySelector('circle');
+      const cx = +circle.getAttribute('cx'), cy = +circle.getAttribute('cy'), r = +circle.getAttribute('r');
+      // 关系标签（font-size=9.5）都应位于中心圆之外
+      const relsOutside = [...svg.querySelectorAll('text')].filter(t => t.getAttribute('font-size') === '9.5').every(t => {
+        const rb = t.getBBox();
+        return Math.hypot(rb.x + rb.width / 2 - cx, rb.y + rb.height / 2 - cy) > r;
+      });
+      wrap.remove();
+      return { centerText: ctext ? ctext.textContent : '', lines: tspans.length, circleR: r, relsOutside };
+    });
+    expect(spot.centerText).toBe('subordinate');
+    expect(spot.lines).toBe(1);   // 单行，不把单词拦腰折断
+    expect(spot.relsOutside).toBe(true);
+  });
 });

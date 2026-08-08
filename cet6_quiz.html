@@ -1996,7 +1996,7 @@ function resolveMapPath(map, stack) {
   return { nodes: nodes, centerWord: centerWord, centerMeaning: centerMeaning };
 }
 
-// 中心文字断行：英文单词单行截断；中文主题按显示宽度均衡两行
+// 中心文字断行（仅主题中心用）：中文短语按显示宽度均衡两行；英文单词由 gmapCenterLayout 单行处理
 function gmapCenterLines(label, isWord) {
   var fs = isWord ? 15 : 13, maxW = isWord ? 90 : 58;
   function w(s) { var r = 0; for (var k = 0; k < s.length; k++) r += (s.charCodeAt(k) > 255 ? 1 : 0.55) * fs; return r; }
@@ -2015,13 +2015,38 @@ function gmapCenterLines(label, isWord) {
   return [head.slice(0, pk).trim(), head.slice(pk).trim()];
 }
 
+// 中心文字布局：返回 {lines, fs, r, lh}
+// 单词中心→单行、字号自适应（不低于 13）、圆随文字宽度外扩，保证长单词不被圆遮住；
+// 主题中心→中文两行断行、圆默认 36
+function gmapCenterLayout(label, isWord) {
+  function w(s, f) { var r = 0; for (var k = 0; k < s.length; k++) r += (s.charCodeAt(k) > 255 ? 1 : 0.55) * f; return r; }
+  if (!isWord) {
+    var lines = gmapCenterLines(label, false);
+    var maxW = 0;
+    for (var k = 0; k < lines.length; k++) { var ww = w(lines[k], 13); if (ww > maxW) maxW = ww; }
+    return { lines: lines, fs: 13, r: Math.max(36, Math.ceil(maxW / 2) + 9), lh: 18 };
+  }
+  var fs = 15;
+  while (fs > 13 && w(label, fs) > 86) fs--;
+  var r = Math.max(30, Math.ceil(w(label, fs) / 2) + 10);
+  if (r > 68) { fs = Math.max(9, Math.floor(fs * 68 / r)); r = Math.max(30, Math.ceil(w(label, fs) / 2) + 10); }
+  return { lines: [label], fs: fs, r: r, lh: fs + 3 };
+}
+
 function buildMapSVG(id, map, r, activeWord) {
   var nodes = r.nodes;
-  var cx = 200, cy = 140, R = 60, textR = 92;
+  var cx = 200, cy = 140;
   var n = nodes.length;
   if (!n) {
     return '<div style="color:var(--text2);font-size:0.85em;padding:10px 0">末端词，无更多关联词</div>';
   }
+  // 中心文字布局（单词单行自适应字号 / 主题两行断行），圆随文字宽度外扩
+  var isWord = !!r.centerWord;
+  var cText = isWord ? r.centerWord : (map.group_name || '词群');
+  var L = gmapCenterLayout(cText, isWord);
+  var centerR = L.r, cfs = L.fs, clines = L.lines, lh = L.lh;
+  // 节点环随中心圆外扩；关系标签放在中心圆与节点圆之间的空隙，避免被圆遮住
+  var R = centerR + 40, textR = R + 32, relD = (centerR + R - 15) / 2;
   var svg = '<svg viewBox="0 0 400 280" style="width:100%;max-width:400px;height:auto;display:block;margin:4px auto;">';
   // 连线 + 关系标签
   for (var i = 0; i < n; i++) {
@@ -2032,19 +2057,16 @@ function buildMapSVG(id, map, r, activeWord) {
     var dash = gmapRelDashed(rel) ? ' stroke-dasharray="4,3"' : '';
     svg += '<line x1="' + cx + '" y1="' + cy + '" x2="' + x + '" y2="' + y + '" stroke-width="1.4" style="stroke:' + col + '"' + dash + '/>';
     if (rel) {
-      var mx = (cx + x) / 2, my = (cy + y) / 2;
+      var mx = cx + relD * Math.cos(ang), my = cy + relD * Math.sin(ang);
       svg += '<text x="' + mx + '" y="' + (my - 4) + '" text-anchor="middle" font-size="9.5" paint-order="stroke" style="fill:' + col + ';stroke:var(--surface);stroke-width:3">' + rel + '</text>';
     }
   }
   // 中心圆（高亮）+ 中心文字
-  var isWord = !!r.centerWord;
-  svg += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (isWord ? 30 : 36) + '" style="fill:var(--accent);stroke:var(--accent2)" stroke-width="2"/>';
-  var clines = gmapCenterLines(isWord ? r.centerWord : (map.group_name || '词群'), isWord);
-  var cfs = isWord ? 15 : 13;
-  var cy0 = cy - (clines.length - 1) * 9;
+  svg += '<circle cx="' + cx + '" cy="' + cy + '" r="' + centerR + '" style="fill:var(--accent);stroke:var(--accent2)" stroke-width="2"/>';
+  var cy0 = cy - (clines.length - 1) * (lh / 2);
   svg += '<text text-anchor="middle" dominant-baseline="middle" font-size="' + cfs + '" font-weight="700" style="fill:#ffffff">';
   for (var cl = 0; cl < clines.length; cl++) {
-    svg += '<tspan x="' + cx + '" y="' + (cy0 + cl * 18) + '">' + clines[cl] + '</tspan>';
+    svg += '<tspan x="' + cx + '" y="' + (cy0 + cl * lh) + '">' + clines[cl] + '</tspan>';
   }
   svg += '</text>';
   // 节点
@@ -2063,11 +2085,11 @@ function buildMapSVG(id, map, r, activeWord) {
       '<circle cx="' + x2 + '" cy="' + y2 + '" r="' + (isActive ? 17 : 15) + '" style="fill:' + (isActive ? 'var(--accent)' : 'var(--surface2)') + ';stroke:var(--accent)" stroke-width="' + (isActive ? 2.6 : 1.6) + '"/>' +
       (hasCh ? '<text x="' + x2 + '" y="' + (y2 - 11) + '" text-anchor="middle" font-size="9" style="fill:var(--accent2)">▾</text>' : '') +
       '</g>';
-    var wText = String(w.word).slice(0, 10);
+    var wText = String(w.word).length > 10 ? String(w.word).slice(0, 9) + '…' : String(w.word);
     var tCol = isActive ? '#ffffff' : 'var(--text)';
     var tStk = isActive ? 'rgba(0,0,0,0.6)' : 'none';
     var tW = isActive ? '2.5' : '0';
-    svg += '<text x="' + tx + '" y="' + ty + '" text-anchor="middle" dominant-baseline="middle" font-size="10.5" font-weight="' + (isActive ? 700 : 500) + '" paint-order="stroke" style="fill:' + tCol + ';stroke:' + tStk + ';stroke-width:' + tW + '" onclick="' + onClick + '" style="cursor:pointer">' + wText + '</text>';
+    svg += '<text x="' + tx + '" y="' + ty + '" text-anchor="middle" dominant-baseline="middle" font-size="10.5" font-weight="' + (isActive ? 700 : 500) + '" paint-order="stroke" style="fill:' + tCol + ';stroke:' + tStk + ';stroke-width:' + tW + ';cursor:pointer" onclick="' + onClick + '">' + wText + '</text>';
   }
   svg += '</svg>';
   return svg;
