@@ -1975,10 +1975,10 @@ function ensureUnitMaps(cb) {
 // 当前词是否可用新版导图（仅核心词库《你还在背单词吗》，且有该词群数据）
 function canUseNewMap(word) {
   if (currentPool !== 'core') return false;
-  if (!word || !word.unit || !word.group_id) return false;
+  if (!word || !word.unit) return false;
   if (!window.__UNIT_MAPS_DATA__) return false;
-  var u = window.__UNIT_MAPS_DATA__[word.unit];
-  return !!(u && u[word.group_id]);
+  // 只要该 unit 有导图数据即可；词实际所在词群以书页导图划分为准（词库 group_id 可能与书页不一致）
+  return !!window.__UNIT_MAPS_DATA__[word.unit];
 }
 
 // 沿下钻路径解析当前中心与一级节点
@@ -2148,13 +2148,26 @@ function findMapNodePath(map, word) {
   return search(map.level1Nodes || [], []);
 }
 
+// 在 unit 的所有词群里查找 word 实际所在的词群（以书页导图划分为准；词库 group_id 可能与书页不一致）
+// 返回 {gid, path}（path 为下钻路径，一级节点为 []），找不到返回 null
+function findMapGroup(unitMap, word) {
+  for (var gid in unitMap) {
+    var path = findMapNodePath(unitMap[gid], word);
+    if (path !== null) return { gid: gid, path: path };
+  }
+  return null;
+}
+
 // 入口：核心词库且有导图数据 → 新版；否则回退旧版（相邻词单层图）
 function groupMapSVG(word) {
   if (canUseNewMap(word)) {
+    var unitMap = window.__UNIT_MAPS_DATA__[word.unit];
+    // 做题词的实际词群按书页划分定位（不依赖词库 group_id），并自动下钻到其所在层
+    var loc = findMapGroup(unitMap, word.word);
+    // 词在书页导图数据里找不到 → 不显示新版词群导图（避免出现不含当前词的图），回退旧版（旧版含当前词）
+    if (!loc) return legacyGroupMapSVG(word);
     var id = 'gmap-' + (++_gmapSeq);
-    // 做题词若不是一级节点（藏在二级/更深层），自动下钻到其所在层，让它成为中心可见
-    var path = findMapNodePath(window.__UNIT_MAPS_DATA__[word.unit][word.group_id], word.word) || [];
-    _gmapState[id] = { unit: word.unit, gid: word.group_id, stack: path, active: word.word };
+    _gmapState[id] = { unit: word.unit, gid: loc.gid, stack: loc.path, active: word.word };
     return renderGroupMap(id);
   }
   return legacyGroupMapSVG(word);

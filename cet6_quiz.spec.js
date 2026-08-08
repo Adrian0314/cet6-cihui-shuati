@@ -1019,7 +1019,9 @@ test.describe('group map (new: unit-maps.js data)', () => {
         if (maxC - r > 1) bad.push({ center: ctext.textContent, r, over: Math.round((maxC - r) * 10) / 10 });
       };
       for (const gid of Object.keys(data)) {
-        const probe = { id: 'p', word: 'x', unit: 1, lesson: 1, seq: 1, group_id: Number(gid), group_name: data[gid].group_name };
+        // 用该词群真实一级节点词作 probe（新版按书页词群定位，占位词 'x' 会触发回退旧版）
+        const lv1word = (data[gid].level1Nodes && data[gid].level1Nodes[0]) ? data[gid].level1Nodes[0].word : 'x';
+        const probe = { id: 'p', word: lv1word, unit: 1, lesson: 1, seq: 1, group_id: Number(gid), group_name: data[gid].group_name };
         wrap.innerHTML = window.groupMapSVG({ ...probe });
         scan();
         const drillWords = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"]')].map(g => g.querySelector('title')?.textContent.split(' ')[0]).filter(Boolean);
@@ -1048,7 +1050,7 @@ test.describe('group map (new: unit-maps.js data)', () => {
       wrap.style.left = '0';
       wrap.style.top = '0';
       document.body.appendChild(wrap);
-      wrap.innerHTML = window.groupMapSVG({ id: 'x', word: 'ordinary', unit: 1, lesson: 1, seq: 1, group_id: 3, group_name: 'ordinary 相关' });
+      wrap.innerHTML = window.groupMapSVG({ id: 'x', word: 'subordinate', unit: 1, lesson: 1, seq: 1, group_id: 3, group_name: 'ordinary 相关' });
       // 下钻到 subordinate（11 个字符）
       for (const g of wrap.querySelectorAll('g[onclick*="groupMapDrill"]')) {
         const title = g.querySelector('title');
@@ -1150,7 +1152,9 @@ test.describe('group map (new: unit-maps.js data)', () => {
       };
       const data = window.__UNIT_MAPS_DATA__[1];
       for (const gid of Object.keys(data)) {
-        const probe = { id: 'x', word: 'x', unit: 1, lesson: 1, seq: 1, group_id: Number(gid), group_name: data[gid].group_name };
+        // 用词群真实一级词作 probe（新版按书页词群定位，占位词 'x' 会触发回退旧版）
+        const lv1word = (data[gid].level1Nodes && data[gid].level1Nodes[0]) ? data[gid].level1Nodes[0].word : 'x';
+        const probe = { id: 'x', word: lv1word, unit: 1, lesson: 1, seq: 1, group_id: Number(gid), group_name: data[gid].group_name };
         wrap.innerHTML = window.groupMapSVG({ ...probe });
         scan();
         const drillWords = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"]')].map(g => g.querySelector('title')?.textContent.split(' ')[0]).filter(Boolean);
@@ -1168,5 +1172,33 @@ test.describe('group map (new: unit-maps.js data)', () => {
     });
     expect(gaps.length).toBeGreaterThan(0);
     expect(Math.min(...gaps)).toBeGreaterThanOrEqual(6);
+  });
+
+  test('every unit1 quiz word is visible in its map (book grouping honored)', async ({ page }) => {
+    // 回归：orient/sight 等 11 个词在词库的 group_id 与书页导图词群不一致（如 orient 词库归 g1，书页归 g14），
+    // 此前在 word.group_id 对应词群找不到自己 → 做题显示错误词群。现按书页划分在整 unit 内定位词群。
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const missing = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const words = JSON.parse(document.getElementById('data-all-words').textContent).filter(w => w.unit === 1);
+      const bad = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'visible-check';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      for (const w of words) {
+        wrap.innerHTML = window.groupMapSVG({ id: 'x', word: w.word, unit: w.unit, lesson: w.lesson, seq: w.seq, group_id: w.group_id, group_name: w.group_name });
+        let ctext = null;
+        for (const t of wrap.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+        const center = ctext ? ctext.textContent : '';
+        const inNodes = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0].toLowerCase() === w.word.toLowerCase());
+        if (!inNodes && center.toLowerCase() !== w.word.toLowerCase()) bad.push(w.word);
+      }
+      wrap.remove();
+      return bad;
+    });
+    expect(missing).toEqual([]);
   });
 });
