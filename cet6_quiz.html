@@ -2090,7 +2090,7 @@ function buildMapSVG(id, map, r, activeWord) {
       '<circle cx="' + x2 + '" cy="' + y2 + '" r="' + (isActive ? 17 : 15) + '" style="fill:' + (isActive ? 'var(--accent)' : 'var(--surface2)') + ';stroke:var(--accent)" stroke-width="' + (isActive ? 2.6 : 1.6) + '"/>' +
       (hasCh ? '<text x="' + x2 + '" y="' + (y2 - 11) + '" text-anchor="middle" font-size="9" style="fill:var(--accent2)">▾</text>' : '') +
       '</g>';
-    var wText = String(w.word).length > 10 ? String(w.word).slice(0, 9) + '…' : String(w.word);
+    var wText = String(w.word);  // 节点文字完整显示（位置已按词长外推且视口足够，不再截断）
     var tCol = isActive ? '#ffffff' : 'var(--text)';
     var tStk = isActive ? 'rgba(0,0,0,0.6)' : 'none';
     var tW = isActive ? '2.5' : '0';

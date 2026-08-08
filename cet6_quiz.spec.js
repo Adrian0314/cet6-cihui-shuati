@@ -1201,4 +1201,53 @@ test.describe('group map (new: unit-maps.js data)', () => {
     });
     expect(missing).toEqual([]);
   });
+
+  test('every node word is fully displayed (no truncation)', async ({ page }) => {
+    // 回归：长词节点（如 congressional 13字符、overwhelmingly 14字符）此前被 slice(0,9)+… 截断。
+    // 现完整显示，扫描 unit1 全部图层断言节点文字无省略号且与完整词匹配。
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const truncated = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const bad = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'full-word';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      const scan = () => {
+        const svg = wrap.querySelector('svg');
+        if (!svg) return;
+        const circleWords = [...svg.querySelectorAll('g[onclick*="groupMapDrill"] title')].map(t => t.textContent.split(' ')[0]);
+        for (const t of svg.querySelectorAll('text')) {
+          const fs = t.getAttribute('font-size');
+          if (fs !== '10.5' && fs !== '9') continue;
+          const wrd = t.textContent;
+          if (wrd === '▾') continue;   // 展开标记不是单词
+          if (wrd.includes('…')) bad.push(wrd);
+          else if (!circleWords.includes(wrd)) bad.push(wrd + '(未匹配完整词)');
+        }
+      };
+      const data = window.__UNIT_MAPS_DATA__[1];
+      for (const gid of Object.keys(data)) {
+        const lv1 = data[gid].level1Nodes || [];
+        const lv1word = lv1[0] ? lv1[0].word : 'x';
+        const probe = { id: 'x', word: lv1word, unit: 1, lesson: 1, seq: 1, group_id: Number(gid), group_name: data[gid].group_name };
+        wrap.innerHTML = window.groupMapSVG({ ...probe });
+        scan();
+        const drillWords = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"]')].map(g => g.querySelector('title')?.textContent.split(' ')[0]).filter(Boolean);
+        for (const wrd of drillWords.slice(0, 12)) {
+          wrap.innerHTML = window.groupMapSVG({ ...probe });
+          for (const g of wrap.querySelectorAll('g[onclick*="groupMapDrill"]')) {
+            const title = g.querySelector('title');
+            if (title && title.textContent.split(' ')[0] === wrd) { g.dispatchEvent(new MouseEvent('click', { bubbles: true })); break; }
+          }
+          scan();
+        }
+      }
+      wrap.remove();
+      return [...new Set(bad)];
+    });
+    expect(truncated).toEqual([]);
+  });
 });
