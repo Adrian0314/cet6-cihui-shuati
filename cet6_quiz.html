@@ -2129,11 +2129,30 @@ function groupMapBack(id) {
   if (el) el.innerHTML = renderGroupMap(id);
 }
 
+// 在导图数据中查找 word 的节点路径（一级→二级→…），找不到返回 null
+function findMapNodePath(map, word) {
+  var target = String(word).toLowerCase();
+  function search(nodes, trail) {
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      if (String(n.word).toLowerCase() === target) return trail;
+      if (n.children) {
+        var r = search(n.children, trail.concat([n.word]));
+        if (r) return r;
+      }
+    }
+    return null;
+  }
+  return search(map.level1Nodes || [], []);
+}
+
 // 入口：核心词库且有导图数据 → 新版；否则回退旧版（相邻词单层图）
 function groupMapSVG(word) {
   if (canUseNewMap(word)) {
     var id = 'gmap-' + (++_gmapSeq);
-    _gmapState[id] = { unit: word.unit, gid: word.group_id, stack: [], active: word.word };
+    // 做题词若不是一级节点（藏在二级/更深层），自动下钻到其所在层，让它成为中心可见
+    var path = findMapNodePath(window.__UNIT_MAPS_DATA__[word.unit][word.group_id], word.word) || [];
+    _gmapState[id] = { unit: word.unit, gid: word.group_id, stack: path, active: word.word };
     return renderGroupMap(id);
   }
   return legacyGroupMapSVG(word);

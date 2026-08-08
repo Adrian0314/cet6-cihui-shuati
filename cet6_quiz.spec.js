@@ -945,6 +945,50 @@ test.describe('group map (new: unit-maps.js data)', () => {
     expect(stats.totalNodes).toBeGreaterThan(200);
   });
 
+  test('unit1 every core word is present in map data (no missing quiz word)', async ({ page }) => {
+    // 回归：precede/gene/rise 曾不在导图数据里，做题词找不到；现 unit1 全部 154 词必须都能在导图节点中找到
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const missing = await page.evaluate(() => {
+      const words = JSON.parse(document.getElementById('data-all-words').textContent);
+      const unit1 = words.filter(w => w.unit === 1);
+      const d = window.__UNIT_MAPS_DATA__[1];
+      const set = new Set();
+      const walk = ns => ns.forEach(n => { set.add(n.word.toLowerCase()); if (n.children) walk(n.children); });
+      Object.keys(d).forEach(g => walk(d[g].level1Nodes || []));
+      return unit1.filter(w => !set.has(w.word.toLowerCase())).map(w => w.word);
+    });
+    expect(missing).toEqual([]);
+  });
+
+  test('quiz word that is a deep node auto-drills to its level and shows highlighted', async ({ page }) => {
+    // 回归：二级词（如 deteriorate，是 generate 的子节点）此前主题层看不到；现自动下钻到所在层并高亮当前词
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const spot = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const wrap = document.createElement('div');
+      wrap.id = 'auto-map';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      wrap.innerHTML = window.groupMapSVG({ id: 'x', word: 'deteriorate', unit: 1, lesson: 1, seq: 1, group_id: 7, group_name: 'gen(e)相关' });
+      let ctext = null;
+      for (const t of wrap.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+      const center = ctext ? ctext.textContent : '';
+      const hasBack = !!wrap.querySelector('.gmap-back');
+      // 当前做题词应在节点中且高亮（active 节点圆 r=17）
+      let activeWord = null;
+      for (const g of wrap.querySelectorAll('g[onclick*="groupMapDrill"]')) {
+        const title = g.querySelector('title');
+        if (title && g.querySelector('circle').getAttribute('r') === '17') { activeWord = title.textContent.split(' ')[0]; }
+      }
+      wrap.remove();
+      return { center, hasBack, activeWord };
+    });
+    expect(spot.hasBack).toBe(true);                    // 自动下钻后应出现返回按钮
+    expect(spot.activeWord).toBe('deteriorate');        // 做题词在导图节点中且高亮
+  });
+
   test('center word stays inside circle after drill (long words not covered)', async ({ page }) => {
     // 回归：下钻后长中心词（如 subordinate/overwhelming）此前会被 r=30 的圆遮住。
     // 现在中心文字单行、字号自适应、圆随宽度外扩，任何主题中心/一级下钻中心都应在圆内。
