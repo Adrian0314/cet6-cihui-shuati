@@ -2035,7 +2035,7 @@ function gmapCenterLayout(label, isWord) {
 
 function buildMapSVG(id, map, r, activeWord) {
   var nodes = r.nodes;
-  var cx = 200, cy = 150;
+  var cx = 240, cy = 190;
   var n = nodes.length;
   if (!n) {
     return '<div style="color:var(--text2);font-size:0.85em;padding:10px 0">末端词，无更多关联词</div>';
@@ -2046,9 +2046,9 @@ function buildMapSVG(id, map, r, activeWord) {
   var L = gmapCenterLayout(cText, isWord);
   var centerR = L.r, cfs = L.fs, clines = L.lines, lh = L.lh;
   // 统一环带节奏：中心圆边→关系标签中心=18px，标签中心→节点圆近边=18px（对称不贴圆）
-  // 节点圆/节点文字随中心圆外扩，视口同步放大避免边缘文字溢出
-  var R = centerR + 51, textR = R + 36, relD = centerR + 18;
-  var svg = '<svg viewBox="0 0 400 300" style="width:100%;max-width:400px;height:auto;display:block;margin:4px auto;">';
+  // 节点文字按词长动态外推（见下方 txR），保证任何角度/词长下文字都不碰任何圆
+  var R = centerR + 51, relD = centerR + 18;
+  var svg = '<svg viewBox="0 0 480 380" style="width:100%;max-width:400px;height:auto;display:block;margin:4px auto;">';
   // 连线 + 关系标签
   for (var i = 0; i < n; i++) {
     var ang = (2 * Math.PI * i / n) - Math.PI / 2;
@@ -2075,7 +2075,9 @@ function buildMapSVG(id, map, r, activeWord) {
     var w = nodes[j];
     var ang2 = (2 * Math.PI * j / n) - Math.PI / 2;
     var x2 = cx + R * Math.cos(ang2), y2 = cy + R * Math.sin(ang2);
-    var tx = cx + textR * Math.cos(ang2), ty = cy + textR * Math.sin(ang2);
+    // 文字水平排布且不沿径向旋转，故按词长外推：径向内侧始终距节点圆≥~10px（半宽≈len*2.9，加圆半径15+空隙）
+    var txR = R + Math.max(38, Math.round(String(w.word).length * 2.9) + 27);
+    var tx = cx + txR * Math.cos(ang2), ty = cy + txR * Math.sin(ang2);
     var isActive = activeWord && (w.word.toLowerCase() === activeWord.toLowerCase());
     var hasCh = !!(w.children && w.children.length);
     var escW = String(w.word).replace(/'/g, "\\'");

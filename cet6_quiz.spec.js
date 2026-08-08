@@ -1116,4 +1116,57 @@ test.describe('group map (new: unit-maps.js data)', () => {
     expect(result.spokeAfterCircle).toEqual([]);              // 点圆圈 → 不发音
     expect(result.backAfterCircle).toBe(true);                // 点圆圈 → 下钻
   });
+
+  test('node word text never touches any circle (min gap >= 6px)', async ({ page }) => {
+    // 回归：节点文字水平排布，斜向节点+长词曾扫进节点圆（121处贴圆，如 ambassador/aggressive）。
+    // 现按词长动态外推，扫描 unit1 全部图层断言文字包围盒到所属节点圆间距≥6px
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const gaps = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const all = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'gap-scan';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      const scan = () => {
+        const svg = wrap.querySelector('svg');
+        if (!svg) return;
+        const texts = [...svg.querySelectorAll('text')].filter(t => ['10.5', '9'].includes(t.getAttribute('font-size')));
+        const circles = [...svg.querySelectorAll('g[onclick*="groupMapDrill"] circle')].map(c => {
+          const title = c.parentElement.querySelector('title');
+          return { cx: +c.getAttribute('cx'), cy: +c.getAttribute('cy'), r: +c.getAttribute('r'), word: title ? title.textContent.split(' ')[0] : '?' };
+        });
+        for (const t of texts) {
+          const b = t.getBBox();
+          const wrd = t.textContent.replace(/…$/, '');
+          const pair = circles.find(c => c.word.startsWith(wrd));
+          if (!pair) continue;
+          const nx = Math.max(b.x, Math.min(pair.cx, b.x + b.width));
+          const ny = Math.max(b.y, Math.min(pair.cy, b.y + b.height));
+          all.push(Math.hypot(nx - pair.cx, ny - pair.cy) - pair.r);
+        }
+      };
+      const data = window.__UNIT_MAPS_DATA__[1];
+      for (const gid of Object.keys(data)) {
+        const probe = { id: 'x', word: 'x', unit: 1, lesson: 1, seq: 1, group_id: Number(gid), group_name: data[gid].group_name };
+        wrap.innerHTML = window.groupMapSVG({ ...probe });
+        scan();
+        const drillWords = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"]')].map(g => g.querySelector('title')?.textContent.split(' ')[0]).filter(Boolean);
+        for (const wrd of drillWords.slice(0, 12)) {
+          wrap.innerHTML = window.groupMapSVG({ ...probe });
+          for (const g of wrap.querySelectorAll('g[onclick*="groupMapDrill"]')) {
+            const title = g.querySelector('title');
+            if (title && title.textContent.split(' ')[0] === wrd) { g.dispatchEvent(new MouseEvent('click', { bubbles: true })); break; }
+          }
+          scan();
+        }
+      }
+      wrap.remove();
+      return all;
+    });
+    expect(gaps.length).toBeGreaterThan(0);
+    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(6);
+  });
 });
