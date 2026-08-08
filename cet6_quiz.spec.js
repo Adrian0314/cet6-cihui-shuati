@@ -1250,4 +1250,91 @@ test.describe('group map (new: unit-maps.js data)', () => {
     });
     expect(truncated).toEqual([]);
   });
+
+  test('browse tab: unit1 word shows its group map via 导图 button', async ({ page }) => {
+    // 单词浏览器（词库 tab）每词条有「导图」按钮，点击后按词定位书页词群导图并渲染
+    await page.click('button[data-tab="browse"]');
+    await page.waitForSelector('#browseSearch');
+    // 等 FULL_WORDS 渲染出词条（可能需加载外置数据）
+    await page.fill('#browseSearch', 'congress');
+    await page.waitForFunction(() => {
+      const list = document.getElementById('browseList');
+      return list && list.innerHTML.indexOf('congress') !== -1 && list.innerHTML.indexOf('导图') !== -1;
+    });
+    // 点击 congress 词条的「导图」按钮（词条里第一个）
+    await page.evaluate(() => {
+      const list = document.getElementById('browseList');
+      const divs = list.querySelectorAll(':scope > div');
+      for (const d of divs) {
+        if (d.textContent.indexOf('congress') !== -1) {
+          const btn = [...d.querySelectorAll('button')].find(b => b.textContent.indexOf('导图') !== -1);
+          if (btn) { btn.click(); return true; }
+        }
+      }
+      return false;
+    });
+    await page.waitForFunction(() => {
+      const svg = document.querySelector('.gmap-wrap svg');
+      return !!svg;
+    });
+    // 导图应包含当前词 congress（节点或中心）
+    const has = await page.evaluate(() => {
+      const wrap = document.querySelector('.gmap-wrap');
+      if (!wrap) return false;
+      const inNodes = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0] === 'congress');
+      let ctext = '';
+      for (const t of wrap.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t.textContent; break; } }
+      return inNodes || ctext.toLowerCase() === 'congress';
+    });
+    expect(has).toBe(true);
+  });
+
+  test('browse tab: word absent from map data shows notice (no map)', async ({ page }) => {
+    // 词不在书页导图数据（如 unit>1 词）时，点「导图」应显示暂无提示，不显示空图
+    await page.click('button[data-tab="browse"]');
+    await page.waitForSelector('#browseSearch');
+    // 先确保导图数据已加载（独立测试环境）
+    await page.evaluate(() => new Promise(resolve => window.ensureUnitMaps ? window.ensureUnitMaps(resolve) : resolve()));
+    const absent = await page.evaluate(() => {
+      // 从 FULL_WORDS 里找一个在导图数据中找不到的词（不在任何 unit 任何词群节点）
+      const mapData = window.__UNIT_MAPS_DATA__;
+      let target = null;
+      if (!mapData) return null;
+      const nodeSet = new Set();
+      for (const u in mapData) for (const g in mapData[u]) {
+        (function walk(ns){ ns.forEach(n => { nodeSet.add(n.word.toLowerCase()); if (n.children) walk(n.children); }); })(mapData[u][g].level1Nodes || []);
+      }
+      for (const w of FULL_WORDS) {
+        if (!nodeSet.has(w.word.toLowerCase())) { target = w.word; break; }
+      }
+      return target;
+    });
+    expect(absent).not.toBeNull();
+    await page.fill('#browseSearch', absent);
+    await page.waitForFunction((w) => {
+      const list = document.getElementById('browseList');
+      return list && list.innerHTML.indexOf(w) !== -1;
+    }, absent);
+    const clicked = await page.evaluate((w) => {
+      const list = document.getElementById('browseList');
+      for (const d of list.querySelectorAll(':scope > div')) {
+        if (d.textContent.indexOf(w) !== -1) {
+          const btn = [...d.querySelectorAll('button')].find(b => b.textContent.indexOf('导图') !== -1);
+          if (btn) { btn.click(); return true; }
+        }
+      }
+      return false;
+    }, absent);
+    expect(clicked).toBe(true);
+    await page.waitForFunction((w) => {
+      const list = document.getElementById('browseList');
+      for (const d of list.querySelectorAll(':scope > div')) {
+        if (d.textContent.indexOf(w) !== -1) {
+          const box = d.querySelector('[id^="bdmap-"]');
+          if (box && box.style.display !== 'none' && box.innerHTML.indexOf('暂无此词') !== -1) return true;
+        }
+      }
+      return false;
+    }, absent);
+  });
 });

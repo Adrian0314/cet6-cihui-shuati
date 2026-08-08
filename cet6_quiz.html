@@ -4534,10 +4534,12 @@ function renderBrowse() {
       '<div style=\"display:flex;justify-content:space-between;align-items:center\">' +
       '<span><strong>' + w.word + '</strong> <span style=\"color:var(--text2);font-size:0.85em\">' + (w.pronunciation || '') + '</span>' +
       '<span onclick=\"speakWord(&quot;' + w.word + '&quot;)\" style=\"cursor:pointer;font-size:0.95em;margin-left:8px;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;vertical-align:middle;border-radius:50%;transition:background 200ms;\" title=\"朗读发音\">\u{1F50A}</span></span>' +
-      '<button class=\"ctrl-btn\" id=\"bdbtn-' + w.word + '\" style=\"padding:6px 14px;font-size:0.8em\" onclick=\"toggleBrowseDetail(&quot;' + w.word + '&quot;)\">\u67E5\u8BE2</button></div>' +
+      '<span><button class=\"ctrl-btn\" id=\"bdbtn-' + w.word + '\" style=\"padding:6px 12px;font-size:0.8em\" onclick=\"toggleBrowseDetail(&quot;' + w.word + '&quot;)\">\u67E5\u8BE2</button> ' +
+      '<button class=\"ctrl-btn\" style=\"padding:6px 12px;font-size:0.8em\" onclick=\"toggleBrowseMap(&quot;' + w.word + '&quot;)\">\u{1F5FA}\uFE0F 导图</button></span></div>' +
       (_uinfo ? '<div style=\"color:var(--accent2);font-size:0.78em;margin-top:3px\">📁 ' + _uinfo + _star + '</div>' : '') +
       '<div style=\"color:var(--text2);font-size:0.85em;margin-top:2px\">' + posHtml + '</div>' +
       '<div id=\"bd-' + w.word + '\" style=\"display:none\"></div>' +
+      '<div id=\"bdmap-' + w.word + '\" style=\"display:none\"></div>' +
       '</div>';
   }
   if (filtered.length > _browsePageSize) {
@@ -4572,6 +4574,39 @@ function toggleBrowseDetail(word) {
   } else {
     box.style.display = 'none';
     btn.textContent = '\u67E5\u8BE2';
+  }
+}
+
+
+// ============ BROWSE WORD GROUP MAP ============
+// 单词浏览器中查看词的词群导图：按词在整个导图数据中定位（不受做题 currentPool 限制）
+function browseGroupMapHTML(word) {
+  if (!window.__UNIT_MAPS_DATA__) return '';
+  for (var u in window.__UNIT_MAPS_DATA__) {
+    var found = findMapGroup(window.__UNIT_MAPS_DATA__[u], word);
+    if (found) {
+      var id = 'gmap-' + (++_gmapSeq);
+      _gmapState[id] = { unit: u, gid: found.gid, stack: found.path, active: word };
+      return renderGroupMap(id);
+    }
+  }
+  return '';
+}
+function toggleBrowseMap(word) {
+  var box = document.getElementById('bdmap-' + word);
+  if (!box) return;
+  if (box.style.display === 'none') {
+    if (!box.dataset.loaded) {
+      box.innerHTML = '<p style="color:var(--text2);font-size:0.85em;padding:8px 0">🗺️ 词群导图加载中…</p>';
+      ensureUnitMaps(function() {
+        var html = browseGroupMapHTML(word);
+        box.innerHTML = html || '<p style="color:var(--text2);font-size:0.85em;padding:8px 0">📖 本书词群导图暂无此词（当前导图数据覆盖核心词库 Unit1）</p>';
+        box.dataset.loaded = '1';
+      });
+    }
+    box.style.display = 'block';
+  } else {
+    box.style.display = 'none';
   }
 }
 
