@@ -4,6 +4,7 @@ var ASSETS = [
   './cet6_quiz.html',
   './manifest.json',
   './data/full-words.js',
+  './data/unit-maps.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png'

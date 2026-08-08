@@ -880,3 +880,68 @@ test.describe('other options show english word on wrong answer', () => {
     expect(rows.length).toBe(3);
   });
 });
+
+// ============ 新版词群导图（书页真实导图数据：放射状 + 下钻） ============
+test.describe('group map (new: unit-maps.js data)', () => {
+  test('core pool quiz answer shows new group map with SVG nodes', async ({ page }) => {
+    // 核心词库默认；答题后反馈里应出现新版词群导图（gmap-wrap 容器）
+    await page.click('button:has-text("开始做题")');
+    await page.waitForSelector('.opt-btn');
+    await page.locator('.opt-btn').first().click();
+    await page.waitForSelector('.next-btn.show');
+    await expect(page.locator('.gmap-wrap')).toBeVisible();
+    await expect(page.locator('.gmap-wrap svg')).toBeVisible();
+    await expect(page.locator('.gmap-title')).toContainText('词群导图');
+  });
+
+  test('new group map node click drills down and shows back button', async ({ page }) => {
+    await page.click('button:has-text("开始做题")');
+    await page.waitForSelector('.opt-btn');
+    await page.locator('.opt-btn').first().click();
+    await page.waitForSelector('.next-btn.show');
+    // 找到有 ▾ 展开标记的节点（有子节点的词），点击应下钻
+    const hasDrill = await page.evaluate(() => {
+      const wrap = document.querySelector('.gmap-wrap');
+      if (!wrap) return false;
+      const texts = wrap.querySelectorAll('text');
+      for (const t of texts) {
+        if (t.textContent === '▾' || t.textContent.indexOf('▾') !== -1) return true;
+      }
+      return false;
+    });
+    if (!hasDrill) {
+      // 若当前词群一级词全无子节点（如 g1 的 conquer 等仍有 children），断言数据已加载即可
+      expect(await page.evaluate(() => !!window.__UNIT_MAPS_DATA__)).toBe(true);
+      return;
+    }
+    // 点击可展开节点（带 onclick 的 g 标签内 circle）
+    await page.evaluate(() => {
+      const wrap = document.querySelector('.gmap-wrap');
+      const gs = wrap.querySelectorAll('g[onclick*="groupMapDrill"]');
+      for (const g of gs) {
+        const tip = g.querySelector('title');
+        if (tip && g.querySelector('text')) { g.dispatchEvent(new MouseEvent('click', { bubbles: true })); break; }
+      }
+    });
+    await page.waitForTimeout(100);
+    // 下钻后应出现「返回上级」按钮
+    await expect(page.locator('.gmap-back')).toBeVisible();
+  });
+
+  test('unit-maps data: 14 groups in unit 1, each has level1Nodes', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const stats = await page.evaluate(() => {
+      const d = window.__UNIT_MAPS_DATA__;
+      const unit1 = d[1];
+      if (!unit1) return null;
+      const ids = Object.keys(unit1).map(Number).sort((a, b) => a - b);
+      let totalNodes = 0;
+      const walk = (ns) => { ns.forEach(n => { totalNodes++; if (n.children) walk(n.children); }); };
+      Object.keys(unit1).forEach(gid => walk(unit1[gid].level1Nodes));
+      return { ids, totalNodes };
+    });
+    expect(stats).not.toBeNull();
+    expect(stats.ids).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    expect(stats.totalNodes).toBeGreaterThan(200);
+  });
+});

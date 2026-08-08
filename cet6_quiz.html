@@ -120,6 +120,10 @@ body{
 .fb-conf .ci{padding:5px 0;color:var(--text2);font-size:0.88em;border-bottom:1px solid var(--border)}
 .fb-conf .ci strong{color:var(--orange)}
 .fb-key{margin-top:10px;font-size:0.82em;color:var(--text2);line-height:1.8}
+.gmap-wrap{margin:10px 0 2px;text-align:center}
+.gmap-title{font-size:0.85em;color:var(--text2);margin-bottom:4px}
+.gmap-back{margin:4px 0 8px;padding:5px 14px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:16px;cursor:pointer;font-size:0.8em;transition:background 200ms}
+.gmap-back:hover{background:rgba(124,58,237,0.08)}
 .word-detail{margin-top:14px;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--surface)}
 .word-detail .wd-head{padding:10px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:0.9em;font-weight:600;background:var(--surface2);user-select:none;transition:background 200ms,color 200ms}@media (hover: hover) and (pointer: fine){
 .word-detail .wd-head:hover{background:rgba(124,58,237,0.08);color:var(--accent)}}
@@ -1950,8 +1954,164 @@ function getWordDetailHTML(word) {
   return html;
 }
 
-// 词群导图：同词群单词的放射状关系图（中心=词群主题，节点=词）
+// ============ 词群导图（新版）：书页真实导图数据（data/unit-maps.js），放射状 + 点击下钻 ============
+// 数据来源：《你还在背单词吗（刘晓艳）》Unit1 书页导图识别（词以群记1-14），音标/释义以词库权威数据为准
+var _gmapSeq = 0;
+var _gmapState = {}; // id -> { unit, gid, stack:[点击过的节点词], active:当前做题词 }
+// 关系类型 → 连线颜色（style 内联，CSS 变量在 attribute 中不生效）
+var GMAP_REL_COLORS = {
+  '扩': 'var(--green)', '同根': 'var(--blue)', '近义': 'var(--orange)',
+  '相关': 'var(--text2)', '形近': 'var(--pink)', '加前缀': '#0891b2',
+  '反义': 'var(--red)', '拆分': 'var(--blue)', '合成': 'var(--green)'
+};
+// 虚线关系（spec：形近/反义 虚线）
+function gmapRelDashed(rel) { return (rel === '形近' || rel === '反义'); }
+
+function ensureUnitMaps(cb) {
+  if (window.__UNIT_MAPS_DATA__) { if (cb) cb(); return; }
+  loadDataScript('data/unit-maps.js', function() { if (cb) cb(); });
+}
+
+// 当前词是否可用新版导图（仅核心词库《你还在背单词吗》，且有该词群数据）
+function canUseNewMap(word) {
+  if (currentPool !== 'core') return false;
+  if (!word || !word.unit || !word.group_id) return false;
+  if (!window.__UNIT_MAPS_DATA__) return false;
+  var u = window.__UNIT_MAPS_DATA__[word.unit];
+  return !!(u && u[word.group_id]);
+}
+
+// 沿下钻路径解析当前中心与一级节点
+function resolveMapPath(map, stack) {
+  var nodes = map.level1Nodes || [];
+  var centerWord = '', centerMeaning = map.group_name;
+  for (var i = 0; i < stack.length; i++) {
+    var target = stack[i], found = null;
+    for (var j = 0; j < nodes.length; j++) { if (nodes[j].word === target) { found = nodes[j]; break; } }
+    if (!found) break;
+    centerWord = found.word;
+    centerMeaning = found.meaning || found.word;
+    nodes = found.children || [];
+  }
+  return { nodes: nodes, centerWord: centerWord, centerMeaning: centerMeaning };
+}
+
+// 中心文字断行：英文单词单行截断；中文主题按显示宽度均衡两行
+function gmapCenterLines(label, isWord) {
+  var fs = isWord ? 15 : 13, maxW = isWord ? 90 : 58;
+  function w(s) { var r = 0; for (var k = 0; k < s.length; k++) r += (s.charCodeAt(k) > 255 ? 1 : 0.55) * fs; return r; }
+  if (w(label) <= maxW) return [label];
+  var cut = 0;
+  while (cut < label.length && w(label.slice(0, cut + 1)) <= maxW * 2) cut++;
+  var head = label.slice(0, Math.max(cut, 1));
+  var best = -1, bd = Infinity;
+  for (var k = 1; k < head.length; k++) {
+    var lw = w(head.slice(0, k)), rw = w(head.slice(k));
+    if (lw > maxW || rw > maxW) continue;
+    var d = Math.abs(lw - rw);
+    if (d < bd) { bd = d; best = k; }
+  }
+  var pk = best > 0 ? best : Math.ceil(head.length / 2);
+  return [head.slice(0, pk).trim(), head.slice(pk).trim()];
+}
+
+function buildMapSVG(id, map, r, activeWord) {
+  var nodes = r.nodes;
+  var cx = 200, cy = 140, R = 60, textR = 92;
+  var n = nodes.length;
+  if (!n) {
+    return '<div style="color:var(--text2);font-size:0.85em;padding:10px 0">末端词，无更多关联词</div>';
+  }
+  var svg = '<svg viewBox="0 0 400 280" style="width:100%;max-width:400px;height:auto;display:block;margin:4px auto;">';
+  // 连线 + 关系标签
+  for (var i = 0; i < n; i++) {
+    var ang = (2 * Math.PI * i / n) - Math.PI / 2;
+    var x = cx + R * Math.cos(ang), y = cy + R * Math.sin(ang);
+    var rel = nodes[i].relation || '';
+    var col = GMAP_REL_COLORS[rel] || 'var(--border)';
+    var dash = gmapRelDashed(rel) ? ' stroke-dasharray="4,3"' : '';
+    svg += '<line x1="' + cx + '" y1="' + cy + '" x2="' + x + '" y2="' + y + '" stroke-width="1.4" style="stroke:' + col + '"' + dash + '/>';
+    if (rel) {
+      var mx = (cx + x) / 2, my = (cy + y) / 2;
+      svg += '<text x="' + mx + '" y="' + (my - 4) + '" text-anchor="middle" font-size="9.5" paint-order="stroke" style="fill:' + col + ';stroke:var(--surface);stroke-width:3">' + rel + '</text>';
+    }
+  }
+  // 中心圆（高亮）+ 中心文字
+  var isWord = !!r.centerWord;
+  svg += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (isWord ? 30 : 36) + '" style="fill:var(--accent);stroke:var(--accent2)" stroke-width="2"/>';
+  var clines = gmapCenterLines(isWord ? r.centerWord : (map.group_name || '词群'), isWord);
+  var cfs = isWord ? 15 : 13;
+  var cy0 = cy - (clines.length - 1) * 9;
+  svg += '<text text-anchor="middle" dominant-baseline="middle" font-size="' + cfs + '" font-weight="700" style="fill:#ffffff">';
+  for (var cl = 0; cl < clines.length; cl++) {
+    svg += '<tspan x="' + cx + '" y="' + (cy0 + cl * 18) + '">' + clines[cl] + '</tspan>';
+  }
+  svg += '</text>';
+  // 节点
+  for (var j = 0; j < n; j++) {
+    var w = nodes[j];
+    var ang2 = (2 * Math.PI * j / n) - Math.PI / 2;
+    var x2 = cx + R * Math.cos(ang2), y2 = cy + R * Math.sin(ang2);
+    var tx = cx + textR * Math.cos(ang2), ty = cy + textR * Math.sin(ang2);
+    var isActive = activeWord && (w.word.toLowerCase() === activeWord.toLowerCase());
+    var hasCh = !!(w.children && w.children.length);
+    var escW = String(w.word).replace(/'/g, "\\'");
+    var tip = w.word + (w.phonetic ? ' ' + w.phonetic : '') + (w.meaning ? ' ' + w.meaning : '');
+    var onClick = 'groupMapDrill(\'' + id + '\',\'' + escW + '\',' + (hasCh ? 1 : 0) + ')';
+    svg += '<g onclick="' + onClick + '" style="cursor:pointer">' +
+      '<title>' + tip + '</title>' +
+      '<circle cx="' + x2 + '" cy="' + y2 + '" r="' + (isActive ? 17 : 15) + '" style="fill:' + (isActive ? 'var(--accent)' : 'var(--surface2)') + ';stroke:var(--accent)" stroke-width="' + (isActive ? 2.6 : 1.6) + '"/>' +
+      (hasCh ? '<text x="' + x2 + '" y="' + (y2 - 11) + '" text-anchor="middle" font-size="9" style="fill:var(--accent2)">▾</text>' : '') +
+      '</g>';
+    var wText = String(w.word).slice(0, 10);
+    var tCol = isActive ? '#ffffff' : 'var(--text)';
+    var tStk = isActive ? 'rgba(0,0,0,0.6)' : 'none';
+    var tW = isActive ? '2.5' : '0';
+    svg += '<text x="' + tx + '" y="' + ty + '" text-anchor="middle" dominant-baseline="middle" font-size="10.5" font-weight="' + (isActive ? 700 : 500) + '" paint-order="stroke" style="fill:' + tCol + ';stroke:' + tStk + ';stroke-width:' + tW + '" onclick="' + onClick + '" style="cursor:pointer">' + wText + '</text>';
+  }
+  svg += '</svg>';
+  return svg;
+}
+
+function renderGroupMap(id) {
+  var st = _gmapState[id];
+  var map = window.__UNIT_MAPS_DATA__[st.unit][st.gid];
+  var r = resolveMapPath(map, st.stack);
+  var backBtn = st.stack.length ? '<button class="gmap-back" onclick="groupMapBack(\'' + id + '\')">← 返回上级</button>' : '';
+  var title = '<div class="gmap-title">🗺️ 词群导图：' + map.group_name + '（点击节点发音 · ▾ 可展开）</div>';
+  return '<div class="gmap-wrap" id="' + id + '">' + title + backBtn + buildMapSVG(id, map, r, st.active) + '</div>';
+}
+
+function groupMapDrill(id, nodeWord, hasChildren) {
+  var st = _gmapState[id];
+  if (!st) return;
+  speakWord(nodeWord);
+  if (hasChildren) {
+    st.stack.push(nodeWord);
+    var el = document.getElementById(id);
+    if (el) el.innerHTML = renderGroupMap(id);
+  }
+}
+function groupMapBack(id) {
+  var st = _gmapState[id];
+  if (!st || !st.stack.length) return;
+  st.stack.pop();
+  var el = document.getElementById(id);
+  if (el) el.innerHTML = renderGroupMap(id);
+}
+
+// 入口：核心词库且有导图数据 → 新版；否则回退旧版（相邻词单层图）
 function groupMapSVG(word) {
+  if (canUseNewMap(word)) {
+    var id = 'gmap-' + (++_gmapSeq);
+    _gmapState[id] = { unit: word.unit, gid: word.group_id, stack: [], active: word.word };
+    return renderGroupMap(id);
+  }
+  return legacyGroupMapSVG(word);
+}
+
+// 旧版：同词群单词的放射状关系图（中心=词群主题，节点=词）
+function legacyGroupMapSVG(word) {
   // 导图内容：同 Unit+Lesson 中序号（seq）最接近当前词的词（书中相邻词群关系更准确）
   if (!word || (!word.group_id && !word.lesson)) return '';
   var members = null;
@@ -3768,6 +3928,7 @@ document.querySelectorAll('.pool-btn').forEach(function(btn) {
         doSwitch();
       });
     } else {
+      ensureUnitMaps();  // 核心词库新版词群导图数据：切回核心词库时预加载（打卡词库无数据自动回退旧版）
       doSwitch();
     }
   });
@@ -4425,6 +4586,7 @@ if (currentPool === 'full' && !_fullWordsLoaded) {
   // 上次停在打卡词库：先加载外置数据再渲染，避免空白/报错
   ensureFullWords(function() { renderAll(); });
 } else {
+  ensureUnitMaps();  // 预加载 Unit 词群导图数据（核心词库新版导图用；打卡词库无数据自动回退旧版）
   renderAll();
 }
 console.log('🎓 CET-6 词库刷题系统（你还在背单词吗 × 艾宾浩斯打卡）已就绪');
