@@ -2257,7 +2257,7 @@ function getWordDetailHTML(word) {
       if (p[0] === '\u{1F331}') body = derivativeHtml(body);
       html += '<div class="wd-row"><span class="wd-tag">' + p[0] + ' ' + p[1] + '</span><span class="wd-txt' + (p[3] ? ' ' + p[3] : '') + '">' + body + '</span></div>';
     }
-    else html += '<div class="wd-row"><span class="wd-txt cn">' + p[2] + '</span></div>';
+    else html += '<div class="wd-row"><span class="wd-tag"></span><span class="wd-txt cn">' + p[2] + '</span></div>';
   });
   html += '</div></div>';
   return html;
