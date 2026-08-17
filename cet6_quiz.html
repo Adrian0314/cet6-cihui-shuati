@@ -137,6 +137,10 @@ theme-button{position:relative;display:inline-block;outline:none}
 .gmap-legend{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:4px 16px;font-size:0.75em;color:var(--text2);margin:2px 0 8px}
 .gmap-legend .gl-badge, .gl-badge{display:inline-flex;align-items:center;justify-content:center;min-width:15px;height:15px;border-radius:8px;background:var(--green);color:#fff;font-size:10px;font-weight:700;line-height:1;padding:0 3px;border:1.5px solid var(--surface);box-sizing:border-box;vertical-align:-2px;margin-right:2px}
 .gmap-legend .gl-leaf, .gl-leaf{display:inline-block;width:11px;height:11px;border-radius:50%;border:1.6px solid var(--accent);background:var(--surface2);vertical-align:-1px;margin-right:4px}
+/* 手机端词群导图：点击圆圈/单词弹出的中文释义气泡（替代悬停） */
+#gmapTip{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:400;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:10px 14px;max-width:86vw;font-size:0.9em;display:none;text-align:left;cursor:pointer}
+#gmapTip .gmt-ph{color:var(--text2);font-size:0.88em;margin-left:6px}
+#gmapTip .gmt-m{color:var(--text);margin-top:3px;line-height:1.5}
 .word-detail{margin-top:14px;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--surface)}
 .word-detail .wd-head{padding:10px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:0.9em;font-weight:600;background:var(--surface2);user-select:none;transition:background 200ms,color 200ms}@media (hover: hover) and (pointer: fine){
 .word-detail .wd-head:hover{background:rgba(124,58,237,0.08);color:var(--accent)}}
@@ -2344,7 +2348,9 @@ function gmapCenterLayout(label, isWord) {
 
 function buildMapSVG(id, map, r, activeWord) {
   var nodes = r.nodes;
-  var cx = 240, cy = 190;
+  // 触摸/窄屏适配：手机端放大节点圆与文字（无 hover，中文靠点击气泡展示）
+  var COARSE = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || (window.innerWidth < 600 && 'ontouchstart' in window);
+  var cx = 240, cy = COARSE ? 210 : 190;
   var n = nodes.length;
   if (!n) {
     return '<div style="color:var(--text2);font-size:0.85em;padding:10px 0">末端词，无更多关联词</div>';
@@ -2356,8 +2362,10 @@ function buildMapSVG(id, map, r, activeWord) {
   var centerR = L.r, cfs = L.fs, clines = L.lines, lh = L.lh;
   // 统一环带节奏：中心圆边→关系标签中心=18px，标签中心→节点圆近边=18px（对称不贴圆）
   // 节点文字按词长动态外推（见下方 txR），保证任何角度/词长下文字都不碰任何圆
-  var R = centerR + 51, relD = centerR + 18;
-  var svg = '<svg viewBox="0 0 480 380" style="width:100%;max-width:400px;height:auto;display:block;margin:4px auto;">';
+  var R = centerR + (COARSE ? 62 : 51), relD = centerR + 18;
+  var relFs = COARSE ? 11 : 9.5;
+  var viewBox = COARSE ? '0 -20 480 460' : '0 0 480 380';
+  var svg = '<svg viewBox="' + viewBox + '" style="width:100%;max-width:400px;height:auto;display:block;margin:4px auto;">';
   // 连线 + 关系标签
   for (var i = 0; i < n; i++) {
     var ang = (2 * Math.PI * i / n) - Math.PI / 2;
@@ -2368,7 +2376,7 @@ function buildMapSVG(id, map, r, activeWord) {
     svg += '<line x1="' + cx + '" y1="' + cy + '" x2="' + x + '" y2="' + y + '" stroke-width="1.4" style="stroke:' + col + '"' + dash + '/>';
     if (rel) {
       var mx = cx + relD * Math.cos(ang), my = cy + relD * Math.sin(ang);
-      svg += '<text x="' + mx + '" y="' + (my - 4) + '" text-anchor="middle" font-size="9.5" paint-order="stroke" style="fill:' + col + ';stroke:var(--surface);stroke-width:3">' + rel + '</text>';
+      svg += '<text x="' + mx + '" y="' + (my - 4) + '" text-anchor="middle" font-size="' + relFs + '" paint-order="stroke" style="fill:' + col + ';stroke:var(--surface);stroke-width:3">' + rel + '</text>';
     }
   }
   // 中心圆（高亮）+ 中心文字
@@ -2380,29 +2388,32 @@ function buildMapSVG(id, map, r, activeWord) {
   }
   svg += '</text>';
   // 节点
+  var nodeFs = COARSE ? 13.5 : 10.5;
   for (var j = 0; j < n; j++) {
     var w = nodes[j];
     var ang2 = (2 * Math.PI * j / n) - Math.PI / 2;
     var x2 = cx + R * Math.cos(ang2), y2 = cy + R * Math.sin(ang2);
     // 文字水平排布且不沿径向旋转，故按词长外推：径向内侧始终距节点圆≥~10px（半宽≈len*2.9，加圆半径15+空隙）
-    var txR = R + Math.max(38, Math.round(String(w.word).length * 2.9) + 27);
+    var txR = R + (COARSE
+      ? Math.max(50, Math.round(String(w.word).length * 3.6) + 36)
+      : Math.max(38, Math.round(String(w.word).length * 2.9) + 27));
     var tx = cx + txR * Math.cos(ang2), ty = cy + txR * Math.sin(ang2);
     var isActive = activeWord && (w.word.toLowerCase() === activeWord.toLowerCase());
     var childCount = (w.children && w.children.length) ? w.children.length : 0;
     var escW = String(w.word).replace(/'/g, "\\'");
     var tip = w.word + (w.phonetic ? ' ' + w.phonetic : '') + (w.meaning ? ' ' + w.meaning : '') +
       (childCount ? '（有 ' + childCount + ' 个分支，点击圆圈展开）' : '（末端词，无分支）');
-    // 圆圈=展开下钻（末端词点击改为朗读）；单词文字=朗读发音
+    // 圆圈=展开下钻（末端词点击改为朗读）；单词文字=朗读发音；均带中文释义气泡（手机端）
     var drillClick = 'groupMapDrill(\'' + id + '\',\'' + escW + '\',' + (childCount ? 1 : 0) + ')';
     var speakClick = 'groupMapSpeak(\'' + id + '\',\'' + escW + '\')';
-    var rNode = isActive ? 17 : 15;
+    var rNode = isActive ? (COARSE ? 25 : 17) : (COARSE ? 22 : 15);
     // 分支徽标：沿径向挂在圆圈外侧，绿色实心 + 白色数字=直接分支数；无徽标即末端词
     var badgeSvg = '';
     if (childCount) {
-      var bDist = rNode + 8, bx = x2 + bDist * Math.cos(ang2), by = y2 + bDist * Math.sin(ang2);
+      var bDist = rNode + (COARSE ? 10 : 8), bx = x2 + bDist * Math.cos(ang2), by = y2 + bDist * Math.sin(ang2);
       var bNum = childCount > 9 ? '9+' : String(childCount);
-      var bFs = childCount > 9 ? 8 : 9;
-      badgeSvg = '<circle cx="' + bx + '" cy="' + by + '" r="7" style="fill:var(--green);stroke:var(--surface)" stroke-width="1.5"/>' +
+      var bFs = COARSE ? 11 : (childCount > 9 ? 8 : 9);
+      badgeSvg = '<circle cx="' + bx + '" cy="' + by + '" r="' + (COARSE ? 9 : 7) + '" style="fill:var(--green);stroke:var(--surface)" stroke-width="1.5"/>' +
         '<text x="' + bx + '" y="' + (by + 0.5) + '" text-anchor="middle" dominant-baseline="middle" font-size="' + bFs + '" font-weight="700" style="fill:#fff;pointer-events:none">' + bNum + '</text>';
     }
     svg += '<g onclick="' + drillClick + '" style="cursor:pointer">' +
@@ -2414,7 +2425,7 @@ function buildMapSVG(id, map, r, activeWord) {
     var tCol = isActive ? '#ffffff' : 'var(--text)';
     var tStk = isActive ? 'rgba(0,0,0,0.6)' : 'none';
     var tW = isActive ? '2.5' : '0';
-    svg += '<text x="' + tx + '" y="' + ty + '" text-anchor="middle" dominant-baseline="middle" font-size="10.5" font-weight="' + (isActive ? 700 : 500) + '" paint-order="stroke" style="fill:' + tCol + ';stroke:' + tStk + ';stroke-width:' + tW + ';cursor:pointer" onclick="' + speakClick + '" title="' + tip.replace(/"/g, '&quot;') + '（点击朗读发音）">' + wText + '</text>';
+    svg += '<text x="' + tx + '" y="' + ty + '" text-anchor="middle" dominant-baseline="middle" font-size="' + nodeFs + '" font-weight="' + (isActive ? 700 : 500) + '" paint-order="stroke" style="fill:' + tCol + ';stroke:' + tStk + ';stroke-width:' + tW + ';cursor:pointer" onclick="' + speakClick + '" title="' + tip.replace(/"/g, '&quot;') + '（点击朗读发音）">' + wText + '</text>';
   }
   svg += '</svg>';
   return svg;
@@ -2425,7 +2436,7 @@ function renderGroupMap(id) {
   var map = window.__UNIT_MAPS_DATA__[st.unit][st.gid];
   var r = resolveMapPath(map, st.stack);
   var backBtn = st.stack.length ? '<button class="gmap-back" onclick="groupMapBack(\'' + id + '\')">← 返回上级</button>' : '';
-  var title = '<div class="gmap-title">🗺️ 词群导图：' + map.group_name + '（点击圆圈展开 · 点击单词发音）</div>';
+  var title = '<div class="gmap-title">🗺️ 词群导图：' + map.group_name + '（点击圆圈展开 · 点击单词发音 · 点按看中文释义）</div>';
   var legend = '<div class="gmap-legend">' +
     '<span><span class="gl-badge">3</span>有分支：数字=分支数，点击圆圈展开</span>' +
     '<span><span class="gl-leaf"></span>末端词：无分支</span>' +
@@ -2433,21 +2444,61 @@ function renderGroupMap(id) {
   return '<div class="gmap-wrap" id="' + id + '">' + title + backBtn + legend + buildMapSVG(id, map, r, st.active) + '</div>';
 }
 
+// 在导图数据中查找 word 的节点对象（含 meaning/phonetic），找不到返回 null
+function gmapFindNodeObj(map, word) {
+  var target = String(word).toLowerCase();
+  function s(ns) {
+    for (var i = 0; i < ns.length; i++) {
+      var nd = ns[i];
+      if (String(nd.word).toLowerCase() === target) return nd;
+      if (nd.children) { var r = s(nd.children); if (r) return r; }
+    }
+    return null;
+  }
+  return s(map.level1Nodes || []);
+}
+// 手机端中文释义气泡：点击圆圈/单词时显示（替代桌面悬停），3.5 秒自动消失，点气泡可关闭
+function gmapShowMeaning(nodeWord, map) {
+  if (!('ontouchstart' in window) && !(window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) return;
+  var tip = document.getElementById('gmapTip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'gmapTip';
+    tip.onclick = function() { tip.style.display = 'none'; };
+    document.body.appendChild(tip);
+  }
+  var nd = map ? gmapFindNodeObj(map, nodeWord) : null;
+  var meaning = nd ? nd.meaning : '';
+  var phon = nd ? nd.phonetic : '';
+  if (!meaning && !phon) return;
+  var escT = function(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
+  tip.innerHTML = '<b>' + escT(nodeWord) + '</b>' + (phon ? ' <span class="gmt-ph">' + escT(phon) + '</span>' : '') +
+    (meaning ? '<div class="gmt-m">' + escT(meaning) + '</div>' : '');
+  tip.style.display = 'block';
+  clearTimeout(gmapShowMeaning._t);
+  gmapShowMeaning._t = setTimeout(function() { tip.style.display = 'none'; }, 3500);
+}
+
 // 点击节点圆圈：有分支→下钻展开；末端词（无分支）→朗读发音
 function groupMapDrill(id, nodeWord, hasChildren) {
   var st = _gmapState[id];
   if (!st) return;
   if (hasChildren) {
+    var map1 = window.__UNIT_MAPS_DATA__[st.unit][st.gid];
+    gmapShowMeaning(nodeWord, map1);   // 下钻时显示所点词中文（手机端）
     st.stack.push(nodeWord);
     var el = document.getElementById(id);
     if (el) el.innerHTML = renderGroupMap(id);
   } else {
     speakWord(nodeWord);
+    gmapShowMeaning(nodeWord, window.__UNIT_MAPS_DATA__[st.unit][st.gid]);   // 末端词朗读 + 中文
   }
 }
-// 点击节点单词文字：只朗读发音（不下钻）
+// 点击节点单词文字：朗读发音 + 中文释义气泡（手机端）
 function groupMapSpeak(id, nodeWord) {
   speakWord(nodeWord);
+  var st = _gmapState[id];
+  if (st) gmapShowMeaning(nodeWord, window.__UNIT_MAPS_DATA__[st.unit][st.gid]);
 }
 function groupMapBack(id) {
   var st = _gmapState[id];
