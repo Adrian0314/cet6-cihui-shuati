@@ -588,6 +588,7 @@ groupSel.addEventListener('change', function(){
   render();
 });
 svg.addEventListener('click', function(ev){
+  if (suppressClick) { suppressClick = false; return; }   // 拖拽/滑动后的 click 不触发朗读
   var t = ev.target;
   while (t && t !== svg && !t.getAttribute('data-speak') && !t.getAttribute('data-id')) t = t.parentNode;
   if (!t || t === svg) return;
@@ -663,29 +664,39 @@ $('btnReset').addEventListener('click', function(){
   main.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
 });
 
-var drag = null;
-main.addEventListener('pointerdown', function(ev){
-  if (ev.pointerType === 'touch') return; // 触摸由 touch 手势处理
+/* 拖拽平移：mousedown + window mousemove/mouseup。
+   不用 setPointerCapture（它会把 pointerup 后的 click 派发到 main，导致点卡片/喇叭朗读失效）；
+   拖拽移动超过阈值后抑制随后的 click，避免拖完误触发朗读。 */
+var drag = null, suppressClick = false;
+main.addEventListener('mousedown', function(ev){
   if (ev.target.closest('svg')) {
-    drag = { x: ev.clientX, y: ev.clientY, tx: tx, ty: ty, id: ev.pointerId };
-    main.setPointerCapture(ev.pointerId);
+    drag = { x: ev.clientX, y: ev.clientY, tx: tx, ty: ty };
   }
 });
-main.addEventListener('pointermove', function(ev){
-  if (drag && drag.id === ev.pointerId) {
-    tx = drag.tx + (ev.clientX - drag.x);
-    ty = drag.ty + (ev.clientY - drag.y);
-    applyTransform();
+window.addEventListener('mousemove', function(ev){
+  if (drag) {
+    var dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
+    if (Math.hypot(dx, dy) > 4) {
+      drag.moved = true;
+      tx = drag.tx + dx;
+      ty = drag.ty + dy;
+      applyTransform();
+    }
   }
 });
-main.addEventListener('pointerup', function(ev){ if (drag && drag.id === ev.pointerId) drag = null; });
-main.addEventListener('pointercancel', function(ev){ if (drag && drag.id === ev.pointerId) drag = null; });
+window.addEventListener('mouseup', function(){
+  if (drag && drag.moved) suppressClick = true;
+  drag = null;
+});
 
-// 双指缩放（触摸）
-var pinch = null;
+// 触摸：单指滑动平移 + 双指缩放；轻点（tap）仍由 click 处理朗读
+var pinch = null, touchDrag = null;
 main.addEventListener('touchstart', function(ev){
   if (ev.touches.length === 2) {
+    touchDrag = null;
     pinch = { d: dist(ev.touches), s: scale, tx: tx, ty: ty, cx: (ev.touches[0].clientX + ev.touches[1].clientX)/2, cy: (ev.touches[0].clientY + ev.touches[1].clientY)/2 };
+  } else if (ev.touches.length === 1) {
+    touchDrag = { x: ev.touches[0].clientX, y: ev.touches[0].clientY, tx: tx, ty: ty };
   }
 }, { passive:true });
 main.addEventListener('touchmove', function(ev){
@@ -700,9 +711,22 @@ main.addEventListener('touchmove', function(ev){
     ty = cy - (cy - pinch.ty) * k;
     scale = ns;
     applyTransform();
+  } else if (touchDrag && ev.touches.length === 1) {
+    ev.preventDefault();
+    var dx = ev.touches[0].clientX - touchDrag.x, dy = ev.touches[0].clientY - touchDrag.y;
+    if (Math.hypot(dx, dy) > 8) {
+      touchDrag.moved = true;
+      tx = touchDrag.tx + dx;
+      ty = touchDrag.ty + dy;
+      applyTransform();
+    }
   }
 }, { passive:false });
-main.addEventListener('touchend', function(){ pinch = null; });
+main.addEventListener('touchend', function(){
+  pinch = null;
+  if (touchDrag && touchDrag.moved) suppressClick = true;
+  touchDrag = null;
+});
 function dist(t){ return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); }
 
 /* ================= 导出 ================= */
