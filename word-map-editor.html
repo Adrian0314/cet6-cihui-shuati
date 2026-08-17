@@ -1,0 +1,3244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>词群导图可视化编辑器</title>
+<style>
+:root{
+  --bg:#fafafa; --surface:#ffffff; --surface2:#f5f5f5;
+  --text:#1a1a1a; --text2:#737373; --accent:#7c3aed;
+  --accent2:#a78bfa; --green:#059669; --red:#dc2626;
+  --orange:#d97706; --blue:#2563eb; --pink:#db2777;
+  --border:#e5e5e5;
+  --radius:10px; --radius-sm:6px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
+body,html{height:100%}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+header h1{font-size:1.25em;color:var(--accent)}
+#status-bar{font-size:0.82em;color:var(--text2);display:flex;gap:14px;flex-wrap:wrap}
+#status-bar b{color:var(--text)}
+main{max-width:1500px;margin:0 auto;padding:14px 18px 40px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px}
+.card h2{font-size:1em;color:var(--text2);margin-bottom:8px;font-weight:600}
+
+/* 导入区 */
+#import-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.imp-item{border:1px dashed var(--border);border-radius:var(--radius-sm);padding:8px 10px}
+.imp-item label{display:block;font-weight:600;margin-bottom:4px;font-size:0.85em}
+.imp-item input[type=file]{font-size:0.8em;margin-bottom:4px;width:100%}
+.imp-item .paste-toggle{font-size:0.75em;color:var(--accent);cursor:pointer;user-select:none}
+.imp-item textarea{display:none;width:100%;height:52px;font-family:Consolas,monospace;font-size:0.75em;border:1px solid var(--border);border-radius:var(--radius-sm);padding:4px;margin-top:4px}
+.imp-item textarea.open{display:block}
+.imp-msg{font-size:0.8em;color:var(--text2);margin-top:6px}
+.imp-msg.ok{color:var(--green)}
+.imp-msg.err{color:var(--red)}
+
+/* 工具栏 */
+#toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+#toolbar select,#toolbar input,#toolbar button{height:30px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0 8px;font-size:0.85em;background:var(--surface);color:var(--text)}
+#toolbar button{cursor:pointer;background:var(--surface2)}
+#toolbar button:hover{border-color:var(--accent);color:var(--accent)}
+#toolbar button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+#toolbar button.primary:hover{background:var(--accent2)}
+#toolbar .sep{width:1px;height:20px;background:var(--border)}
+#group-name-input{width:170px}
+
+/* 工作区 */
+#workspace{display:grid;grid-template-columns:1fr 1.15fr;gap:14px;align-items:start}
+@media (max-width:900px){#workspace{grid-template-columns:1fr}}
+#tree-panel{max-height:calc(100vh - 260px);overflow:auto;padding-right:4px}
+#preview-panel{position:sticky;top:10px}
+#preview-panel .gmap-wrap{padding:8px 0}
+#preview-breadcrumb{font-size:0.78em;color:var(--text2);margin-bottom:4px;min-height:1.2em}
+.gmap-back{font-size:0.8em;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);cursor:pointer;padding:2px 8px;margin-bottom:6px}
+.gmap-title{font-size:0.85em;color:var(--text2);margin-bottom:4px}
+
+/* 树 */
+/* 层级颜色竖线：每层一个颜色，用 data-depth 区分，循环 6 色 */
+#tree{position:relative}
+#tree ul{list-style:none;padding-left:14px;margin-left:7px;border-left:3px solid #ccc}
+#tree>ul{padding-left:0;border-left:none;margin-left:0}
+#tree ul[data-depth="0"]{border-left-color:#7c3aed}   /* 紫 */
+#tree ul[data-depth="1"]{border-left-color:#2563eb}   /* 蓝 */
+#tree ul[data-depth="2"]{border-left-color:#059669}   /* 绿 */
+#tree ul[data-depth="3"]{border-left-color:#d97706}   /* 橙 */
+#tree ul[data-depth="4"]{border-left-color:#db2777}   /* 粉 */
+#tree ul[data-depth="5"]{border-left-color:#0891b2}   /* 青 */
+#tree ul[data-depth="6"]{border-left-color:#7c3aed}   /* 循环 */
+#tree ul[data-depth="7"]{border-left-color:#2563eb}
+#tree ul[data-depth="8"]{border-left-color:#059669}
+.node-row{display:flex;align-items:center;gap:5px;padding:2px 4px;border-radius:var(--radius-sm);cursor:pointer;font-size:0.85em;white-space:nowrap}
+.node-row:hover{background:var(--surface2)}
+.node-row.selected{background:rgba(124,58,237,0.10);outline:1px solid var(--accent2)}
+.node-row .tw{padding:0 2px;color:var(--text2);font-size:0.75em;width:14px;text-align:center;flex:none}
+.node-row .node-multi{flex:none;width:13px;height:13px;margin:0 1px 0 0;cursor:pointer;accent-color:var(--accent);vertical-align:middle}
+.node-row.multi-checked{outline:1px dashed var(--accent2)}
+.node-row .nw{font-weight:600;color:var(--accent);flex:none}
+.node-row .ph{color:var(--text2);font-size:0.78em;flex:none}
+.node-row .mn{color:var(--text2);font-size:0.75em;max-width:150px;overflow:hidden;text-overflow:ellipsis;flex:none}
+.node-row .pos-badge{background:var(--surface2);border:1px solid var(--border);border-radius:3px;font-size:0.68em;padding:0 4px;color:var(--text2);flex:none}
+.node-row .rel-badge{border-radius:3px;font-size:0.68em;padding:0 5px;color:#fff;flex:none;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.node-row .tools{display:none;gap:2px;margin-left:auto;flex:none}
+.node-row:hover .tools{display:flex}
+.node-row .tools button{border:none;background:transparent;cursor:pointer;color:var(--text2);font-size:0.82em;padding:0 3px;border-radius:3px}
+.node-row .tools button:hover{background:var(--accent);color:#fff}
+.node-row.warn{outline:1px solid var(--orange)}
+.node-row.err-node{outline:1px solid var(--red)}
+.node-row.drag-source{opacity:0.4}
+.node-row.drag-target{outline:2px dashed var(--accent);outline-offset:-1px;background:rgba(124,58,237,0.08)}
+#tree ul.drag-list-target{border-left-color:var(--accent);background:rgba(124,58,237,0.05)}
+.node-row{cursor:grab}
+body.dragging-node, body.dragging-node *{cursor:grabbing !important;-webkit-user-select:none;user-select:none}
+/* 拖拽插入指示线：拖动单词时在上方显示横向直线，线下的锚点节点即该单词将归入的节点 */
+#drop-line{position:absolute;left:0;height:0;border-top:2px solid var(--accent);border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,0.92);pointer-events:none;z-index:9;display:none}
+#drop-line .dl-dot{position:absolute;left:-5px;top:-5px;width:9px;height:9px;border-radius:50%;background:var(--accent);border:1px solid #fff}
+#drop-line .dl-label{position:absolute;left:50%;transform:translateX(-50%) translateY(-100%);top:-8px;background:var(--accent);color:#fff;font-size:0.72em;padding:1px 9px;border-radius:10px;white-space:nowrap;max-width:76vw;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 4px rgba(0,0,0,0.2)}
+.node-row.drop-anchor{background:rgba(124,58,237,0.14);outline:1px dashed var(--accent);outline-offset:-1px}
+.empty-hint{color:var(--text2);font-size:0.82em;padding:14px;text-align:center;border:1px dashed var(--border);border-radius:var(--radius-sm);margin-top:8px}
+.empty-hint button{margin-top:8px;border:1px solid var(--accent);background:var(--surface);color:var(--accent);border-radius:var(--radius-sm);padding:4px 12px;cursor:pointer;font-size:0.85em}
+
+/* 节点编辑弹层 */
+#modal-mask{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:none;z-index:50;align-items:center;justify-content:center}
+#modal-mask.open{display:flex}
+#node-modal{background:var(--surface);border-radius:var(--radius);padding:16px 18px;width:min(520px,92vw);max-height:86vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,0.2)}
+#node-modal h3{margin-bottom:10px;color:var(--accent);font-size:1em}
+#node-modal label{display:block;font-size:0.8em;color:var(--text2);margin:8px 0 3px}
+#node-modal input,#node-modal select{width:100%;border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 8px;font-size:0.9em;background:var(--surface);color:var(--text)}
+#nm-relation-custom{margin-top:4px}
+#node-modal input[data-missing="true"]{border-color:var(--red)}
+#lookup-hint{font-size:0.78em;margin-top:5px}
+#lookup-hint.ok{color:var(--green)}
+#lookup-hint.err{color:var(--red)}
+#morph-hint{font-size:0.75em;color:var(--text2);background:var(--surface2);border-radius:var(--radius-sm);padding:6px 8px;margin-top:8px;white-space:pre-wrap}
+#modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+#modal-btns button{border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);padding:6px 16px;cursor:pointer;font-size:0.88em}
+#modal-btns button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+#modal-btns button.danger{background:#fff;color:var(--red);border-color:var(--red)}
+
+/* 挂到弹层 */
+#attach-modal{background:var(--surface);border-radius:var(--radius);padding:16px 18px;width:min(420px,92vw);max-height:86vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,0.2);display:none}
+#attach-modal h3{margin-bottom:10px;color:var(--accent);font-size:1em}
+#attach-list{max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-sm);margin-top:6px}
+#attach-list .al-row{padding:5px 8px;cursor:pointer;font-size:0.85em}
+#attach-list .al-row:hover{background:var(--surface2)}
+
+/* 添加新词弹层 */
+#addword-modal{background:var(--surface);border-radius:var(--radius);padding:16px 18px;width:min(560px,94vw);max-height:88vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,0.2);display:none}
+#addword-modal h3{margin-bottom:10px;color:var(--accent);font-size:1em}
+#addword-modal label{display:block;font-size:0.8em;color:var(--text2);margin:8px 0 3px}
+#addword-modal input,#addword-modal select,#addword-modal textarea{width:100%;border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 8px;font-size:0.9em;background:var(--surface);color:var(--text);font-family:inherit}
+#addword-modal textarea{font-family:Consolas,monospace;font-size:0.82em}
+#addword-modal #aw-paste{display:none;height:120px;margin-top:4px;white-space:pre;overflow:auto}
+#addword-modal #aw-paste.open{display:block}
+#addword-modal #aw-msg{margin-top:6px;white-space:pre-line}
+#addword-modal .aw-pastebar{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
+#aw-server-status{font-size:0.78em;margin-top:6px;padding:4px 8px;border-radius:var(--radius-sm);line-height:1.6}
+#aw-server-status.server-on{background:rgba(5,150,105,0.08);color:var(--green)}
+#aw-server-status.server-off{background:rgba(220,38,38,0.07);color:var(--red)}
+#aw-btns{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:16px}
+#aw-btns button{border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);padding:6px 14px;cursor:pointer;font-size:0.88em}
+#aw-btns button:hover{border-color:var(--accent);color:var(--accent)}
+#aw-btns button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+#aw-btns button.primary:hover{background:var(--accent2)}
+
+/* 校验 */
+#validation-list{max-height:220px;overflow:auto;font-size:0.8em}
+.v-item{display:flex;gap:8px;align-items:baseline;padding:3px 6px;border-radius:4px;cursor:pointer}
+.v-item:hover{background:var(--surface2)}
+.v-item .lvl{flex:none;font-weight:700;width:44px}
+.v-item.lvl-error{color:var(--red)}
+.v-item.lvl-warn{color:var(--orange)}
+.v-item.lvl-ok{color:var(--green)}
+.v-item .desc{color:var(--text)}
+.v-item .lvl-ok-desc{color:var(--text2)}
+#valid-summary{font-size:0.8em;margin-bottom:6px;font-weight:600}
+
+/* 导出 */
+#export-area textarea{width:100%;height:210px;font-family:Consolas,monospace;font-size:0.72em;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;background:#fbfbfb;color:#111}
+#export-opts{display:flex;gap:14px;align-items:center;margin-bottom:8px;font-size:0.82em;flex-wrap:wrap}
+#export-opts label{display:flex;align-items:center;gap:4px;color:var(--text2)}
+#export-btns{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+#export-btns button,#valid-btns button{border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);padding:5px 14px;cursor:pointer;font-size:0.85em}
+#export-btns button:hover,#valid-btns button:hover{border-color:var(--accent);color:var(--accent)}
+#export-btns button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+/* 按钮组 */
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.btn-row button{border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);padding:5px 12px;cursor:pointer;font-size:0.82em}
+.btn-row button:hover{border-color:var(--accent);color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <h1>🗺️ 词群导图可视化编辑器</h1>
+  <div id="status-bar">
+    <span>主词库 <b id="st-words">未导入</b></span>
+    <span>打卡词库 <b id="st-fullwords">未导入</b></span>
+    <span>词群 <b id="st-maps">未导入</b></span>
+    <span>编辑 <b id="st-cur">-</b></span>
+  </div>
+</header>
+<main>
+
+  <!-- 导入区 -->
+  <section class="card" id="import-zone">
+    <h2>① 导入数据（直接选本项目文件即可）</h2>
+    <div id="import-grid">
+      <div class="imp-item">
+        <label>cet6_quiz.html（词库 ALL_WORDS）</label>
+        <input type="file" id="f-allwords" accept=".html,.htm">
+        <div><span class="paste-toggle" data-tgt="paste-aw">▸ 粘贴文本（无法选文件时）</span></div>
+        <textarea id="paste-aw"></textarea>
+      </div>
+      <div class="imp-item">
+        <label>data/unit-maps.js（现有导图）</label>
+        <input type="file" id="f-maps" accept=".js">
+        <div><span class="paste-toggle" data-tgt="paste-maps">▸ 粘贴文本</span></div>
+        <textarea id="paste-maps"></textarea>
+      </div>
+      <div class="imp-item">
+        <label>data/full-words.js（可选·扩展词库）</label>
+        <input type="file" id="f-fullwords" accept=".js">
+        <div><span class="paste-toggle" data-tgt="paste-fw">▸ 粘贴文本</span></div>
+        <textarea id="paste-fw"></textarea>
+      </div>
+    </div>
+    <div style="margin-top:10px">
+      <button id="btn-autoimport" style="padding:6px 14px;font-size:0.95em;font-weight:600;color:var(--accent);border:1px solid var(--accent);border-radius:6px;background:transparent;cursor:pointer">⚡ 自动导入本项目文件</button>
+      <span style="font-size:0.78em;color:var(--text2);margin-left:8px">需先运行「打开词群编辑器.bat」启动词典服务</span>
+    </div>
+    <div class="imp-msg" id="import-msg">选择文件后自动解析。粘贴文本时先展开折叠块粘贴内容，再点「应用粘贴」。</div>
+  </section>
+
+  <!-- 编辑控制条 -->
+  <section class="card" id="toolbar-card">
+    <h2>② 选择/新建词群</h2>
+    <div id="toolbar">
+      <span style="font-size:0.85em">Unit</span>
+      <select id="unit-select"></select>
+      <span style="font-size:0.85em">词群</span>
+      <select id="gid-select"></select>
+      <span style="font-size:0.85em">词群名</span>
+      <input id="group-name-input" placeholder="如：光相关" title="词群名显示在预览中心，导出时写入 group_name。回车 / 失焦 / 点 ✓ 即保存">
+      <button onclick="saveGroupName()" title="保存词群名">✓</button>
+      <span class="sep"></span>
+      <button onclick="loadSelectedGroup()">载入</button>
+      <button onclick="newUnit()">新建 unit</button>
+      <button onclick="newGroup()">新建词群</button>
+      <button onclick="deleteGroup()" title="从内存数据删除该词群">删除</button>
+      <button onclick="mergeBack()" title="把当前词群写回内存数据">合并回数据</button>
+      <span class="sep"></span>
+      <button onclick="undo()" title="Ctrl+Z">↶ 撤销</button>
+      <button onclick="redo()" title="Ctrl+Shift+Z">↷ 重做</button>
+    </div>
+  </section>
+
+  <!-- 工作区 -->
+  <section id="workspace">
+    <section class="card" id="tree-panel-card" style="margin-bottom:0">
+      <h2 style="display:flex;justify-content:space-between;align-items:center">
+        <span>③ 层级树编辑</span>
+        <span style="display:flex;gap:6px">
+          <button class="primary" onclick="addWordSmart()" style="border:1px solid var(--accent);border-radius:4px;background:var(--accent);color:#fff;cursor:pointer;font-size:0.78em;padding:2px 8px" title="添加新词到导图：有选中节点 → 挂到该词层级下（子词）；无选中 → 添加为一级词。词库已收录自动补全音标/释义/词性，未收录自动从有道词典抓取讲解">＋ 添加单词</button>
+          <button onclick="autoCompleteGroup()" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);cursor:pointer;font-size:0.78em;padding:2px 8px" title="回填缺音标/释义/词性">自动补全</button>
+          <button onclick="inferAllRelations()" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);cursor:pointer;font-size:0.78em;padding:2px 8px" title="给 relation 为空的节点推断关系">推断关系</button>
+          <button onclick="openBatchRelModal()" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);cursor:pointer;font-size:0.78em;padding:2px 8px" title="给勾选的多个节点统一设置 relation">批量改 relation</button>
+          <button onclick="batchDeleteNodes()" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);cursor:pointer;font-size:0.78em;padding:2px 8px" title="删除所有勾选的节点（连同子节点，可 Ctrl+Z 撤销）">批量删除</button>
+          <button onclick="openBatchMovePicker()" style="border:1px solid var(--border);border-radius:4px;background:var(--surface2);cursor:pointer;font-size:0.78em;padding:2px 8px" title="把勾选的多个节点移动到某个词之下（也可直接拖动勾选中的任一行，整批拖入目标词之下）">批量移动</button>
+        </span>
+      </h2>
+      <div id="tree"></div>
+    </section>
+    <section class="card" id="preview-panel">
+      <h2>④ 导图预览（与网站渲染一致）</h2>
+      <div id="preview-breadcrumb"></div>
+      <div id="preview-svg"></div>
+      <div style="font-size:0.72em;color:var(--text2);margin-top:6px">点击圆圈=下钻 · 点击单词=选中该节点 · 树与预览双向联动</div>
+    </section>
+  </section>
+
+  <!-- 校验 + 导出 -->
+  <section class="card" id="output-zone">
+    <h2 style="display:flex;justify-content:space-between;align-items:center">
+      <span>⑤ 校验与导出</span>
+      <span id="valid-btns" style="display:flex;gap:6px">
+        <button onclick="validateGroup()">校验词群</button>
+        <button onclick="validateUnit()">校验整个 unit</button>
+      </span>
+    </h2>
+    <div id="valid-summary"></div>
+    <div id="validation-list"></div>
+    <div id="export-opts" style="margin-top:10px">
+      <label><input type="checkbox" id="opt-compact" checked> 紧凑单行</label>
+      <label><input type="checkbox" id="opt-rel" checked> 省略空 relation</label>
+    </div>
+    <div id="export-btns">
+      <button onclick="exportGroupJSON()">导出当前词群 JSON</button>
+      <button onclick="exportUnitBlock()">导出整个 unit 数据块</button>
+      <button class="primary" onclick="exportFullFile()" title="下载 unit-maps.js 并自动保存到本项目 data/unit-maps.js，做题网站刷新即生效">下载 unit-maps.js（整体替换）</button>
+    </div>
+    <div id="save-project-msg" style="font-size:0.8em;color:var(--text2);margin-top:6px"></div>
+    <div id="export-area">
+      <textarea id="export-out" readonly spellcheck="false"></textarea>
+    </div>
+  </section>
+
+</main>
+
+<!-- 节点编辑弹层 -->
+<div id="modal-mask">
+  <div id="node-modal">
+    <h3 id="nm-title">编辑节点</h3>
+    <label>word（输入后自动查词库填充）</label>
+    <input id="nm-word" list="word-datalist">
+    <datalist id="word-datalist"></datalist>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span id="lookup-hint"></span>
+      <button id="nm-fetch-btn" style="display:none;font-size:0.78em;padding:2px 8px" onclick="fetchYoudaoIntoNode()" title="词库未收录时，从有道词典抓取音标/释义/词性填入本节点">📥 从有道词典抓取</button>
+      <button id="nm-open-aw-btn" style="display:none;font-size:0.78em;padding:2px 8px" onclick="openAddWordForNode()" title="打开「添加新词」弹窗：可查看巧记/例句/派生词、写入内存词库或生成词库记录 JSON">📚 添加新词弹窗（写词库/生成记录）</button>
+    </div>
+    <label>phonetic</label>
+    <input id="nm-phonetic">
+    <label>meaning</label>
+    <input id="nm-meaning">
+    <label>pos</label>
+    <input id="nm-pos" list="pos-datalist">
+    <datalist id="pos-datalist">
+      <option value="n"></option><option value="adj"></option><option value="v"></option>
+      <option value="adv"></option><option value="prep"></option><option value="conj"></option>
+      <option value="pron"></option><option value="num"></option><option value="art"></option>
+      <option value="int"></option><option value="aux"></option>
+    </datalist>
+    <label>relation</label>
+    <select id="nm-relation" onchange="nmRelationOnChange()">
+      <option value="">（无）</option>
+      <option value="扩">扩</option>
+      <option value="同根">同根</option>
+      <option value="近义">近义</option>
+      <option value="相关">相关</option>
+      <option value="形近">形近</option>
+      <option value="加前缀">加前缀</option>
+      <option value="反义">反义</option>
+      <option value="拆分">拆分</option>
+      <option value="合成">合成</option>
+      <option value="__custom__">自定义…</option>
+    </select>
+    <input id="nm-relation-custom" placeholder="输入自定义关系文本" style="display:none;margin-top:4px">
+    <div id="morph-hint"></div>
+    <div id="modal-btns">
+      <button onclick="modalInferRelation()">推断与父词关系</button>
+      <button onclick="closeModal()">取消</button>
+      <button class="primary" onclick="saveNodeModal()">保存</button>
+    </div>
+  </div>
+  <div id="attach-modal">
+    <h3 id="attach-title">挂到哪个词下？</h3>
+    <div id="attach-list"></div>
+    <div id="modal-btns"><button onclick="closeModal()">取消</button></div>
+  </div>
+  <div id="batch-rel-modal">
+    <h3>批量修改 relation</h3>
+    <p id="batch-rel-count" style="font-size:0.85em;color:var(--text2);margin-bottom:8px"></p>
+    <label>relation（将应用到所有勾选节点）</label>
+    <select id="nm-batch-relation" onchange="batchRelOnChange()">
+      <option value="">（无）</option>
+      <option value="扩">扩</option>
+      <option value="同根">同根</option>
+      <option value="近义">近义</option>
+      <option value="相关">相关</option>
+      <option value="形近">形近</option>
+      <option value="加前缀">加前缀</option>
+      <option value="反义">反义</option>
+      <option value="拆分">拆分</option>
+      <option value="合成">合成</option>
+      <option value="__custom__">自定义…</option>
+    </select>
+    <input id="nm-batch-relation-custom" placeholder="输入自定义关系文本" style="display:none;margin-top:4px">
+    <div id="modal-btns">
+      <button onclick="closeBatchRelModal()">取消</button>
+      <button class="primary" onclick="applyBatchRel()">应用</button>
+    </div>
+  </div>
+  <div id="addword-modal">
+    <h3>＋ 添加新词</h3>
+    <p style="font-size:0.8em;color:var(--text2);margin-bottom:6px;line-height:1.6">
+      抓取的讲解与做题网站词库一致（音标 / 释义 / 巧记 / 例句 / 派生词）。<br>
+      推荐先启动本地词典服务：<code>node dict-server.js</code>；未启动时可粘贴有道 JSON 手动解析。
+    </p>
+    <label>单词 word</label>
+    <div style="display:flex;gap:6px">
+      <input id="aw-word" list="word-datalist" style="flex:1" placeholder="输入要添加的生词">
+      <button onclick="fetchFromDict()" title="从本地词典服务抓取（需先运行 node dict-server.js），服务离线时尝试直连有道">📥 从有道词典抓取</button>
+    </div>
+    <div id="aw-server-status"></div>
+    <div class="imp-msg" id="aw-msg"></div>
+    <div class="aw-pastebar">
+      <span style="font-size:0.8em;color:var(--text2)">粘贴抓取结果（有道 jsonapi 原始 JSON，服务不可用时）</span>
+      <span class="paste-toggle" onclick="togglePasteJson()">▸ 展开</span>
+    </div>
+    <textarea id="aw-paste" placeholder='终端执行：curl "https://dict.youdao.com/jsonapi?q=ambition" 后把返回的 JSON 粘贴到这里'></textarea>
+    <div style="margin-top:6px"><button onclick="parseYoudaoPaste()">解析粘贴内容</button></div>
+    <label>音标 pronunciation</label>
+    <input id="aw-pronunciation" placeholder="/æm'bɪʃn/">
+    <label>释义 meaning</label>
+    <input id="aw-meaning" placeholder="n.雄心；抱负">
+    <label>词性 pos</label>
+    <input id="aw-pos" list="pos-datalist">
+    <label>巧记 memo（对应做题站「🧠 巧记」）</label>
+    <textarea id="aw-memo" rows="2"></textarea>
+    <label>例句 example（英文 + 空格 + 中文，对应做题站「💬 例句」）</label>
+    <textarea id="aw-example" rows="2"></textarea>
+    <label>派生词 derivative（对应做题站「🌱 派生词」）</label>
+    <textarea id="aw-derivative" rows="2"></textarea>
+    <div id="aw-btns">
+      <button class="primary" onclick="addWordToGroup()" title="把该词作为新节点加入当前词群（有选中节点则挂其下，否则作一级词）">📌 添加到导图词群</button>
+      <button onclick="addWordToAllWords()" title="写入编辑器内存词库，lookup 立即可查（要永久生效请再复制/下载 JSON 合并进 cet6_quiz.html）">📚 写入内存词库</button>
+      <button onclick="copyWordRecordJSON()" title="生成 ALL_WORDS 格式记录并复制，粘贴进 cet6_quiz.html 的 data-all-words 数据块">📋 复制词库记录 JSON</button>
+      <button onclick="downloadWordRecordJSON()" title="下载 add-words.json（本会话新增词累积）">⬇ 下载 JSON</button>
+      <button onclick="closeModal()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+ * 词群导图可视化编辑器
+ * 单文件自包含，无外部依赖，双击 file:// 打开即用。
+ * 数据格式与 cet6_quiz.html 的 unit-maps.js 完全对齐。
+ * ============================================================ */
+
+/* ---------- 全局状态 ---------- */
+var state = {
+  allWords: [], fullWords: [], idx: null,
+  unitMaps: null, fileHeader: '',
+  currentUnit: '1', currentGid: '1',
+  groupName: '', level1Nodes: [],
+  stack: [],            // 预览下钻路径（词名数组）
+  activeWord: '',       // 预览高亮词
+  selected: null,       // 树中选中节点路径（子索引数组）
+  clipboard: null,
+  multiSel: {},         // 批量勾选：pathKey(path) -> true
+  history: [], histIdx: -1,
+  collapse: {},         // 树折叠状态 pathKey -> bool
+  opts: { compact: true, omitEmptyRelation: true }
+};
+
+/* ============================================================
+ * buildMapSVG 渲染（从 cet6_quiz.html 逐字移植，仅改 2 处 onclick 回调名）
+ * ============================================================ */
+var GMAP_REL_COLORS = {
+  '扩': 'var(--green)', '同根': 'var(--blue)', '近义': 'var(--orange)',
+  '相关': 'var(--text2)', '形近': 'var(--pink)', '加前缀': '#0891b2',
+  '反义': 'var(--red)', '拆分': 'var(--blue)', '合成': 'var(--green)'
+};
+/* 自定义 relation 的颜色：醒目紫罗兰，避免之前近白的浅灰几乎看不见 */
+var GMAP_REL_CUSTOM_COLOR = '#a855f7';
+function gmapRelDashed(rel) { return (rel === '形近' || rel === '反义'); }
+
+function gmapCenterLines(label, isWord) {
+  var fs = isWord ? 15 : 13, maxW = isWord ? 90 : 58;
+  function w(s) { var r = 0; for (var k = 0; k < s.length; k++) r += (s.charCodeAt(k) > 255 ? 1 : 0.55) * fs; return r; }
+  if (w(label) <= maxW) return [label];
+  var cut = 0;
+  while (cut < label.length && w(label.slice(0, cut + 1)) <= maxW * 2) cut++;
+  var head = label.slice(0, Math.max(cut, 1));
+  var best = -1, bd = Infinity;
+  for (var k = 1; k < head.length; k++) {
+    var lw = w(head.slice(0, k)), rw = w(head.slice(k));
+    if (lw > maxW || rw > maxW) continue;
+    var d = Math.abs(lw - rw);
+    if (d < bd) { bd = d; best = k; }
+  }
+  var pk = best > 0 ? best : Math.ceil(head.length / 2);
+  return [head.slice(0, pk).trim(), head.slice(pk).trim()];
+}
+
+function gmapCenterLayout(label, isWord) {
+  function w(s, f) { var r = 0; for (var k = 0; k < s.length; k++) r += (s.charCodeAt(k) > 255 ? 1 : 0.55) * f; return r; }
+  if (!isWord) {
+    var lines = gmapCenterLines(label, false);
+    var maxW = 0;
+    for (var k = 0; k < lines.length; k++) { var ww = w(lines[k], 13); if (ww > maxW) maxW = ww; }
+    return { lines: lines, fs: 13, r: Math.max(36, Math.ceil(maxW / 2) + 9), lh: 18 };
+  }
+  var fs = 15;
+  while (fs > 13 && w(label, fs) > 86) fs--;
+  var r = Math.max(30, Math.ceil(w(label, fs) / 2) + 10);
+  if (r > 68) { fs = Math.max(9, Math.floor(fs * 68 / r)); r = Math.max(30, Math.ceil(w(label, fs) / 2) + 10); }
+  return { lines: [label], fs: fs, r: r, lh: fs + 3 };
+}
+
+/* relation 文本自适应：
+ * 横向宽度预算 = 相邻两条连线在 relD 半径处的弧长（防止盖到两侧节点/文字）；
+ * 纵向高度预算 = 中心圆边缘到节点圆边缘的环形空隙（约 30px）；
+ * 超过预算时优先换行，再自动缩小字号，最后才截断加省略号（全文本放 <title> 悬停可见）。 */
+function relTextWidth(s, fs) {
+  var r = 0;
+  for (var k = 0; k < s.length; k++) r += (s.charCodeAt(k) > 255 ? 1 : 0.55) * fs;
+  return r;
+}
+function wrapRelLines(s, maxW, fs) {
+  var lines = [], cur = '';
+  var tokens = String(s).split(/(\s+)/);
+  function pushLine(t) { var x = String(t).trim(); if (x) lines.push(x); }
+  for (var i = 0; i < tokens.length; i++) {
+    var tk = tokens[i];
+    if (!tk) continue;
+    if (relTextWidth(cur + tk, fs) <= maxW) { cur += tk; continue; }
+    if (cur) { pushLine(cur); cur = ''; }
+    while (tk.length) {
+      var take = 0;
+      while (take < tk.length && relTextWidth(tk.slice(0, take + 1), fs) <= maxW) take++;
+      if (!take) take = 1;
+      pushLine(tk.slice(0, take));
+      tk = tk.slice(take);
+    }
+  }
+  if (cur) pushLine(cur);
+  return lines.length ? lines : [String(s)];
+}
+/* 标签矩形(宽 2·hw × 高 H，中心在标签位置)到圆心(相对偏移 offX/offY)的最小距离 ≥ r 时，
+ * 二分求出允许的最大半宽 hw：矩形越大、离圆心越近 → 约束单调，二分安全。 */
+function maxHwForCircle(offX, offY, r, H2) {
+  var lo = 0, hi = 96;
+  for (var k = 0; k < 24; k++) {
+    var mid = (lo + hi) / 2;
+    var nx = Math.max(-mid, Math.min(mid, offX));
+    var ny = Math.max(-H2, Math.min(H2, offY));
+    var dx = offX - nx, dy = offY - ny;
+    if (Math.sqrt(dx * dx + dy * dy) >= r) lo = mid; else hi = mid;
+  }
+  return lo;
+}
+
+/* 标签在高度 H 下，避开「自身节点圆」和「中心圆」能允许的最大半宽 */
+function gmapRelHalfWidth(relD, R, ang, centerR, H) {
+  var cosT = Math.cos(ang), sinT = Math.sin(ang);
+  var H2 = H / 2;
+  var hwNode = maxHwForCircle((R - relD) * cosT, (R - relD) * sinT, 16, H2);
+  var hwCenter = maxHwForCircle(-relD * cosT, -relD * sinT, centerR + 2, H2);
+  return Math.max(4, Math.min(hwNode, hwCenter));
+}
+
+function layoutRelLabel(rel, n, relD, R, centerR, ang) {
+  var wedgeHalf = relD * Math.sin(Math.PI / n) * 0.82;   // 相邻节点夹角（切线方向）预算
+  var band = 30;   // 中心圆 ↔ 节点圆之间的径向空隙
+  var fs = 9.5, lines = [rel], lh = fs + 3;
+  for (; fs >= 6.5; fs -= 0.5) {
+    lh = fs + 3;
+    var maxLines = Math.max(1, Math.floor(band / lh));
+    lines = wrapRelLines(rel, 96, fs);
+    if (lines.length > maxLines) lines = lines.slice(0, maxLines);
+    // 行宽 ↔ 标签高度 ↔ 可用半宽 相互耦合，迭代收敛
+    for (var it = 0; it < 6; it++) {
+      var H = lines.length * lh + 3;
+      var mh = Math.min(wedgeHalf, gmapRelHalfWidth(relD, R, ang, centerR, H));
+      var newLines = wrapRelLines(rel, mh * 2, fs);
+      if (newLines.length > maxLines) newLines = newLines.slice(0, maxLines);
+      if (newLines.join('\n') === lines.join('\n')) break;
+      lines = newLines;
+    }
+    var Hf = lines.length * lh + 3;
+    var mhf = Math.min(wedgeHalf, gmapRelHalfWidth(relD, R, ang, centerR, Hf));
+    var widest = Math.max.apply(null, lines.map(function(l){ return relTextWidth(l, fs); }));
+    if (widest / 2 <= mhf + 0.5) break;   // 本次字号已放得下
+  }
+  // 兜底：按最终可用宽度全量换行，若行数超出径向容量 → 省略号截断（全文在 <title> 里可悬停查看）
+  var maxLinesF = Math.max(1, Math.floor(band / (fs + 3)));
+  var Hf2 = lines.length * (fs + 3) + 3;
+  var mhf2 = Math.min(wedgeHalf, gmapRelHalfWidth(relD, R, ang, centerR, Hf2));
+  var capW = Math.max(8, mhf2 * 2);
+  var fullWrapped = wrapRelLines(rel, capW, fs);
+  if (fullWrapped.length > maxLinesF) {
+    var kept = fullWrapped.slice(0, Math.max(0, maxLinesF - 1));
+    var rest = fullWrapped.slice(maxLinesF - 1).join(' ');
+    var cap = rest;
+    while (cap.length && relTextWidth(cap + '…', fs) > capW) cap = cap.slice(0, -1);
+    kept.push(cap + '…');
+    lines = kept;
+  } else {
+    lines = fullWrapped;   // 全部内容放得下，不截断
+  }
+  return { fs: fs, lines: lines, lh: fs + 3 };
+}
+function relLabelSVG(rel, mx, my, n, relD, R, centerR, ang, col) {
+  var lay = layoutRelLabel(rel, n, relD, R, centerR, ang);
+  var y0 = my - (lay.lines.length - 1) * (lay.lh / 2);
+  var s = '<text text-anchor="middle" font-size="' + lay.fs + '" paint-order="stroke" style="fill:' + col + ';stroke:var(--surface);stroke-width:3">';
+  for (var k = 0; k < lay.lines.length; k++) {
+    s += '<tspan x="' + mx + '" y="' + (y0 + k * lay.lh).toFixed(1) + '">' + esc(lay.lines[k]) + '</tspan>';
+  }
+  s += '<title>' + esc(rel) + '</title></text>';
+  return s;
+}
+
+function resolveMapPath(map, stack) {
+  var nodes = map.level1Nodes || [];
+  var centerWord = '', centerMeaning = map.group_name;
+  for (var i = 0; i < stack.length; i++) {
+    var target = stack[i], found = null;
+    for (var j = 0; j < nodes.length; j++) { if (nodes[j].word === target) { found = nodes[j]; break; } }
+    if (!found) break;
+    centerWord = found.word;
+    centerMeaning = found.meaning || found.word;
+    nodes = found.children || [];
+  }
+  return { nodes: nodes, centerWord: centerWord, centerMeaning: centerMeaning };
+}
+
+function findMapNodePath(map, word) {
+  var target = String(word).toLowerCase();
+  function search(nodes, trail) {
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      if (String(n.word).toLowerCase() === target) return trail;
+      if (n.children) {
+        var r = search(n.children, trail.concat([n.word]));
+        if (r) return r;
+      }
+    }
+    return null;
+  }
+  return search(map.level1Nodes || [], []);
+}
+
+function buildMapSVG(id, map, r, activeWord) {
+  var nodes = r.nodes;
+  var cx = 240, cy = 190;
+  var n = nodes.length;
+  if (!n) {
+    return '<div style="color:var(--text2);font-size:0.85em;padding:10px 0">末端词，无更多关联词</div>';
+  }
+  var isWord = !!r.centerWord;
+  var cText = isWord ? r.centerWord : (map.group_name || '词群');
+  var L = gmapCenterLayout(cText, isWord);
+  var centerR = L.r, cfs = L.fs, clines = L.lines, lh = L.lh;
+  var R = centerR + 51, relD = centerR + 18;
+  var svg = '<svg viewBox="0 0 480 380" style="width:100%;max-width:400px;height:auto;display:block;margin:4px auto;">';
+  for (var i = 0; i < n; i++) {
+    var ang = (2 * Math.PI * i / n) - Math.PI / 2;
+    var x = cx + R * Math.cos(ang), y = cy + R * Math.sin(ang);
+    var rel = nodes[i].relation || '';
+    var col = GMAP_REL_COLORS[rel] || GMAP_REL_CUSTOM_COLOR;
+    var dash = gmapRelDashed(rel) ? ' stroke-dasharray="4,3"' : '';
+    svg += '<line x1="' + cx + '" y1="' + cy + '" x2="' + x + '" y2="' + y + '" stroke-width="1.4" style="stroke:' + col + '"' + dash + '/>';
+    if (rel) {
+      var mx = cx + relD * Math.cos(ang), my = cy + relD * Math.sin(ang);
+      svg += relLabelSVG(rel, mx, my, n, relD, R, centerR, ang, col);
+    }
+  }
+  svg += '<circle cx="' + cx + '" cy="' + cy + '" r="' + centerR + '" style="fill:var(--accent);stroke:var(--accent2)" stroke-width="2"/>';
+  var cy0 = cy - (clines.length - 1) * (lh / 2);
+  svg += '<text text-anchor="middle" dominant-baseline="middle" font-size="' + cfs + '" font-weight="700" style="fill:#ffffff">';
+  for (var cl = 0; cl < clines.length; cl++) {
+    svg += '<tspan x="' + cx + '" y="' + (cy0 + cl * lh) + '">' + clines[cl] + '</tspan>';
+  }
+  svg += '</text>';
+  for (var j = 0; j < n; j++) {
+    var w = nodes[j];
+    var ang2 = (2 * Math.PI * j / n) - Math.PI / 2;
+    var x2 = cx + R * Math.cos(ang2), y2 = cy + R * Math.sin(ang2);
+    var txR = R + Math.max(38, Math.round(String(w.word).length * 2.9) + 27);
+    var tx = cx + txR * Math.cos(ang2), ty = cy + txR * Math.sin(ang2);
+    var isActive = activeWord && (w.word.toLowerCase() === activeWord.toLowerCase());
+    var hasCh = !!(w.children && w.children.length);
+    var escW = String(w.word).replace(/'/g, "\\'");
+    var tip = w.word + (w.phonetic ? ' ' + w.phonetic : '') + (w.meaning ? ' ' + w.meaning : '');
+    // 仅改两处回调：groupMapDrill->editorDrill, groupMapSpeak->editorSelectWord
+    var drillClick = 'editorDrill(\'' + id + '\',\'' + escW + '\',' + (hasCh ? 1 : 0) + ')';
+    var speakClick = 'editorSelectWord(\'' + id + '\',\'' + escW + '\')';
+    svg += '<g onclick="' + drillClick + '" style="cursor:pointer">' +
+      '<title>' + tip + '</title>' +
+      '<circle cx="' + x2 + '" cy="' + y2 + '" r="' + (isActive ? 17 : 15) + '" style="fill:' + (isActive ? 'var(--accent)' : 'var(--surface2)') + ';stroke:var(--accent)" stroke-width="' + (isActive ? 2.6 : 1.6) + '"/>' +
+      (hasCh ? '<text x="' + x2 + '" y="' + (y2 - 11) + '" text-anchor="middle" font-size="9" style="fill:var(--accent2)">▾</text>' : '') +
+      '</g>';
+    var wText = String(w.word);
+    var tCol = isActive ? '#ffffff' : 'var(--text)';
+    var tStk = isActive ? 'rgba(0,0,0,0.6)' : 'none';
+    var tW = isActive ? '2.5' : '0';
+    svg += '<text x="' + tx + '" y="' + ty + '" text-anchor="middle" dominant-baseline="middle" font-size="10.5" font-weight="' + (isActive ? 700 : 500) + '" paint-order="stroke" style="fill:' + tCol + ';stroke:' + tStk + ';stroke-width:' + tW + ';cursor:pointer" onclick="' + speakClick + '" title="' + tip.replace(/"/g, '&quot;') + '（点击朗读发音）">' + wText + '</text>';
+  }
+  svg += '</svg>';
+  return svg;
+}
+
+/* 预览交互（编辑器版下钻/选中） */
+function editorDrill(id, nodeWord, hasChildren) {
+  if (hasChildren) {
+    state.stack.push(nodeWord);
+    renderPreview();
+    renderTree();
+  }
+}
+function editorBack() {
+  if (!state.stack.length) return;
+  state.stack.pop();
+  renderPreview();
+  renderTree();
+}
+function editorSelectWord(id, nodeWord) {
+  // 按词反查路径，选中树节点
+  var map = { group_name: state.groupName, level1Nodes: state.level1Nodes };
+  var trail = findMapNodePath(map, nodeWord);
+  if (trail !== null) {
+    var path = [];
+    var nodes = state.level1Nodes;
+    for (var i = 0; i < trail.length; i++) {
+      var idx = nodes.findIndex(function(n){ return n.word === trail[i]; });
+      if (idx < 0) break;
+      path.push(idx);
+      nodes = nodes[idx].children;
+    }
+    // 找到目标词本身的索引
+    var last = nodes.findIndex(function(n){ return String(n.word).toLowerCase() === String(nodeWord).toLowerCase(); });
+    if (last >= 0) path.push(last);
+    state.selected = path.length ? path : null;
+    expandPath(path);
+    renderTree();
+  }
+  // 发声（try/catch 保护）
+  try { if ('speechSynthesis' in window && nodeWord) speechSynthesis.speak(new SpeechSynthesisUtterance(nodeWord)); } catch(e){}
+}
+function speakWord(word) {
+  try { if ('speechSynthesis' in window && word) speechSynthesis.speak(new SpeechSynthesisUtterance(word)); } catch(e){}
+}
+
+/* ============================================================
+ * 词根词缀规则库（内联）
+ * ============================================================ */
+var ROOTS = [
+  { root:'spect', cn:'看', words:['spectacle','spectator','inspect','respect','prospect','retrospect','expect','suspect','aspect','perspective','circumspect'] },
+  { root:'gress', cn:'行走', words:['progress','progressive','aggressive','aggression','congress','congressional','regress','transgress'] },
+  { root:'dict', cn:'说/断言', words:['dictate','dictator','dictionary','predict','predictable','contradict','verdict','indicate','dedicate','dictation'] },
+  { root:'ven/vent', cn:'来', words:['convene','convention','intervene','venture','adventure','event','prevent','invent','avenue','revenue','advent'] },
+  { root:'vis/vid/view', cn:'看', words:['visible','vision','visual','visit','revise','supervise','evidence','provide','television','view','preview','review'] },
+  { root:'fer', cn:'带来/拿', words:['transfer','confer','refer','infer','prefer','offer','defer','fertile','fertilizer','interfere'] },
+  { root:'tain', cn:'拿住', words:['contain','maintain','retain','sustain','attain','obtain','detain','entertain','pertain'] },
+  { root:'mit/mis', cn:'送', words:['transmit','submit','commit','permit','admit','mission','commission','missile','dismiss','emit'] },
+  { root:'sist', cn:'站立', words:['assist','resist','persist','consist','insist','exist','assistant','resistance'] },
+  { root:'tract', cn:'拉', words:['tractor','attract','extract','abstract','contract','subtract','distract','attraction'] },
+  { root:'press', cn:'压', words:['press','pressure','compress','depress','express','impress','suppress','oppress','depression','impression'] },
+  { root:'ject', cn:'扔', words:['project','inject','reject','object','subject','eject','trajectory'] },
+  { root:'duce/duct', cn:'引导', words:['produce','product','conduct','introduce','reduce','deduce','induce','productive','conductor'] },
+  { root:'port', cn:'携带', words:['port','porter','import','export','support','transport','portable','report','deport'] },
+  { root:'form', cn:'形状', words:['form','formal','inform','reform','transform','conform','uniform','formation','information'] },
+  { root:'vers/vert', cn:'转', words:['convert','reverse','diverse','diversify','version','vertical','advertise','controversy','universe'] },
+  { root:'pend/pens', cn:'悬挂/称量', words:['pendulum','depend','independent','suspend','appendix','expense','expensive','pension'] },
+  { root:'pos/pon', cn:'放置', words:['position','compose','oppose','propose','suppose','deposit','opponent','component','postpone'] },
+  { root:'sign', cn:'标记', words:['sign','signal','signify','signature','design','assign','resign','insignificant'] },
+  { root:'sume/sum', cn:'拿取', words:['assume','consume','resume','presume','sum','summary','summarise','summit'] },
+  { root:'serve/serv', cn:'服务/保存', words:['serve','service','servant','preserve','reserve','conserve','observe','deserve','conservative'] },
+  { root:'tend/tens/tent', cn:'伸展/倾向', words:['tend','tendency','attend','contend','intend','extend','intense','extensive','tension'] },
+  { root:'tract/treat', cn:'拉/处理', words:['treat','treaty','treatment','retreat','trait','entreat','tractor'] },
+  { root:'cede/ceed/cess', cn:'走/让', words:['proceed','process','procedure','exceed','succeed','success','precede','predecessor','recede'] },
+  { root:'pose', cn:'放置', words:['pose','compose','expose','impose','oppose','propose','deposit','position'] },
+  { root:'vale/val', cn:'强壮/价值', words:['value','valid','invalid','available','prevail','prevalent','evaluate','equivalent'] },
+  { root:'vary/ver', cn:'变化', words:['vary','various','variable','variety','variation','invariably'] },
+  { root:'cede/cess', cn:'让/走', words:['access','accessory','excess','process','successor','concession','proceed'] },
+  { root:'grad/gress', cn:'步', words:['grade','gradual','graduate','degree','degrade','upgrade','progress'] },
+  { root:'graph/gram', cn:'写/画', words:['graph','diagram','grammar','telegram','paragraph','photograph','autograph'] },
+  { root:'scrib/script', cn:'写', words:['describe','description','prescribe','subscribe','inscribe','manuscript','script'] },
+  { root:'litera/liter', cn:'文字', words:['literary','literature','literal','literate','illiterate','literacy'] },
+  { root:'loqu/locut', cn:'说话', words:['eloquent','colloquial','loquacious','interlocutor'] },
+  { root:'manu/man', cn:'手', words:['manual','manufacture','manuscript','manipulate','manage','manner'] },
+  { root:'mob/mov/mot', cn:'动', words:['move','movement','mobile','mobilize','motion','motor','promote','remove','automobile','emotion'] },
+  { root:'nav', cn:'船', words:['navy','naval','navigate','navigation','circumnavigate'] },
+  { root:'norm', cn:'规则', words:['normal','abnormal','norm','enormous','normally','enormity'] },
+  { root:'nov', cn:'新', words:['novel','novelty','novice','innovate','innovation','renovate'] },
+  { root:'oper', cn:'工作', words:['operate','operation','cooperate','cooperation','operator'] },
+  { root:'opt', cn:'选择/眼睛', words:['opt','option','optional','optimal','optimistic','adopt','optical'] },
+  { root:'organ', cn:'器官/组织', words:['organ','organize','organization','organise'] },
+  { root:'part', cn:'部分', words:['part','partial','participate','particle','particular','partner','apart','department'] },
+  { root:'pass', cn:'通过/热情', words:['pass','passage','passenger','passive','passion','compassion','surpass'] },
+  { root:'pat/pass', cn:'忍耐', words:['patient','patience','passion','compassion','impatient','compatible'] },
+  { root:'ped', cn:'脚', words:['pedal','pedestrian','expedition','impede','centipede'] },
+  { root:'pel/puls', cn:'推', words:['compel','expel','propel','repel','impulse','compulsion','pulse'] },
+  { root:'pen/pun', cn:'惩罚', words:['penalty','punish','punishment','penance','impunity'] },
+  { root:'pet', cn:'追求', words:['compete','competition','competitive','appetite','petition','repeat','competent'] },
+  { root:'phil', cn:'爱', words:['philosophy','philosopher','philanthropy','bibliophile'] },
+  { root:'phon', cn:'声音', words:['phone','telephone','symphony','phonetic','microphone'] },
+  { root:'plic/ply/plex', cn:'折叠/重叠', words:['complicate','complicated','implicate','apply','imply','reply','supply','complex','complexion','perplex','explicit'] },
+  { root:'pon/pos', cn:'放', words:['postpone','component','compound','opponent','proposal','purpose'] },
+  { root:'popul', cn:'人民', words:['population','popular','popularity','populate'] },
+  { root:'port', cn:'门/搬运', words:['port','import','export','porch','portrait','opportunity'] },
+  { root:'pos', cn:'放置', words:['position','positive','compose','deposit','expose'] },
+  { root:'preci', cn:'价格/价值', words:['precious','appreciate','depreciate','praise','prize'] },
+  { root:'prim', cn:'第一/最初', words:['prime','primary','primitive','primal','primeval'] },
+  { root:'priv', cn:'单独', words:['private','privilege','privacy','deprive','privy'] },
+  { root:'prob/prov', cn:'测试', words:['prove','proof','approve','improve','disprove','probe'] },
+  { root:'quer/quest/quir', cn:'询问', words:['question','request','quest','query','inquire','inquiry','acquire','require','conquer','questionnaire','prerequisite'] },
+  { root:'qui/quit', cn:'安静/离开', words:['quiet','quit','quite','acquit','quiescent'] },
+  { root:'radi', cn:'光线/根', words:['radiate','radiation','radical','radioactive','radius','radiant'] },
+  { root:'rect/reg', cn:'直/统治', words:['correct','direct','erect','regular','regulate','regime','region','reign'] },
+  { root:'rupt', cn:'破裂', words:['rupture','abrupt','corrupt','erupt','interrupt','disrupt','bankrupt'] },
+  { root:'sci', cn:'知道', words:['science','scientific','conscious','conscience','omniscient'] },
+  { root:'secut/sequ', cn:'跟随', words:['consequence','sequence','subsequent','pursue','persecute','prosecute','execute'] },
+  { root:'sed/sid/sess', cn:'坐', words:['sit','seat','session','preside','resident','reside','subside','assess','possess','siege'] },
+  { root:'sens/sent', cn:'感觉', words:['sense','sensible','sensitive','sensation','sentiment','consent','resent','nonsense','sentence'] },
+  { root:'senti', cn:'感觉', words:['sentiment','sentimental','resent','consent','dissent'] },
+  { root:'sert', cn:'放置', words:['assert','insert','desert','exert','series'] },
+  { root:'sol', cn:'单独/太阳', words:['sole','solo','solitary','solar','isolate','desolate','absolute'] },
+  { root:'solv/solu', cn:'松开/解决', words:['solve','solution','resolve','dissolve','absolute','solvent','soluble'] },
+  { root:'soph', cn:'智慧', words:['sophisticated','philosophy','sophomore'] },
+  { root:'spir', cn:'呼吸', words:['spirit','inspire','expire','respire','conspire','aspire','perspire'] },
+  { root:'sta/stat/stit', cn:'站立', words:['stand','stable','station','status','statue','estate','instant','substitute','constitute','restore'] },
+  { root:'struct', cn:'建造', words:['structure','construct','instruct','destruct','infrastructure','obstruct'] },
+  { root:'tact/tang', cn:'接触', words:['contact','tact','tactics','tangible','intact','contagious'] },
+  { root:'tail', cn:'切割', words:['tailor','detail','retail','entail'] },
+  { root:'tempo/tempor', cn:'时间', words:['temporary','temporal','contemporary','tempo','temporary','extempore'] },
+  { root:'tempt', cn:'尝试', words:['attempt','tempt','temptation','contempt'] },
+  { root:'ten', cn:'持有', words:['contain','tenant','tenure','content','maintain','retain','sustain'] },
+  { root:'terr', cn:'土地/恐惧', words:['territory','terrain','terrible','terrify','terror','deterrent'] },
+  { root:'text', cn:'编织/文本', words:['text','textile','texture','context','pretext'] },
+  { root:'therm', cn:'热', words:['thermal','thermometer','thermostat','hypothermia'] },
+  { root:'tort/tors', cn:'扭曲', words:['torture','torment','distort','contort','extort'] },
+  { root:'tour/turn', cn:'转', words:['tour','tourist','return','turnover','turnout'] },
+  { root:'tract', cn:'拉', words:['tractor','abstract','attract','contract','extract','subtract','traction'] },
+  { root:'trib', cn:'给', words:['tribute','contribute','distribute','attribute','tributary'] },
+  { root:'turb', cn:'搅动', words:['turbine','disturb','perturb','turbulent','turbulence'] },
+  { root:'vac/van/void', cn:'空', words:['vacant','vacuum','evacuate','vacation','vanish','vain','avoid','devoid'] },
+  { root:'vad/vas', cn:'走', words:['invade','invasion','evade','evasion','pervade'] },
+  { root:'vali/val', cn:'价值', words:['value','valid','evaluate','prevail','prevalent','available'] },
+  { root:'ven/vent', cn:'来', words:['convene','event','adventure','prevent','invent','avenue','revenue'] },
+  { root:'ver', cn:'真实', words:['very','verify','verdict','veritable','avert'] },
+  { root:'vert/vers', cn:'转', words:['advertise','convert','diverse','reverse','controversy','universe','anniversary'] },
+  { root:'via/vi', cn:'路', words:['via','deviate','obvious','previous','trivial','impervious'] },
+  { root:'vict/vinc', cn:'征服', words:['victory','victorious','convince','evict','invincible'] },
+  { root:'viv/vit', cn:'生命', words:['vivid','vital','vitality','survive','revive','vitamin'] },
+  { root:'voc/vok', cn:'声音/呼喊', words:['vocal','vocabulary','advocate','provoke','evoke','revoke','vocation'] },
+  { root:'vol', cn:'意志/意愿', words:['voluntary','volunteer','benevolent','malevolent','evolution'] },
+  { root:'volv/volut', cn:'滚/转', words:['evolve','evolution','revolve','revolution','involve','volume'] },
+  { root:'zoo', cn:'动物', words:['zoo','zoology','zoological'] },
+  { root:'aqua', cn:'水', words:['aquarium','aquatic','aqueduct','subaquatic'] },
+  { root:'astro', cn:'星', words:['astronaut','astronomy','astronomer','astrology'] },
+  { root:'bio', cn:'生命', words:['biology','biography','antibiotic','biologist','symbiosis'] },
+  { root:'chron', cn:'时间', words:['chronic','chronicle','synchronize','chronology','chronological'] },
+  { root:'civ', cn:'公民', words:['civil','civilize','civilization','civilian'] },
+  { root:'cosm', cn:'宇宙/秩序', words:['cosmic','cosmopolitan','microcosm'] },
+  { root:'cred', cn:'相信', words:['credit','credible','incredible','credentials','creditor'] },
+  { root:'cult', cn:'种植/崇拜', words:['cultivate','culture','agriculture','cult'] },
+  { root:'cur', cn:'关心/跑', words:['care','curious','curiosity','accurate','secure','cure','curriculum','current'] },
+  { root:'cycl', cn:'圆', words:['cycle','bicycle','recycle','encyclopedia','cyclone'] },
+  { root:'demo', cn:'人民', words:['democracy','democratic','democrat','epidemic','demographic'] },
+  { root:'dign', cn:'价值/尊严', words:['dignity','dignify','indignant','dignitary','condign'] },
+  { root:'doc/doct', cn:'教', words:['doctor','doctrine','document','documentary','indoctrinate'] },
+  { root:'domin', cn:'统治', words:['dominant','dominate','domination','predominate','domain','domestic'] },
+  { root:'don/dot', cn:'给予', words:['donate','donation','donor','anecdote','pardon'] },
+  { root:'dur', cn:'持续', words:['during','durable','duration','endure','endurance'] },
+  { root:'ego', cn:'我', words:['ego','egoism','egotistical'] },
+  { root:'equ', cn:'相等', words:['equal','equality','equation','adequate','equivalent','equity','equate'] },
+  { root:'ess/est', cn:'存在/是', words:['essence','essential','interest','interested','disinterest'] },
+  { root:'fac/fic/fact', cn:'做', words:['factory','factor','fact','manufacture','faculty','efficient','sufficient','deficient','facilitate','facility'] },
+  { root:'fend/fens', cn:'打击', words:['defend','defense','offend','offense','fence','fend'] },
+  { root:'fin', cn:'结束/界限', words:['final','finish','finance','financial','infinite','define','definite','confine','refine'] },
+  { root:'firm', cn:'坚固', words:['firm','confirm','affirm','infirm','firmly'] },
+  { root:'flect/flex', cn:'弯曲', words:['reflect','reflection','flexible','inflect','deflect','circumflex'] },
+  { root:'flu/flux', cn:'流动', words:['fluent','fluid','influence','affluent','influenza','fluctuate','flush','flux'] },
+  { root:'fort', cn:'强壮', words:['fort','fortress','comfort','effort','force','enforce','reinforce','fortify'] },
+  { root:'frag/fract', cn:'打破', words:['fragment','fragile','fraction','fracture','infringe','fragrant'] },
+  { root:'fug', cn:'逃', words:['fugitive','refuge','refugee','centrifugal'] },
+  { root:'fus', cn:'熔化/流', words:['fuse','fusion','confuse','diffuse','infuse','refuse','suffuse'] },
+  { root:'gen', cn:'出生/种类', words:['generate','generation','generous','genius','genuine','gene','general','genetic','ingenious','degenerate'] },
+  { root:'geo', cn:'地球', words:['geography','geology','geometry','geometric','geopolitics'] },
+  { root:'gest', cn:'携带/举止', words:['gesture','digest','suggest','congestion','ingest'] },
+  { root:'gnos/gnit', cn:'知道', words:['know','knowledge','recognise','recognition','diagnose','ignore','ignorant','cognitive'] },
+  { root:'grad', cn:'步/级', words:['grade','gradual','graduate','degrade','upgrade','ingredient'] },
+  { root:'grat', cn:'感激', words:['grateful','gratitude','congratulate','gratify','ingrate'] },
+  { root:'grav', cn:'重', words:['gravity','grave','grieve','aggravate','gravitate'] },
+  { root:'habit', cn:'居住/习惯', words:['habit','habitual','inhabit','inhabitant','exhibit','prohibit'] },
+  { root:'hap', cn:'机会/运气', words:['happen','perhaps','mishap','hapless','haphazard'] },
+  { root:'here/hes', cn:'粘附', words:['adhere','adhesive','cohere','coherent','hesitate','inherent'] },
+  { root:'horr', cn:'发抖', words:['horror','horrible','horrify','abhor'] },
+  { root:'hospit/host', cn:'客人', words:['hospital','hospitality','host','hostel','hospitable'] },
+  { root:'ide/idea', cn:'想法', words:['idea','ideal','ideology','ideological'] },
+  { root:'ign', cn:'火', words:['ignite','ignition','igneous'] },
+  { root:'jur/jus', cn:'法律/正义', words:['jury','justice','justify','injury','injustice','jurisdiction'] },
+  { root:'labor', cn:'劳动', words:['labor','laboratory','collaborate','elaborate','laborious'] },
+  { root:'lat', cn:'携带', words:['translate','relation','relate','correlate','legislation','collateral'] },
+  { root:'leg/lect', cn:'选择/读', words:['collect','select','elect','lecture','neglect','intellectual','elegant','legend'] },
+  { root:'lex/lect', cn:'读', words:['lexicon','lecture','dialect','intellect'] },
+  { root:'liber', cn:'自由', words:['liberal','liberate','liberty','liberation','libertine'] },
+  { root:'lingu', cn:'语言', words:['language','linguistic','linguist','bilingual'] },
+  { root:'lumin', cn:'光', words:['illuminate','luminous','luminary','illumination'] },
+  { root:'magn', cn:'大', words:['magnificent','magnify','magnitude','magnate','magnet'] },
+  { root:'mal', cn:'坏', words:['malady','malnutrition','malfunction','malpractice','malicious'] },
+  { root:'mand', cn:'命令', words:['command','demand','mandate','mandatory','recommend'] },
+  { root:'mani/manu', cn:'手', words:['manipulate','manual','manufacture','manifest'] },
+  { root:'medi', cn:'中间', words:['medium','media','immediate','mediate','intermediate','medieval'] },
+  { root:'memor', cn:'记忆', words:['memory','memorise','memorial','commemorate','remember'] },
+  { root:'ment', cn:'心智', words:['mental','mention','comment','commentary'] },
+  { root:'merc', cn:'交易', words:['merchant','merchandise','commerce','commercial','mercy','merciful'] },
+  { root:'meter/metr', cn:'测量', words:['meter','metric','diameter','thermometer','symmetry','geometry'] },
+  { root:'min', cn:'小/少', words:['minimum','minor','minority','minute','diminish','minimize','miniature'] },
+  { root:'mir', cn:'惊奇/看', words:['miracle','mirror','admire','marvel','marvelous'] },
+  { root:'mod', cn:'方式/尺度', words:['mode','model','moderate','modern','modify','accommodate','commodity'] },
+  { root:'mon', cn:'提醒/警告', words:['monitor','monument','admonish','summon','money','monetary'] },
+  { root:'mort', cn:'死', words:['mortal','immortal','mortgage','moribund','postmortem'] },
+  { root:'mut', cn:'改变', words:['mutual','mutate','mutation','commute','immutable','transmute'] },
+  { root:'nat', cn:'出生', words:['native','nation','national','nature','natural','innate','international','renaissance'] },
+  { root:'neg', cn:'否定', words:['negate','negative','neglect','negotiate','negligible'] },
+  { root:'nom', cn:'名字', words:['name','nominal','nominate','nomination','anonymous','synonym','antonym'] },
+  { root:'nounce/nunci', cn:'报告/宣布', words:['announce','announcement','pronounce','renounce','denounce'] },
+  { root:'nutri', cn:'营养', words:['nutrition','nutrient','malnutrition','nourish'] },
+  { root:'onym', cn:'名字', words:['anonymous','synonym','antonym','pseudonym'] },
+  { root:'opt', cn:'选择', words:['option','optimal','optimum','optimistic','adopt'] },
+  { root:'ordin', cn:'顺序', words:['order','ordinary','extraordinary','coordinate','subordinate','disorder'] },
+  { root:'ori', cn:'升起/开始', words:['origin','original','originate','orient','orientation','disorient'] },
+  { root:'para', cn:'在旁边/超越', words:['parallel','paragraph','parade','paradox','paradise','parameter','parasite'] },
+  { root:'pathy', cn:'感情/疾病', words:['sympathy','sympathetic','pathetic','apathy','pathology','antipathy'] },
+  { root:'patr', cn:'父亲/祖国', words:['patriot','patriotic','patriotism','compatriot','patron'] },
+  { root:'ped/pod', cn:'脚', words:['pedal','pedestrian','expedition','pediatric'] },
+  { root:'pend', cn:'悬挂', words:['pendant','pendulum','depend','suspend','appendix','expend','expense'] },
+  { root:'per', cn:'尝试/危险', words:['experience','experiment','expert','peril','empirical'] },
+  { root:'peri', cn:'周围', words:['perimeter','period','peripheral','peripatetic'] },
+  { root:'petit', cn:'追求/寻求', words:['petition','appetite','compete','competition','petition'] },
+  { root:'phil', cn:'爱', words:['philosophy','philosopher','philanthropist'] },
+  { root:'plac', cn:'使满意', words:['place','placebo','placate','implacable','complacent'] },
+  { root:'plen/plet', cn:'充满', words:['plenty','plentiful','complete','complement','implement','supplement','replete'] },
+  { root:'plur/plus', cn:'更多', words:['plural','plus','surplus','nonplus'] },
+  { root:'poli/polis', cn:'城市/国家', words:['police','policy','politics','political','metropolis','cosmopolitan'] },
+  { root:'pon', cn:'放', words:['component','compound','opponent','postpone','proponent'] },
+  { root:'popul', cn:'人民', words:['population','popular','popularity','populous','depopulate'] },
+  { root:'port', cn:'搬运', words:['port','porter','import','export','portable','transport','portfolio'] },
+  { root:'poss/pot', cn:'有能力', words:['possible','possible','potential','power','potent','omnipotent','possess'] },
+  { root:'pract', cn:'实践', words:['practice','practical','practicable','practitioner','malpractice'] },
+  { root:'prehend', cn:'抓住', words:['comprehend','apprehend','prehension','comprehensive'] },
+  { root:'press', cn:'压', words:['press','compress','depress','express','impress','suppress','oppress','pressure'] },
+  { root:'prim', cn:'最初', words:['primary','prime','primitive','primate','primer'] },
+  { root:'prin', cn:'第一/主要', words:['prince','principal','principle','primal'] },
+  { root:'priy/priv', cn:'私人的', words:['private','privacy','privilege','deprive'] },
+  { root:'prob/prov', cn:'证明', words:['probable','probability','prove','approve','improve','probe'] },
+  { root:'punct', cn:'点', words:['point','punctual','punctuate','appoint','disappoint','punch'] },
+  { root:'pur', cn:'纯净', words:['pure','purify','purist','depurate'] },
+  { root:'quest', cn:'询问', words:['question','quest','request','quest','query'] },
+  { root:'quiet/quit', cn:'安静', words:['quiet','quit','acquit','require','inquire'] },
+  { root:'radi', cn:'光线', words:['radiate','radiation','radiant','radioactive','radius'] },
+  { root:'rap', cn:'抓住', words:['rapid','rape','rapt','rapture','usurp'] },
+  { root:'ras/raz', cn:'刮', words:['rase','razor','erase','abrasive'] },
+  { root:'rat', cn:'计算/理性', words:['rate','ratio','rational','irrational','ration','reason'] },
+  { root:'re', cn:'事物/回', words:['real','reality','realize','realise','realm'] },
+  { root:'rect', cn:'直', words:['correct','correct','direct','erect','rectangle','rectify'] },
+  { root:'reg', cn:'统治', words:['regent','regime','region','regulate','regula','regal'] },
+  { root:'rel', cn:'放松', words:['relax','release','relent','relentless'] },
+  { root:'rem', cn:'遗留', words:['remain','remnant','remanent'] },
+  { root:'rend', cn:'给', words:['render','surrender','rendition'] },
+  { root:'resist', cn:'站立/抵抗', words:['resist','resistance','irresistible','assist'] },
+  { root:'rhythm', cn:'节奏', words:['rhythm','rhythmic','arrhythmia'] },
+  { root:'rid', cn:'笑', words:['ridicule','ridiculous','deride'] },
+  { root:'rig', cn:'僵硬/灌溉', words:['rigid','rigor','rigorous','irrigate'] },
+  { root:'riv', cn:'河/竞争', words:['river','rival','rivalry','derive','arrive'] },
+  { root:'rog', cn:'问', words:['interrogate','arrogant','arrogate','prerogative','abrogate'] },
+  { root:'rot', cn:'转', words:['rotate','rotation','rotary','rotund'] },
+  { root:'rud', cn:'粗糙', words:['rude','rudimentary','erudite'] },
+  { root:'rupt', cn:'破裂', words:['rupture','abrupt','erupt','interrupt','disrupt','corrupt'] },
+  { root:'sacr', cn:'神圣', words:['sacred','sacrifice','consecrate','desecrate'] },
+  { root:'sag/sap', cn:'味道/智慧', words:['sagacious','sage','sapid','insipid','sapient'] },
+  { root:'sal', cn:'盐/跳', words:['salt','salary','salad','salient','assail','sally'] },
+  { root:'san', cn:'健康', words:['sane','sanitary','sanitation','insane','sanity'] },
+  { root:'sat', cn:'足够', words:['satisfy','satiate','saturate','satiety'] },
+  { root:'scal', cn:'梯子', words:['scale','escalate','escalator','ascendant'] },
+  { root:'scend', cn:'爬', words:['ascend','descend','transcend','condescend','descendant'] },
+  { root:'sci', cn:'知道', words:['science','scientific','conscious','conscience','conscientious'] },
+  { root:'scrib/script', cn:'写', words:['describe','prescribe','subscribe','script','manuscript','transcribe'] },
+  { root:'sec/sect', cn:'切割', words:['section','sector','insect','intersect','dissect','segment'] },
+  { root:'sed', cn:'坐', words:['sedentary','sediment','subside','assiduous','supersede'] },
+  { root:'sem', cn:'种子', words:['seminar','seed','seminal','disseminate'] },
+  { root:'sen', cn:'老', words:['senior','senate','senator','senile','senescent'] },
+  { root:'sens/sent', cn:'感觉', words:['sense','sensible','sensitive','sensation','sentence','sentiment'] },
+  { root:'serv', cn:'服务/保存', words:['serve','servant','service','preserve','reserve','conserve','observe','deserve'] },
+  { root:'sign', cn:'标记', words:['sign','signal','signify','signature','design','assign','resign','insignia'] },
+  { root:'simil/simul', cn:'相似', words:['similar','simile','simulate','simultaneous','assimilate','resemble'] },
+  { root:'soci', cn:'同伴', words:['social','society','associate','association','sociology'] },
+  { root:'sol', cn:'太阳/单独', words:['solar','sole','solo','solitary','isolate','solitude'] },
+  { root:'solu/solv', cn:'松开', words:['solve','solution','resolve','dissolve','solvent','absolute','soluble'] },
+  { root:'son', cn:'声音', words:['sound','sonar','resonant','dissonance','consonant'] },
+  { root:'soph', cn:'智慧', words:['sophisticated','philosophy','sophomore','sophistry'] },
+  { root:'spec/specul', cn:'看', words:['specimen','special','species','specific','speculate','spectator','inspect','respect','prospect'] },
+  { root:'spir', cn:'呼吸', words:['spirit','spiritual','inspire','expire','conspire','aspire','perspire','respire'] },
+  { root:'spond', cn:'承诺', words:['respond','response','responsible','correspond','sponsor','despondent'] },
+  { root:'st', cn:'站', words:['stand','stable','status','statue','estate','instant','distant','substance','circumstance','obstacle'] },
+  { root:'strain/strict', cn:'拉紧', words:['strain','constrain','restrain','strict','restrict','district','stringent'] },
+  { root:'struct', cn:'建造', words:['structure','construct','instruct','destruction','infrastructure','obstruct'] },
+  { root:'sum', cn:'总和', words:['sum','summary','summarize','summit','consume','assume','resume'] },
+  { root:'tact/tang', cn:'接触', words:['tact','tactful','tactics','contact','tangible','intact','tangent'] },
+  { root:'tail', cn:'切割', words:['tailor','tail','detail','retail','entail','curtail'] },
+  { root:'tain/tent', cn:'保持', words:['contain','content','maintain','retain','sustain','attain','obtain','detain','entertain'] },
+  { root:'techn', cn:'技艺', words:['technique','technical','technology','technician'] },
+  { root:'tele', cn:'远', words:['telephone','television','telegram','telescope','telepathy'] },
+  { root:'tempor', cn:'时间', words:['temporary','temporal','contemporary','tempo'] },
+  { root:'tend/tens', cn:'伸/拉', words:['tend','tendency','tendon','tension','tent','extend','intend','pretend','distend'] },
+  { root:'ten', cn:'持有', words:['tenable','tenant','tenure','tenacious','content','retention'] },
+  { root:'term', cn:'终点/边界', words:['term','terminal','terminate','determine','exterminate'] },
+  { root:'terr', cn:'土地/害怕', words:['terrace','terrain','territory','terrible','terrify','terror'] },
+  { root:'test', cn:'见证', words:['test','testify','testimony','protest','contest','attest'] },
+  { root:'text', cn:'编织', words:['text','textbook','textile','texture','context','pretext'] },
+  { root:'the', cn:'神', words:['theology','atheist','theist','pantheon','theocracy'] },
+  { root:'therm', cn:'热', words:['thermal','thermometer','thermostat'] },
+  { root:'thes/thet', cn:'放置', words:['thesis','synthesis','synthetic','hypothesis','parenthesis'] },
+  { root:'tim', cn:'害怕', words:['timid','intimidate','timorous'] },
+  { root:'toler', cn:'忍受', words:['tolerate','tolerance','intolerant','tolerable'] },
+  { root:'tom', cn:'切割', words:['atom','anatomy','tome','dichotomy'] },
+  { root:'tort', cn:'扭曲', words:['torture','torment','distort','contort','retort'] },
+  { root:'tour', cn:'转', words:['tour','tourist','tournament','detour'] },
+  { root:'tox', cn:'毒', words:['toxic','toxin','detoxify','intoxicate'] },
+  { root:'tract', cn:'拉', words:['tract','tractor','attract','contract','detract','extract','subtract','abstract'] },
+  { root:'tra', cn:'拉/痕迹', words:['track','trait','trace','train','treat','trail','traitor'] },
+  { root:'trem', cn:'颤抖', words:['tremble','tremendous','tremor','tremulous'] },
+  { root:'trib', cn:'给/分配', words:['tribute','contribute','distribute','attribute','tribunal'] },
+  { root:'turb', cn:'搅动', words:['turbulent','disturb','perturb','turbine'] },
+  { root:'ultim', cn:'最后', words:['ultimate','ultimately','ultimatum','penultimate'] },
+  { root:'uni', cn:'一', words:['unite','unity','unify','uniform','universe','university','unique','unit'] },
+  { root:'urb', cn:'城市', words:['urban','suburb','suburban','urbanize','urbane'] },
+  { root:'us/ut', cn:'使用', words:['use','usage','usual','utilize','utility','utensil','abuse','misuse'] },
+  { root:'vac/vacu', cn:'空', words:['vacant','vacate','vacuum','vacation','evacuate','vacancy'] },
+  { root:'vad/vag', cn:'走', words:['invade','invasion','evade','evasive','vagrant','vague'] },
+  { root:'val', cn:'强壮/价值', words:['valiant','value','valid','evaluate','prevail','available','equivalent'] },
+  { root:'vapor', cn:'蒸汽', words:['vapor','evaporate','vaporize'] },
+  { root:'vari', cn:'变化', words:['vary','various','variable','variety','variation','invariably'] },
+  { root:'veh', cn:'运载', words:['vehicle','vehicular','convey'] },
+  { root:'ven/vent', cn:'来', words:['venue','convene','convention','event','advent','prevent','invent','avenue','revenue'] },
+  { root:'ver', cn:'真实/转', words:['very','verify','verdict','verifiable','avert','advertise','reverse','convert','diverse','universe'] },
+  { root:'vest', cn:'衣服', words:['vest','invest','investment','investigate','divest'] },
+  { root:'vibr', cn:'振动', words:['vibrate','vibration','vibrant'] },
+  { root:'vic', cn:'村庄/变化', words:['vice','vicinity','vicissitude','vice-president'] },
+  { root:'vict/vinc', cn:'征服', words:['victor','victory','victorious','convince','convict','evict','invincible'] },
+  { root:'vig', cn:'活力', words:['vigor','vigorous','invigorate'] },
+  { root:'vit', cn:'生命', words:['vital','vitality','vitamin','vitalize','revitalize'] },
+  { root:'viv', cn:'活', words:['vivid','vivacious','survive','survival','revive','revival'] },
+  { root:'voc/vok', cn:'叫/喊', words:['vocal','voice','vocation','vocabulary','advocate','provoke','evoke','revoke','convoke'] },
+  { root:'vol', cn:'愿望/意志', words:['voluntary','volunteer','volition','benevolent','malevolent'] },
+  { root:'volv/volut', cn:'滚转', words:['evolve','evolution','revolve','revolution','involve','volume','convoluted'] },
+  { root:'vor', cn:'吃', words:['devour','voracious','carnivorous','herbivorous'] },
+  { root:'wis/wit', cn:'知道', words:['wise','wisdom','wit','witty','witness'] },
+  { root:'zym', cn:'发酵', words:['enzyme','zymology'] }
+];
+
+var PREFIXES = [
+  { p:'anti', cn:'反对', neg:true }, { p:'contra/counter', cn:'相反', neg:true },
+  { p:'un', cn:'不；反向', neg:true }, { p:'dis', cn:'不；分离', neg:true },
+  { p:'in/im/il/ir', cn:'不；进入', neg:true }, { p:'mis', cn:'错', neg:true },
+  { p:'non', cn:'非', neg:true }, { p:'de', cn:'向下；去除', neg:false },
+  { p:'re', cn:'再次；回', neg:false }, { p:'pre', cn:'在…之前', neg:false },
+  { p:'post', cn:'在…之后', neg:false }, { p:'sub', cn:'在下；次级', neg:false },
+  { p:'super/sur', cn:'在上；超', neg:false }, { p:'inter', cn:'在…之间', neg:false },
+  { p:'trans', cn:'跨越；转变', neg:false }, { p:'ex/e', cn:'向外；前任', neg:false },
+  { p:'pro', cn:'向前；支持', neg:false }, { p:'per', cn:'贯穿；完全', neg:false },
+  { p:'ab', cn:'离开；反常', neg:false }, { p:'ad', cn:'朝向', neg:false },
+  { p:'en/em', cn:'使…', neg:false }, { p:'fore', cn:'预先；前', neg:false },
+  { p:'out', cn:'向外；超过', neg:false }, { p:'over', cn:'过度；在上', neg:false },
+  { p:'under', cn:'在下；不足', neg:false }, { p:'circum', cn:'周围', neg:false },
+  { p:'co/com/con/col/cor', cn:'共同', neg:false }, { p:'extra', cn:'超越', neg:false },
+  { p:'intra', cn:'在内', neg:false }, { p:'intro', cn:'向内', neg:false },
+  { p:'macro', cn:'大', neg:false }, { p:'micro', cn:'微小', neg:false },
+  { p:'multi', cn:'多', neg:false }, { p:'semi', cn:'半', neg:false },
+  { p:'uni', cn:'一', neg:false }, { p:'bene', cn:'好', neg:false },
+  { p:'mal/male', cn:'坏', neg:true }, { p:'hypo', cn:'下', neg:false },
+  { p:'hyper', cn:'上/过度', neg:false }, { p:'synchron', cn:'同时', neg:false }
+];
+
+var SUFFIXES = [
+  { s:'tion', pos:'n' }, { s:'sion', pos:'n' }, { s:'ment', pos:'n' }, { s:'ness', pos:'n' },
+  { s:'ity', pos:'n' }, { s:'ence', pos:'n' }, { s:'ance', pos:'n' }, { s:'age', pos:'n' },
+  { s:'er', pos:'n' }, { s:'or', pos:'n' }, { s:'ist', pos:'n' }, { s:'ism', pos:'n' },
+  { s:'ure', pos:'n' }, { s:'al', pos:'adj' }, { s:'ive', pos:'adj' }, { s:'ous', pos:'adj' },
+  { s:'ful', pos:'adj' }, { s:'less', pos:'adj' }, { s:'able/ible', pos:'adj' },
+  { s:'ic', pos:'adj' }, { s:'ish', pos:'adj' }, { s:'ary', pos:'adj' }, { s:'ory', pos:'adj/n' },
+  { s:'ant', pos:'adj/n' }, { s:'ent', pos:'adj/n' },
+  { s:'ate', pos:'v/adj' }, { s:'ify', pos:'v' }, { s:'ize/ise', pos:'v' },
+  { s:'en', pos:'v' }, { s:'ly', pos:'adv' }, { s:'wards', pos:'adv' }
+];
+
+var SEMANTIC_HINTS = [
+  { a:'benefit', b:'profit', type:'近义' }, { a:'negative', b:'positive', type:'反义' },
+  { a:'legal', b:'illegal', type:'反义' }, { a:'valid', b:'invalid', type:'反义' },
+  { a:'increase', b:'decrease', type:'反义' }, { a:'agree', b:'disagree', type:'反义' },
+  { a:'success', b:'failure', type:'反义' }, { a:'ancient', b:'modern', type:'反义' },
+  { a:'fragile', b:'durable', type:'反义' }, { a:'benign', b:'malign', type:'反义' },
+  { a:'ample', b:'scarce', type:'反义' }, { a:'gather', b:'disperse', type:'反义' },
+  { a:'import', b:'export', type:'反义' }, { a:'broad', b:'narrow', type:'反义' },
+  { a:'guilty', b:'innocent', type:'反义' }, { a:'arrogant', b:'humble', type:'反义' },
+  { a:'generous', b:'selfish', type:'反义' }, { a:'rigid', b:'flexible', type:'反义' }
+];
+
+/* ============================================================
+ * 数据导入 / 解析 / 索引
+ * ============================================================ */
+function readFileAsText(file) {
+  return new Promise(function(res, rej) {
+    var fr = new FileReader();
+    fr.onload = function() { res(fr.result); };
+    fr.onerror = function() { rej(fr.error); };
+    fr.readAsText(file, 'UTF-8');
+  });
+}
+
+function stripEmoji(s) {
+  return String(s).replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/gu, '').trim();
+}
+
+function parseAllWords(htmlText) {
+  var re = /<script type="application\/json" id="data-all-words">([\s\S]*?)<\/script>/;
+  var m = htmlText.match(re);
+  if (!m) throw new Error('未在 cet6_quiz.html 中找到 id="data-all-words" 数据块');
+  var arr = JSON.parse(m[1]);
+  arr.forEach(function(w) { if (w.meaning) w.meaning = stripEmoji(w.meaning); });
+  return arr;
+}
+
+function parseUnitMaps(jsText) {
+  var eq = jsText.indexOf('=');
+  if (eq < 0) throw new Error('unit-maps.js 未找到赋值符号');
+  var s = jsText.indexOf('{', eq);
+  var e = jsText.lastIndexOf('}');
+  if (s < 0 || e < 0) throw new Error('unit-maps.js 未找到 JSON 对象');
+  var obj = JSON.parse(jsText.slice(s, e + 1));
+  // header 只保留注释（到赋值语句前的部分），赋值语句由导出时统一生成
+  var headerEnd = Math.max(jsText.lastIndexOf('\n', eq), jsText.lastIndexOf('\r', eq));
+  var header = headerEnd >= 0 ? jsText.slice(0, headerEnd + 1) : '';
+  return { obj: obj, header: header };
+}
+
+function parseFullWords(jsText) {
+  var m = jsText.match(/window\.__FULL_WORDS_DATA__\s*=\s*(\[[\s\S]*\])\s*;?\s*$/);
+  if (!m) throw new Error('full-words.js 未找到 __FULL_WORDS_DATA__');
+  return JSON.parse(m[1]);
+}
+
+function buildIndexes(allWords) {
+  var byWord = {}, byUnitWord = {};
+  allWords.forEach(function(w) {
+    var k = w.word.toLowerCase();
+    (byWord[k] = byWord[k] || []).push(w);
+    (byUnitWord[w.unit] = byUnitWord[w.unit] || {})[k] = w;
+  });
+  return { byWord: byWord, byUnitWord: byUnitWord };
+}
+
+function inferPos(meaning) {
+  var mn = String(meaning || '').replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/gu, '').trim();
+  // 优先匹配词性缩写（n./v./adj./adv./prep. 等），支持 "n./v." 复合与 "adj. 有雄心" 含空格形式
+  var m3 = mn.match(/^([a-z]+(?:\/[a-z]+)*)[\.、]/i);
+  if (m3) return m3[1].split('/')[0].toLowerCase();
+  var m4 = mn.match(/\b(n|v|adj|adv|prep|conj|pron|num|art|det|int|exclam)\b\./i);
+  return m4 ? m4[1].toLowerCase() : '';
+}
+
+function lookupWord(word, preferUnit) {
+  var k = String(word || '').toLowerCase().trim();
+  if (!k) return { source: null, entry: null };
+  if (state.idx && state.idx.byUnitWord && state.idx.byUnitWord[preferUnit] && state.idx.byUnitWord[preferUnit][k]) {
+    return { source: 'allWords', unit: preferUnit, entry: state.idx.byUnitWord[preferUnit][k] };
+  }
+  if (state.idx && state.idx.byWord && state.idx.byWord[k] && state.idx.byWord[k].length) {
+    return { source: 'allWords', unit: state.idx.byWord[k][0].unit, entry: state.idx.byWord[k][0] };
+  }
+  if (state.fullWords.length) {
+    for (var i = 0; i < state.fullWords.length; i++) {
+      var fw = state.fullWords[i];
+      if (String(fw.word).toLowerCase() === k) {
+        return { source: 'fullWords', unit: null, entry: { word: fw.word, pronunciation: fw.pronunciation, meaning: fw.meaning } };
+      }
+    }
+  }
+  return { source: null, entry: null };
+}
+
+/* ============================================================
+ * 词根词缀匹配 / 关系推断
+ * ============================================================ */
+function levenshtein(a, b) {
+  a = String(a).toLowerCase(); b = String(b).toLowerCase();
+  var m = a.length, n = b.length;
+  var dp = new Array(n + 1);
+  for (var j = 0; j <= n; j++) dp[j] = j;
+  for (var i = 1; i <= m; i++) {
+    var prev = dp[0]; dp[0] = i;
+    for (var j = 1; j <= n; j++) {
+      var tmp = dp[j];
+      var cost = (a[i-1] === b[j-1]) ? 0 : 1;
+      dp[j] = Math.min(dp[j] + 1, dp[j-1] + 1, prev + cost);
+      prev = tmp;
+    }
+  }
+  return dp[n];
+}
+
+function findRoot(w) {
+  var wl = String(w).toLowerCase();
+  for (var i = 0; i < ROOTS.length; i++) {
+    var r = ROOTS[i];
+    var branches = r.root.split('/');
+    for (var bi = 0; bi < branches.length; bi++) {
+      var br = branches[bi];
+      if (br.length >= 3 && wl.indexOf(br) >= 0) {
+        // 词根出现位置：若在词首则 OK，否则要求不在词首时能找到一个词素位置（简单启发）
+        return r;
+      }
+    }
+  }
+  return null;
+}
+
+function stripPrefixWord(w) {
+  var wl = String(w).toLowerCase();
+  for (var i = 0; i < PREFIXES.length; i++) {
+    var branches = PREFIXES[i].p.split('/');
+    for (var bi = 0; bi < branches.length; bi++) {
+      var px = branches[bi];
+      if (wl.indexOf(px) === 0 && wl.length > px.length + 2) {
+        var rest = wl.slice(px.length);
+        if (rest.length < 3) continue;
+        // 短前缀要求剩余命中 ROOTS 或 SUFFIXES 白名单
+        if ((px.length <= 3) && !findRoot(rest) && !hasSuffix(rest)) continue;
+        return { pre: px, rest: rest, cn: PREFIXES[i].cn };
+      }
+    }
+  }
+  return null;
+}
+
+function hasSuffix(w) {
+  var wl = String(w).toLowerCase();
+  for (var i = 0; i < SUFFIXES.length; i++) {
+    var branches = SUFFIXES[i].s.split('/');
+    for (var bi = 0; bi < branches.length; bi++) {
+      var sf = branches[bi];
+      if (sf.length >= 2 && wl.length > sf.length + 2 && wl.slice(-sf.length) === sf) return true;
+    }
+  }
+  return false;
+}
+
+function stripSuffixWord(w) {
+  var wl = String(w).toLowerCase();
+  var best = null;
+  for (var i = 0; i < SUFFIXES.length; i++) {
+    var branches = SUFFIXES[i].s.split('/');
+    for (var bi = 0; bi < branches.length; bi++) {
+      var sf = branches[bi];
+      if (sf.length >= 2 && wl.length > sf.length + 1 && wl.slice(-sf.length) === sf) {
+        var root = wl.slice(0, wl.length - sf.length);
+        if (root.length >= 3) { best = { suf: sf, root: root, pos: SUFFIXES[i].pos }; break; }
+      }
+    }
+    if (best) break;
+  }
+  return best;
+}
+
+function semanticHint(a, b) {
+  var al = String(a).toLowerCase(), bl = String(b).toLowerCase();
+  for (var i = 0; i < SEMANTIC_HINTS.length; i++) {
+    var h = SEMANTIC_HINTS[i];
+    if ((h.a === al && h.b === bl) || (h.a === bl && h.b === al)) return h.type;
+  }
+  return null;
+}
+
+// child 是否 = parent 去掉末尾重叠字母后 + suffix
+// 例：action = act + tion（重叠 t），connection = connect + tion（重叠 t），exhibition = exhibit + ion
+function derivedWithSuffix(child, parent, suffix) {
+  var c = String(child).toLowerCase(), p = String(parent).toLowerCase(), sf = String(suffix).toLowerCase();
+  if (c === p + sf) return true;
+  if (c.length <= p.length + 1 || c.length > p.length + sf.length + 2) return false;
+  // 尝试重叠 0..2 个末尾字母
+  for (var ov = 1; ov <= Math.min(2, p.length); ov++) {
+    var base = p.slice(0, p.length - ov);
+    if (base && c === base + sf) return true;
+  }
+  // 尝试后缀在 child 中是否恰好跟在 parent 的某个前缀后（如 act+ion）
+  for (var ov2 = 0; ov2 <= Math.min(2, p.length); ov2++) {
+    var b2 = p.slice(0, p.length - ov2);
+    if (b2 && c === b2 + sf) return true;
+  }
+  return false;
+}
+
+function inferRelation(child, parent) {
+  if (!child || !parent) return '';
+  var c = String(child).toLowerCase(), p = String(parent).toLowerCase();
+  if (c === p) return '相关';
+  // 语义提示（近义/反义）
+  var hint = semanticHint(child, parent);
+  if (hint) return hint;
+  // 加前缀：child = 前缀 + parent
+  for (var i = 0; i < PREFIXES.length; i++) {
+    var branches = PREFIXES[i].p.split('/');
+    for (var bi = 0; bi < branches.length; bi++) {
+      var px = branches[bi];
+      if (c === px + p && c !== p) return '加前缀';
+      if (p === px + c) return '拆分';
+    }
+  }
+  // 扩：child = parent + 后缀（容忍重叠字母，如 act+tion→action、connect+tion→connection）
+  for (var s = 0; s < SUFFIXES.length; s++) {
+    var sbs = SUFFIXES[s].s.split('/');
+    for (var si = 0; si < sbs.length; si++) {
+      var sf = sbs[si];
+      if (derivedWithSuffix(c, p, sf)) return '扩';
+      if (derivedWithSuffix(p, c, sf)) return '扩';
+    }
+  }
+  // 合成：parent 是 child 的成分词
+  if (c.indexOf(p) === 0 && c.length - p.length >= 3) return '合成';
+  // 拆分：child 是 parent 的子串
+  if (p.indexOf(c) === 0 && c.length >= 3 && c.length < p.length) return '拆分';
+  // 同根
+  var rc = findRoot(c), rp = findRoot(p);
+  if (rc && rp && rc === rp) return '同根';
+  // 形近
+  var d = levenshtein(c, p);
+  var L = Math.max(c.length, p.length);
+  if (L >= 6 && d <= 2) return '形近';
+  if (L >= 4 && d <= 1) return '形近';
+  return '相关';
+}
+
+function inferAllRelations() {
+  pushHistory();
+  var changed = 0;
+  function walk(nodes, parentWord) {
+    nodes.forEach(function(n) {
+      if (parentWord && !n.relation) {
+        var r = inferRelation(n.word, parentWord);
+        if (r) { n.relation = r; changed++; }
+      }
+      if (n.children) walk(n.children, n.word);
+    });
+  }
+  walk(state.level1Nodes, null);
+  renderTree();
+  renderPreview();
+  updateStatus();
+  alert('已推断 ' + changed + ' 个关系（relation 已存在的节点跳过）。可用 Ctrl+Z 撤销。');
+}
+
+/* ============================================================
+ * 工具函数 / 状态管理 / 撤销
+ * ============================================================ */
+function esc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function getNodeByPath(path) {
+  if (!path || !path.length) return null;
+  var nodes = state.level1Nodes;
+  var node = null;
+  for (var i = 0; i < path.length; i++) {
+    var idx = path[i];
+    if (!nodes || idx >= nodes.length) return null;
+    node = nodes[idx];
+    nodes = node.children || [];
+  }
+  return node;
+}
+
+function getParentByPath(path) {
+  if (!path || path.length <= 1) return { list: state.level1Nodes, idx: path ? path[0] : -1 };
+  var nodes = state.level1Nodes;
+  for (var i = 0; i < path.length - 1; i++) {
+    var idx = path[i];
+    if (!nodes || idx >= nodes.length) return null;
+    nodes = nodes[idx].children || [];
+  }
+  return { list: nodes, idx: path[path.length - 1] };
+}
+
+function pathKey(path) { return (path || []).join('.'); }
+
+function pushHistory() {
+  if (state.history.length > 50) state.history.shift();
+  if (state.histIdx < state.history.length - 1) state.history = state.history.slice(0, state.histIdx + 1);
+  state.history.push(JSON.stringify({ nodes: state.level1Nodes, gn: state.groupName }));
+  state.histIdx = state.history.length - 1;
+}
+
+function undo() {
+  if (state.histIdx <= 0) return;
+  state.histIdx--;
+  restoreHistory(state.histIdx);
+}
+function redo() {
+  if (state.histIdx >= state.history.length - 1) return;
+  state.histIdx++;
+  restoreHistory(state.histIdx);
+}
+function restoreHistory(i) {
+  var snap = JSON.parse(state.history[i]);
+  state.level1Nodes = snap.nodes;
+  state.groupName = snap.gn;
+  state.multiSel = {};  // 撤销/重做改变节点索引，清空勾选
+  renderTree(); renderPreview(); updateStatus();
+}
+
+/* 树折叠 */
+function expandPath(path) {
+  for (var i = 1; i < (path || []).length; i++) {
+    state.collapse[pathKey(path.slice(0, i))] = false;
+  }
+}
+
+/* ============================================================
+ * 渲染：工具栏 / 树 / 预览
+ * ============================================================ */
+function updateStatus() {
+  document.getElementById('st-words').textContent = state.allWords.length ? (state.allWords.length + ' 词') : '未导入';
+  document.getElementById('st-fullwords').textContent = state.fullWords.length ? (state.fullWords.length + ' 词') : '未导入';
+  var mapCount = 0;
+  if (state.unitMaps) { for (var u in state.unitMaps) mapCount += Object.keys(state.unitMaps[u]).length; }
+  document.getElementById('st-maps').textContent = mapCount ? (mapCount + ' 词群') : '未导入';
+  document.getElementById('st-cur').textContent = state.unitMaps ? ('unit' + state.currentUnit + ' g' + state.currentGid) : '-';
+}
+
+function renderToolbar() {
+  var us = document.getElementById('unit-select');
+  var gs = document.getElementById('gid-select');
+  var gni = document.getElementById('group-name-input');
+  // unit 下拉
+  var prevU = state.currentUnit;
+  us.innerHTML = '';
+  if (state.unitMaps) {
+    var units = Object.keys(state.unitMaps).sort(function(a,b){ return +a - +b; });
+    units.forEach(function(u) {
+      var o = document.createElement('option');
+      o.value = u; o.textContent = 'Unit ' + u;
+      us.appendChild(o);
+    });
+  }
+  if (us.querySelector('option[value="' + prevU + '"]')) us.value = prevU;
+  // gid 下拉
+  gs.innerHTML = '';
+  if (state.unitMaps && state.unitMaps[state.currentUnit]) {
+    var gids = Object.keys(state.unitMaps[state.currentUnit]).sort(function(a,b){ return +a - +b; });
+    gids.forEach(function(g) {
+      var grp = state.unitMaps[state.currentUnit][g];
+      var o = document.createElement('option');
+      o.value = g; o.textContent = 'g' + g + ' ' + (grp.group_name || '');
+      gs.appendChild(o);
+    });
+  }
+  if (gs.querySelector('option[value="' + state.currentGid + '"]')) gs.value = state.currentGid;
+  gni.value = state.groupName || '';
+}
+
+function renderTree() {
+  var root = document.getElementById('tree');
+  if (!state.level1Nodes.length) {
+    root.innerHTML = '<div class="empty-hint">词群暂无节点。<br><button onclick="addLevel1()">＋ 添加第一个一级词</button></div>';
+  } else {
+    var html = '<ul data-depth="0" data-list-path="">';
+    state.level1Nodes.forEach(function(n, i) {
+      html += renderNodeRow(n, [i], 0);
+    });
+    html += '</ul>';
+    root.innerHTML = html;
+  }
+  // 拖拽插入指示线（每次重建树后追加）
+  var dl = document.createElement('div');
+  dl.id = 'drop-line';
+  dl.innerHTML = '<span class="dl-dot"></span><span class="dl-label"></span>';
+  root.appendChild(dl);
+}
+
+var LEVEL_COLORS = ['#7c3aed', '#2563eb', '#059669', '#d97706', '#db2777', '#0891b2'];
+
+function renderNodeRow(n, path, depth) {
+  var hasCh = !!(n.children && n.children.length);
+  var key = pathKey(path);
+  var collapsed = state.collapse[key];
+  var isSel = state.selected && pathKey(state.selected) === key;
+  var relColor = GMAP_REL_COLORS[n.relation] || GMAP_REL_CUSTOM_COLOR;
+  var relBadge = n.relation ? '<span class="rel-badge" title="' + esc(n.relation) + '" style="background:' + relColor + '">' + esc(n.relation) + '</span>' : '';
+  var posBadge = n.pos ? '<span class="pos-badge">' + esc(n.pos) + '</span>' : '';
+  var warn = (!n.word) ? ' err-node' : '';
+  // 层级色条：节点行左侧 3px 竖条 + 词名带层色
+  var lc = LEVEL_COLORS[depth % LEVEL_COLORS.length];
+  var h = '<li>';
+  // 节点行可拖拽：pointerdown 记源路径，拖拽中实时判定放置目标（放到节点下变子词）
+  h += '<div class="node-row' + (isSel ? ' selected' : '') + (state.multiSel[key] ? ' multi-checked' : '') + warn + '" style="border-left:3px solid ' + lc + ';padding-left:6px" onclick="selectNode([' + path.join(',') + '])" data-path="' + key + '" onpointerdown="nodePtrDown(event,[' + path.join(',') + '])">';
+  h += '<input type="checkbox" class="node-multi" onclick="event.stopPropagation();toggleMultiNode([' + path.join(',') + '],this.checked)" draggable="false" ondragstart="event.stopPropagation()"' + (state.multiSel[key] ? ' checked' : '') + '>';
+  h += '<span class="tw" onclick="event.stopPropagation();toggleCollapse([' + path.join(',') + '])" style="cursor:' + (hasCh ? 'pointer' : 'default') + '">' + (hasCh ? (collapsed ? '▶' : '▾') : '·') + '</span>';
+  h += '<span class="nw" style="color:' + lc + '">' + esc(n.word || '（空词）') + '</span>';
+  if (n.phonetic) h += '<span class="ph">' + esc(n.phonetic) + '</span>';
+  if (n.meaning) h += '<span class="mn">' + esc(n.meaning) + '</span>';
+  h += posBadge + relBadge;
+  h += '<span class="tools">';
+  h += '<button title="新增子节点" onclick="event.stopPropagation();addChild([' + path.join(',') + '])">＋子</button>';
+  h += '<button title="编辑" onclick="event.stopPropagation();editNode([' + path.join(',') + '])">✎</button>';
+  h += '<button title="提升一级" onclick="event.stopPropagation();promoteNode([' + path.join(',') + '])">⇡一级</button>';
+  h += '<button title="挂到某词下" onclick="event.stopPropagation();openAttachPicker([' + path.join(',') + '])">⇩挂到</button>';
+  h += '<button title="复制" onclick="event.stopPropagation();copyNode([' + path.join(',') + '])">⧉</button>';
+  h += (state.clipboard ? '<button title="粘贴为子节点" onclick="event.stopPropagation();pasteNode([' + path.join(',') + '])">⤢</button>' : '');
+  h += '<button title="上移" onclick="event.stopPropagation();moveNode([' + path.join(',') + '],-1)">↑</button>';
+  h += '<button title="下移" onclick="event.stopPropagation();moveNode([' + path.join(',') + '],1)">↓</button>';
+  h += '<button title="删除" onclick="event.stopPropagation();deleteNode([' + path.join(',') + '])">✕</button>';
+  h += '</span>';
+  h += '</div>';
+  if (hasCh && !collapsed) {
+    var childDepth = depth + 1;
+    h += '<ul data-depth="' + childDepth + '" data-list-path="' + key + '">';
+    n.children.forEach(function(c, ci) {
+      h += renderNodeRow(c, path.concat([ci]), childDepth);
+    });
+    h += '</ul>';
+  }
+  h += '</li>';
+  return h;
+}
+
+function renderPreview() {
+  var map = { group_name: state.groupName, level1Nodes: state.level1Nodes };
+  var r = resolveMapPath(map, state.stack);
+  var bc = document.getElementById('preview-breadcrumb');
+  var crumbs = state.groupName ? '<b>' + esc(state.groupName) + '</b>' : '';
+  state.stack.forEach(function(w) { crumbs += ' › ' + esc(w); });
+  var backBtn = state.stack.length ? '<button class="gmap-back" onclick="editorBack()">← 返回上级</button>' : '';
+  bc.innerHTML = crumbs + backBtn;
+  var svg = buildMapSVG('editor-map', map, r, state.activeWord);
+  document.getElementById('preview-svg').innerHTML = svg;
+}
+
+function renderValidation(reports) {
+  var list = document.getElementById('validation-list');
+  var summary = document.getElementById('valid-summary');
+  if (!reports) { list.innerHTML = ''; summary.textContent = ''; return; }
+  var err = reports.filter(function(r){ return r.lvl === 'error'; }).length;
+  var warn = reports.filter(function(r){ return r.lvl === 'warn'; }).length;
+  var ok = reports.filter(function(r){ return r.lvl === 'ok'; }).length;
+  summary.innerHTML = (err ? '<span style="color:var(--red)">' + err + ' 错误</span> ' : '') +
+    (warn ? '<span style="color:var(--orange)">' + warn + ' 警告</span> ' : '') +
+    (ok ? '<span style="color:var(--green)">' + ok + ' 通过</span>' : '') +
+    (reports.length === 0 ? '<span style="color:var(--green)">✓ 无问题</span>' : '');
+  list.innerHTML = reports.map(function(r) {
+    var cls = r.lvl === 'error' ? 'lvl-error' : (r.lvl === 'warn' ? 'lvl-warn' : 'lvl-ok');
+    var lvlTxt = r.lvl === 'error' ? '错误' : (r.lvl === 'warn' ? '警告' : (r.lvl === 'info' ? '提示' : '通过'));
+    var descCls = (r.lvl === 'ok' || r.lvl === 'info') ? 'lvl-ok-desc' : '';
+    var clickAttr = r.path ? ' onclick="selectNode([' + (r.path||[]).join(',') + '])"' : '';
+    return '<div class="v-item ' + cls + '"' + clickAttr + '><span class="lvl">' + lvlTxt + '</span><span class="desc ' + descCls + '">' + esc(r.msg) + '</span></div>';
+  }).join('');
+}
+
+/* ============================================================
+ * 节点操作
+ * ============================================================ */
+function selectNode(path) {
+  if (_justDragged) { _justDragged = false; return; }  // 刚拖拽完落下的 click 不触发选中
+  state.selected = path || null;
+  // 点击树节点 → 预览下钻到该节点一环
+  var node = getNodeByPath(path);
+  if (node) {
+    // stack 重建为父词链
+    var newStack = [];
+    var nodes = state.level1Nodes;
+    for (var i = 0; i < path.length - 1; i++) {
+      newStack.push(nodes[path[i]].word);
+      nodes = nodes[path[i]].children;
+    }
+    state.stack = newStack;
+    state.activeWord = node.word;
+  } else {
+    state.stack = [];
+    state.activeWord = '';
+  }
+  renderTree();
+  renderPreview();
+}
+
+/* 拖拽：可把节点拖成另一节点的子词，或插入某层级列表的任意位置。
+ * 拖动时在被拖单词上方显示横向插入线：线下紧贴的锚点节点即该单词归入的位置，
+ * 中间区域（节点中段）表示变为该节点的子词。 */
+var _dragPath = null;
+var _drop = null;   // { mode:'before'|'after'|'child'|'append', listPath:[...], index:n }
+var _ptrDrag = null;   // { pointerId, startX, startY, started, srcEl, srcPath }
+var _justDragged = false;  // 真实拖拽后抑制紧随其后的 click，避免落下时误选中
+var _edgeTimer = null;     // 拖到滚动区上/下边缘时的自动滚动定时器
+var _lastPX = 0, _lastPY = 0;   // 拖拽中指针最后所在的视口坐标
+
+/* 拖拽基于 Pointer Events 自实现：
+ * 原生 HTML5 拖拽在 Windows 的 Chrome/Edge 中会屏蔽鼠标滚轮事件（拖动期间页面无法滚动，
+ * 见 Chromium issue #41272694 / WHATWG html#4794），改 pointer 拖拽后不进入浏览器拖拽模式，
+ * 滚轮即可正常滚动页面；另外支持拖到容器上/下边缘自动滚动。放置语义与原来完全一致。 */
+function nodePtrDown(e, path) {
+  if (e.pointerType === 'touch' || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  var t = e.target;
+  if (!t || (t.closest && (t.closest('button') || t.closest('input') || t.closest('.tw')))) return;
+  _ptrDrag = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, started: false, srcEl: e.currentTarget, srcPath: path, multi: !!(state.multiSel && state.multiSel[pathKey(path)]) };
+  try { if (e.currentTarget.setPointerCapture) e.currentTarget.setPointerCapture(e.pointerId); } catch (err) {}
+  document.addEventListener('pointermove', nodePtrMove, true);
+  document.addEventListener('pointerup', nodePtrUpTrue, true);
+  document.addEventListener('pointercancel', nodePtrUpCancel, true);
+  document.addEventListener('wheel', nodePtrWheel, true);
+  document.addEventListener('keydown', nodePtrKey, true);
+}
+function nodePtrUpTrue(e) { nodePtrUp(e, true); }
+function nodePtrUpCancel(e) { nodePtrUp(e, false); }
+
+function nodePtrMove(e) {
+  if (!_ptrDrag) return;
+  var dx = e.clientX - _ptrDrag.startX, dy = e.clientY - _ptrDrag.startY;
+  if (!_ptrDrag.started) {
+    if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return;   // 未超过拖拽阈值，视为普通点击
+    _ptrDrag.started = true;
+    _dragPath = _ptrDrag.srcPath;
+    if (_ptrDrag.srcEl) _ptrDrag.srcEl.classList.add('drag-source');
+    document.body.classList.add('dragging-node');
+  }
+  e.preventDefault();
+  _lastPX = e.clientX; _lastPY = e.clientY;
+  nodeRefreshDrop(_lastPX, _lastPY);
+  nodeEdgeAutoScroll(_lastPX, _lastPY);
+}
+
+function nodePtrUp(e, commit) {
+  if (!_ptrDrag) return;
+  var wasDrag = _ptrDrag.started;
+  if (wasDrag) {
+    var src = _dragPath ? _dragPath.slice() : null;
+    var d = _drop;
+    _justDragged = true;
+    setTimeout(function(){ _justDragged = false; }, 0);
+    nodeDragEnd(e);
+    if (commit !== false && src && d) {
+      if (_ptrDrag.multi && d.mode === 'child') doMoveBatch(src, d);   // 勾选批量 → 整批拖入目标词之下
+      else doMove(src, d);                                              // Esc / pointercancel 时不做移动
+    }
+  } else {
+    nodeDragEnd(e);
+  }
+  if (_ptrDrag.srcEl) { try { if (_ptrDrag.srcEl.releasePointerCapture) _ptrDrag.srcEl.releasePointerCapture(_ptrDrag.pointerId); } catch (err) {} }
+  document.body.classList.remove('dragging-node');
+  stopEdgeAutoScroll();
+  _ptrDrag = null;
+  document.removeEventListener('pointermove', nodePtrMove, true);
+  document.removeEventListener('pointerup', nodePtrUpTrue, true);
+  document.removeEventListener('pointercancel', nodePtrUpCancel, true);
+  document.removeEventListener('wheel', nodePtrWheel, true);
+  document.removeEventListener('keydown', nodePtrKey, true);
+}
+
+/* 按指针坐标找出当前放置目标并更新指示线（复用 nodeDragOver 的核心判定逻辑） */
+function nodeRefreshDrop(x, y) {
+  if (!_dragPath) return;
+  var el = document.elementFromPoint(x, y);
+  if (!el) { _drop = null; renderDropIndicator(); return; }
+  // 指针仍停在被拖节点自身或其子元素上时，不当作放置目标
+  if (_ptrDrag && _ptrDrag.srcEl && (_ptrDrag.srcEl === el || _ptrDrag.srcEl.contains(el))) {
+    _drop = null; renderDropIndicator(); return;
+  }
+  var cur = el;
+  while (cur && cur !== document.body) {
+    if (cur.classList && (cur.classList.contains('node-row') || cur.tagName === 'UL' || cur.id === 'tree')) {
+      nodeDragOver({ clientX: x, clientY: y, currentTarget: cur, preventDefault: function(){}, dataTransfer: null, stopPropagation: function(){} });
+      return;
+    }
+    cur = cur.parentNode;
+  }
+}
+
+/* 拖拽中滚轮滚动页面后，布局已经移动，需按指针所在的新位置重算放置目标 */
+function nodePtrWheel() {
+  if (!_ptrDrag || !_ptrDrag.started) return;
+  setTimeout(function(){ nodeRefreshDrop(_lastPX, _lastPY); }, 0);
+}
+
+function nodePtrKey(e) {
+  if (e.key === 'Escape' && _ptrDrag) nodePtrUp(e, false);
+}
+
+/* 找指针下方实际的滚动容器（当前布局未给树设独立滚动，即页面本身） */
+function getScrollContainer() {
+  var el = document.elementFromPoint(_lastPX, _lastPY) || document.body;
+  var cur = el;
+  while (cur && cur !== document.body) {
+    var oy = getComputedStyle(cur).overflowY;
+    if (/(auto|scroll)/.test(oy) && cur.scrollHeight > cur.clientHeight) return cur;
+    cur = cur.parentNode;
+  }
+  return document.scrollingElement || document.documentElement;
+}
+
+/* 拖到滚动区上/下边缘时自动滚动，滚到边界即停 */
+function nodeEdgeAutoScroll(x, y) {
+  var sc = getScrollContainer();
+  var isWin = (sc === document.scrollingElement || sc === document.documentElement);
+  var rect = isWin ? { top: 0, bottom: window.innerHeight } : sc.getBoundingClientRect();
+  var zone = 52;
+  var speed = 0;
+  if (y < rect.top + zone) speed = -1;
+  else if (y > rect.bottom - zone) speed = 1;
+  if (!speed) { stopEdgeAutoScroll(); return; }
+  if (_edgeTimer) return;   // 已在滚动中
+  _edgeTimer = setInterval(function(){
+    var before = sc.scrollTop;
+    sc.scrollTop += speed * 16;
+    if (sc.scrollTop === before) { stopEdgeAutoScroll(); return; }   // 已滚到边界
+    nodeRefreshDrop(_lastPX, _lastPY);   // 布局滚动后重算指示线位置
+  }, 16);
+}
+
+function stopEdgeAutoScroll() {
+  if (_edgeTimer) { clearInterval(_edgeTimer); _edgeTimer = null; }
+}
+
+function getNodeRowPath(el) {
+  var p = el.getAttribute('data-path');
+  return p ? p.split('.').map(Number) : null;
+}
+function getListPathFromEl(el) {
+  var p = el.getAttribute('data-list-path');
+  return p ? p.split('.').map(Number) : [];
+}
+function getNodeRowWord(el) {
+  var w = el ? el.querySelector('.nw') : null;
+  return w ? w.textContent : '';
+}
+
+function nodeDragOver(e) {
+  if (!_dragPath) return;
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+  var t = e.currentTarget;
+  if (t.classList && t.classList.contains('node-row')) {
+    // 节点行：上 28% 插到该节点前，下 28% 插到该节点后，中段变为该节点子词
+    var path = getNodeRowPath(t);
+    if (path) {
+      var rect = t.getBoundingClientRect();
+      var ratio = (e.clientY - rect.top) / Math.max(1, rect.height);
+      if (ratio < 0.28) {
+        _drop = { mode: 'before', listPath: path.slice(0, -1), index: path[path.length - 1] };
+      } else if (ratio > 0.72) {
+        _drop = { mode: 'after', listPath: path.slice(0, -1), index: path[path.length - 1] };
+      } else {
+        _drop = { mode: 'child', listPath: path, index: -1 };
+      }
+    }
+    e.stopPropagation();
+  } else if (t.tagName === 'UL') {
+    // 列表容器：按最近子项的中点判定插到哪个子项前，或在末尾追加
+    var lp = getListPathFromEl(t);
+    var lis = Array.prototype.filter.call(t.children, function(ch){ return ch.tagName === 'LI'; });
+    var idx = lis.length;
+    for (var k = 0; k < lis.length; k++) {
+      var r = lis[k].getBoundingClientRect();
+      if (e.clientY < r.top + r.height / 2) { idx = k; break; }
+    }
+    if (idx < lis.length) _drop = { mode: 'before', listPath: lp, index: idx };
+    else _drop = { mode: 'append', listPath: lp, index: idx };
+    e.stopPropagation();
+  } else {
+    // #tree 容器空白处：追加到一级列表末尾
+    _drop = { mode: 'append', listPath: [], index: state.level1Nodes.length };
+  }
+  renderDropIndicator();
+}
+
+function nodeDragEnd(e) {
+  _dragPath = null;
+  _drop = null;
+  document.querySelectorAll('#tree .node-row.drag-source').forEach(function(el){ el.classList.remove('drag-source'); });
+  document.querySelectorAll('#tree .node-row.drag-target').forEach(function(el){ el.classList.remove('drag-target'); });
+  document.querySelectorAll('#tree ul.drag-list-target').forEach(function(el){ el.classList.remove('drag-list-target'); });
+  document.querySelectorAll('#tree .node-row.drop-anchor').forEach(function(el){ el.classList.remove('drop-anchor'); });
+  var line = document.getElementById('drop-line');
+  if (line) line.style.display = 'none';
+}
+
+/* 定位插入线：直线画在锚点节点的下缘，锚点节点高亮并显示归入说明 */
+function renderDropIndicator() {
+  var tree = document.getElementById('tree');
+  var line = document.getElementById('drop-line');
+  if (!tree || !line) return;
+  document.querySelectorAll('#tree .node-row.drop-anchor').forEach(function(el){ el.classList.remove('drop-anchor'); });
+  var d = _drop;
+  if (!d || !_dragPath) { line.style.display = 'none'; return; }
+  var anchorEl = null, y = null, label = '';
+  var labelEl = line.querySelector('.dl-label');
+  if (d.mode === 'child') {
+    var pEl = tree.querySelector('.node-row[data-path="' + d.listPath.join('.') + '"]');
+    if (pEl) {
+      y = pEl.getBoundingClientRect().bottom;
+      anchorEl = pEl;
+      label = (_ptrDrag && _ptrDrag.multi) ? '把勾选的节点整体移到「' + (getNodeRowWord(pEl) || '空词') + '」之下' : '成为「' + (getNodeRowWord(pEl) || '空词') + '」的子词';
+    }
+  } else {
+    var listStr = d.listPath.join('.');
+    var ul = d.listPath.length ? tree.querySelector('ul[data-list-path="' + listStr + '"]') : tree.querySelector('ul[data-list-path=""]');
+    if (ul) {
+      var lis = Array.prototype.filter.call(ul.children, function(c){ return c.tagName === 'LI'; });
+      if (!lis.length) {
+        y = ul.getBoundingClientRect().top;
+        label = '插入到列表最前';
+      } else if (d.mode === 'before') {
+        var bi = Math.min(d.index, lis.length - 1);
+        y = lis[bi].getBoundingClientRect().top;
+        if (bi > 0) { anchorEl = lis[bi - 1].querySelector('.node-row'); label = '插到「' + (getNodeRowWord(anchorEl) || '') + '」之后'; }
+        else label = '插入到列表最前';
+      } else {
+        var ai = Math.min(Math.max(d.index, 0), lis.length - 1);
+        y = lis[ai].getBoundingClientRect().bottom;
+        anchorEl = lis[ai].querySelector('.node-row');
+        label = '插到「' + (getNodeRowWord(anchorEl) || '') + '」之后';
+      }
+    }
+  }
+  if (y == null) { line.style.display = 'none'; return; }
+  if (anchorEl) anchorEl.classList.add('drop-anchor');
+  var tr = tree.getBoundingClientRect();
+  line.style.top = (y - tr.top - 1) + 'px';
+  line.style.width = Math.max(40, tree.clientWidth) + 'px';
+  line.style.display = 'block';
+  if (labelEl) labelEl.textContent = label;
+}
+
+/* 目标列表路径是否处于 src 自身或其子树内（会成环则禁止） */
+function isSelfOrAncestorTarget(src, lp) {
+  if (!lp || lp.length < src.length) return false;
+  for (var i = 0; i < src.length; i++) if (src[i] !== lp[i]) return false;
+  return true;
+}
+
+/* 核心移动：按 _drop 目标把 src 节点插入对应列表的指定索引 */
+function doMove(src, drop) {
+  pushHistory();
+  var srcPar = getParentByPath(src);
+  if (!srcPar) { alert('未找到源节点。'); return; }
+  var node = srcPar.list[srcPar.idx];
+  var list, insIndex;
+  if (drop.mode === 'child') {
+    if (isSelfOrAncestorTarget(src, drop.listPath)) { alert('不能把节点拖到它自己或其子节点下。'); return; }
+    var pnode = getNodeByPath(drop.listPath);
+    if (!pnode) { alert('未找到目标节点。'); return; }
+    if (!pnode.children) pnode.children = [];
+    list = pnode.children;
+    insIndex = list.length;
+  } else {
+    var lp = drop.listPath || [];
+    if (isSelfOrAncestorTarget(src, lp)) { alert('不能把节点拖到它自己或其子层级下。'); return; }
+    list = lp.length ? (getNodeByPath(lp) || {}).children : state.level1Nodes;
+    if (!list) { alert('未找到目标列表。'); return; }
+    insIndex = drop.mode === 'before' ? drop.index : drop.index + 1;
+  }
+  srcPar.list.splice(srcPar.idx, 1);
+  // 源节点移除后，同列表内目标索引前移
+  if (srcPar.list === list && srcPar.idx < insIndex) insIndex--;
+  insIndex = Math.max(0, Math.min(insIndex, list.length));
+  list.splice(insIndex, 0, node);
+  var selList = (drop.mode === 'child') ? drop.listPath : (drop.listPath || []);
+  state.selected = selList.concat([insIndex]);
+  state.stack = [];
+  state.multiSel = {};  // 结构变更清空勾选
+  renderTree(); renderPreview(); updateStatus();
+}
+
+function addLevel1() {
+  pushHistory();
+  state.level1Nodes.push(emptyNode());
+  state.multiSel = {};
+  renderTree();
+  updateStatus();
+  editNode([state.level1Nodes.length - 1]);
+}
+/* 「＋ 添加单词」：有选中节点 → 挂到该词层级下（子词）；无选中（或选中已失效）→ 添加为一级词 */
+function addWordSmart() {
+  if (state.selected && state.selected.length && getNodeByPath(state.selected)) {
+    addChild(state.selected);
+  } else {
+    addLevel1();
+  }
+}
+function addChild(path) {
+  pushHistory();
+  var parent = getNodeByPath(path);
+  if (!parent) return;
+  if (!parent.children) parent.children = [];
+  parent.children.push(emptyNode());
+  state.multiSel = {};
+  renderTree();
+  editNode(path.concat([parent.children.length - 1]));
+}
+function emptyNode() { return { word: '', phonetic: '', meaning: '', pos: '', children: [] }; }
+
+function promoteNode(path) {
+  if (!path || path.length <= 1) return; // 已是一级
+  pushHistory();
+  var par = getParentByPath(path);
+  if (!par) return;
+  var node = par.list[par.idx];
+  par.list.splice(par.idx, 1);
+  state.level1Nodes.push(node);
+  state.selected = [state.level1Nodes.length - 1];
+  state.multiSel = {};
+  renderTree(); renderPreview(); updateStatus();
+}
+
+function deleteNode(path) {
+  if (!path || !path.length) return;
+  pushHistory();
+  var par = getParentByPath(path);
+  if (!par) return;
+  par.list.splice(par.idx, 1);
+  state.selected = null;
+  state.multiSel = {};
+  renderTree(); renderPreview(); updateStatus();
+}
+
+function copyNode(path) {
+  var node = getNodeByPath(path);
+  if (!node) return;
+  state.clipboard = JSON.parse(JSON.stringify(node));
+  renderTree();
+}
+function pasteNode(path) {
+  if (!state.clipboard) return;
+  pushHistory();
+  var node = getNodeByPath(path);
+  if (node) {
+    if (!node.children) node.children = [];
+    node.children.push(JSON.parse(JSON.stringify(state.clipboard)));
+  } else {
+    state.level1Nodes.push(JSON.parse(JSON.stringify(state.clipboard)));
+  }
+  state.multiSel = {};
+  renderTree(); renderPreview(); updateStatus();
+}
+
+function moveNode(path, dir) {
+  if (!path || !path.length) return;
+  pushHistory();
+  var par = getParentByPath(path);
+  if (!par) return;
+  var target = par.idx + dir;
+  if (target < 0 || target >= par.list.length) return;
+  var tmp = par.list[par.idx];
+  par.list[par.idx] = par.list[target];
+  par.list[target] = tmp;
+  var newPath = path.slice();
+  newPath[newPath.length - 1] = target;
+  state.selected = newPath;
+  state.multiSel = {};
+  renderTree(); renderPreview();
+}
+
+function toggleCollapse(path) {
+  var key = pathKey(path);
+  state.collapse[key] = !state.collapse[key];
+  renderTree();
+}
+
+/* 挂到某词下：弹层选目标 */
+function openAttachPicker(path) {
+  var node = getNodeByPath(path);
+  if (!node) return;
+  state._attachPath = path;
+  // 用独立 #attach-modal 容器，不复用 #node-modal（避免清空编辑输入框）
+  document.getElementById('attach-title').textContent = '将「' + (node.word || '空节点') + '」挂到哪个词下？';
+  var list = document.getElementById('attach-list');
+  list.innerHTML = '';
+  function walk(nodes, indent, trail) {
+    nodes.forEach(function(n, i) {
+      var ind = '';
+      for (var k = 0; k < indent; k++) ind += '&nbsp;&nbsp;';
+      var row = document.createElement('div');
+      row.className = 'al-row';
+      row.innerHTML = ind + esc(n.word || '（空词）') + (n.meaning ? ' <span style="color:var(--text2);font-size:0.8em">' + esc(n.meaning.slice(0, 20)) + '</span>' : '');
+      row.onclick = function() {
+        attachUnder(state._attachPath, trail.concat([i]));
+        closeModal();
+      };
+      list.appendChild(row);
+      if (n.children) walk(n.children, indent + 1, trail.concat([i]));
+    });
+  }
+  walk(state.level1Nodes, 0, []);
+  // 隐藏节点编辑弹层，显示 attach 弹层
+  document.getElementById('node-modal').style.display = 'none';
+  document.getElementById('attach-modal').style.display = 'block';
+  document.getElementById('batch-rel-modal').style.display = 'none';
+  document.getElementById('modal-mask').classList.add('open');
+}
+
+function attachUnder(path, targetPath) {
+  pushHistory();
+  var par = getParentByPath(path);
+  if (!par) return;
+  var node = par.list[par.idx];
+  par.list.splice(par.idx, 1);
+  var tgt = getNodeByPath(targetPath);
+  if (!tgt) { state.level1Nodes.push(node); return; }
+  if (!tgt.children) tgt.children = [];
+  tgt.children.push(node);
+  state.selected = targetPath.concat([tgt.children.length - 1]);
+  state.multiSel = {};
+  renderTree(); renderPreview(); updateStatus();
+}
+
+/* ============================================================
+ * 批量操作（配合行首复选框勾选）：
+ *   - 批量删除：删除所有勾选节点（连同子节点）
+ *   - 批量移动：弹层点选目标词；或直接拖动勾选中的任一行，整批拖入目标词之下
+ * ============================================================ */
+
+/* 按引用查找节点所在列表（增删后路径变化也安全） */
+function findNodeParentList(node, nodes) {
+  for (var i = 0; i < nodes.length; i++) {
+    if (nodes[i] === node) return { list: nodes, idx: i };
+    if (nodes[i].children && nodes[i].children.length) {
+      var r = findNodeParentList(node, nodes[i].children);
+      if (r) return r;
+    }
+  }
+  return null;
+}
+function removeNodeByRef(node) {
+  var p = findNodeParentList(node, state.level1Nodes);
+  if (!p) return false;
+  p.list.splice(p.idx, 1);
+  return true;
+}
+
+/* 勾选的有效节点列表（自动过滤失效路径） */
+function checkedNodeList() {
+  var out = [];
+  Object.keys(state.multiSel).forEach(function(k) {
+    var n = getNodeByPath(k.split('.').map(Number));
+    if (n) out.push(n);
+  });
+  return out;
+}
+
+/* 批量删除 */
+function batchDeleteNodes() {
+  var nodes = checkedNodeList();
+  if (!nodes.length) { alert('请先在树中勾选要删除的节点（行首复选框）。'); return; }
+  if (!confirm('确定删除勾选的 ' + nodes.length + ' 个节点（连同其子节点）？可 Ctrl+Z 撤销。')) return;
+  pushHistory();
+  nodes.forEach(function(n) { removeNodeByRef(n); });
+  state.multiSel = {};
+  state.selected = null;
+  renderTree(); renderPreview(); updateStatus();
+}
+
+/* 批量移动：弹层点选目标词 */
+function openBatchMovePicker() {
+  var cnt = checkedNodeList().length;
+  if (!cnt) { alert('请先在树中勾选要移动的节点（行首复选框）。'); return; }
+  document.getElementById('attach-title').textContent = '把勾选的 ' + cnt + ' 个节点移动到哪个词之下？（点选目标词）';
+  var list = document.getElementById('attach-list');
+  list.innerHTML = '';
+  (function walk(ns, indent, trail) {
+    ns.forEach(function(n, i) {
+      var ind = '';
+      for (var k = 0; k < indent; k++) ind += '&nbsp;&nbsp;';
+      var row = document.createElement('div');
+      row.className = 'al-row';
+      row.innerHTML = ind + esc(n.word || '（空词）') + (n.meaning ? ' <span style="color:var(--text2);font-size:0.8em">' + esc(n.meaning.slice(0, 20)) + '</span>' : '');
+      var tPath = trail.concat([i]);
+      if (state.multiSel[pathKey(tPath)]) {
+        row.style.opacity = '0.45';
+        row.title = '该词已在勾选范围内，不能作为移动目标';
+      } else {
+        row.onclick = function() { batchMoveTo(tPath); closeModal(); };
+      }
+      list.appendChild(row);
+      if (n.children) walk(n.children, indent + 1, tPath);
+    });
+  })(state.level1Nodes, 0, []);
+  document.getElementById('node-modal').style.display = 'none';
+  document.getElementById('attach-modal').style.display = 'block';
+  document.getElementById('batch-rel-modal').style.display = 'none';
+  document.getElementById('modal-mask').classList.add('open');
+}
+
+/* 收集可移动到目标(tKey)之下的勾选节点：
+ * 排除目标自身、目标是其子孙（成环）、祖先也在勾选内（随祖先整棵移动） */
+function collectBatchMoveNodes(tKey) {
+  var out = [];
+  Object.keys(state.multiSel).forEach(function(k) {
+    if (k === tKey) return;
+    if (tKey.indexOf(k + '.') === 0) return;
+    var hasAnc = false;
+    Object.keys(state.multiSel).forEach(function(o) { if (o !== k && k.indexOf(o + '.') === 0) hasAnc = true; });
+    if (hasAnc) return;
+    var n = getNodeByPath(k.split('.').map(Number));
+    if (n) out.push(n);
+  });
+  return out;
+}
+
+/* 把勾选节点移动到 targetPath 之下（按引用移动，路径变化也安全） */
+function batchMoveTo(targetPath) {
+  var tgt = getNodeByPath(targetPath);
+  if (!tgt) return;
+  var nodes = collectBatchMoveNodes(pathKey(targetPath));
+  if (!nodes.length) { alert('没有可移动的节点：勾选无效，或目标词在勾选范围内。'); return; }
+  pushHistory();
+  if (!tgt.children) tgt.children = [];
+  nodes.forEach(function(n) { removeNodeByRef(n); tgt.children.push(n); });
+  state.multiSel = {};
+  state.selected = targetPath.concat([tgt.children.length - 1]);
+  renderTree(); renderPreview(); updateStatus();
+  alert('已将 ' + nodes.length + ' 个节点移动到「' + (tgt.word || '空节点') + '」之下。');
+}
+
+/* 批量拖拽提交：勾选中的行整批拖入目标节点之下（仅 child 放置模式） */
+function doMoveBatch(src, drop) {
+  var tgt = getNodeByPath(drop.listPath);
+  if (!tgt) { doMove(src, drop); return; }
+  var nodes = collectBatchMoveNodes(pathKey(drop.listPath));
+  if (!nodes.length) { alert('勾选的节点不能移动到该目标下（目标在其自身或子孙范围内）。'); return; }
+  pushHistory();
+  if (!tgt.children) tgt.children = [];
+  nodes.forEach(function(n) { removeNodeByRef(n); tgt.children.push(n); });
+  state.multiSel = {};
+  state.selected = drop.listPath.concat([tgt.children.length - 1]);
+  renderTree(); renderPreview(); updateStatus();
+}
+
+/* ============================================================
+ * 节点编辑弹层
+ * ============================================================ */
+var _modalPath = null;
+
+function openModal() {
+  document.getElementById('node-modal').style.display = '';
+  document.getElementById('attach-modal').style.display = 'none';
+  document.getElementById('batch-rel-modal').style.display = 'none';
+  document.getElementById('addword-modal').style.display = 'none';
+  document.getElementById('modal-mask').classList.add('open');
+}
+function closeModal() {
+  document.getElementById('modal-mask').classList.remove('open');
+  document.getElementById('node-modal').style.display = '';
+  document.getElementById('attach-modal').style.display = 'none';
+  document.getElementById('batch-rel-modal').style.display = 'none';
+  document.getElementById('addword-modal').style.display = 'none';
+  // 若编辑的是空节点（word 为空且无子节点），关闭时从树中移除，避免残留"（空词）"
+  if (_modalPath && _modalPath.length) {
+    var nd = getNodeByPath(_modalPath);
+    if (nd && !nd.word && (!nd.children || !nd.children.length)) {
+      var par = getParentByPath(_modalPath);
+      if (par) {
+        par.list.splice(par.idx, 1);
+        state.selected = null;
+        renderTree(); renderPreview(); updateStatus();
+      }
+    }
+  }
+  _modalPath = null;
+}
+
+/* relation 控件核心：标准值 select + 自定义输入 双向联动（参数化，单节点/批量弹窗复用） */
+function relSet(sel, inp, rel) {
+  rel = rel || '';
+  if (STD_RELS[rel]) {          // 标准值 → 选中对应项，隐藏输入
+    sel.value = rel;
+    inp.style.display = 'none';
+    inp.value = '';
+  } else if (rel === '') {      // 空 → 选中（无），隐藏输入
+    sel.value = '';
+    inp.style.display = 'none';
+    inp.value = '';
+  } else {                      // 自定义 → 选"自定义…"，回填并显示输入
+    sel.value = '__custom__';
+    inp.value = rel;
+    inp.style.display = 'block';
+  }
+}
+function relGet(sel, inp) { return (sel.value === '__custom__') ? inp.value.trim() : sel.value; }
+function relOnChange(sel, inp) {
+  if (sel.value === '__custom__') {
+    inp.style.display = 'block';
+    inp.focus();                 // 切到自定义时聚焦，方便直接键入
+  } else {
+    inp.style.display = 'none';
+    inp.value = '';              // 离开自定义模式清空，避免陈旧文本被误存
+  }
+}
+function nmRelationSet(rel) { relSet(document.getElementById('nm-relation'), document.getElementById('nm-relation-custom'), rel); }
+function nmRelationGet() { return relGet(document.getElementById('nm-relation'), document.getElementById('nm-relation-custom')); }
+function nmRelationOnChange() { relOnChange(document.getElementById('nm-relation'), document.getElementById('nm-relation-custom')); }
+function batchRelSet(rel) { relSet(document.getElementById('nm-batch-relation'), document.getElementById('nm-batch-relation-custom'), rel); }
+function batchRelGet() { return relGet(document.getElementById('nm-batch-relation'), document.getElementById('nm-batch-relation-custom')); }
+function batchRelOnChange() { relOnChange(document.getElementById('nm-batch-relation'), document.getElementById('nm-batch-relation-custom')); }
+
+function editNode(path) {
+  var node = getNodeByPath(path);
+  if (!node) return;
+  _modalPath = path;
+  document.getElementById('nm-word').value = node.word || '';
+  document.getElementById('nm-phonetic').value = node.phonetic || '';
+  document.getElementById('nm-meaning').value = node.meaning || '';
+  document.getElementById('nm-pos').value = node.pos || '';
+  nmRelationSet(node.relation);
+  updateMorphHint(node.word || '');
+  document.getElementById('lookup-hint').textContent = '';
+  var _fb = document.getElementById('nm-fetch-btn');
+  var _ab = document.getElementById('nm-open-aw-btn');
+  if (_fb) _fb.style.display = 'none';
+  if (_ab) _ab.style.display = 'none';
+  document.getElementById('nm-title').textContent = '编辑节点（路径 ' + (path || []).map(function(x){return '['+x+']';}).join('') + '）';
+  openModal();
+  document.getElementById('nm-word').focus();
+}
+
+/* 批量修改 relation：勾选多节点统一设置 */
+function toggleMultiNode(path, checked) {
+  var key = pathKey(path);
+  if (checked) state.multiSel[key] = true;
+  else delete state.multiSel[key];
+  renderTree();          // 重建后 checked 由 state.multiSel 重渲染
+}
+function clearMultiSel() {
+  state.multiSel = {};
+  renderTree();
+}
+function openBatchRelModal() {
+  var keys = Object.keys(state.multiSel);
+  if (!keys.length) { alert('请先在树中勾选要批量修改的节点。'); return; }
+  // 预清理已失效的 path（节点被删/移动后残留）
+  var valid = 0;
+  keys.forEach(function(k) {
+    if (!getNodeByPath(k.split('.').map(Number))) { delete state.multiSel[k]; return; }
+    valid++;
+  });
+  if (!valid) { state.multiSel = {}; renderTree(); alert('勾选的节点已全部失效，请重新勾选。'); return; }
+  document.getElementById('batch-rel-count').textContent = '已选 ' + valid + ' 个节点，将统一设置 relation：';
+  batchRelSet('');       // 复位下拉到「（无）」
+  document.getElementById('node-modal').style.display = 'none';
+  document.getElementById('attach-modal').style.display = 'none';
+  document.getElementById('batch-rel-modal').style.display = 'block';
+  document.getElementById('modal-mask').classList.add('open');
+  document.getElementById('nm-batch-relation').focus();
+}
+function closeBatchRelModal() {
+  closeModal();          // 关闭，但不清空 multiSel（取消保留勾选，便于调整后重开）
+}
+function applyBatchRel() {
+  var keys = Object.keys(state.multiSel);
+  if (!keys.length) { closeModal(); return; }
+  var rel = batchRelGet();
+  pushHistory();         // 一次快照，整批可 Ctrl+Z 撤销
+  var applied = 0, skipped = 0;
+  keys.forEach(function(k) {
+    var node = getNodeByPath(k.split('.').map(Number));
+    if (!node) { skipped++; delete state.multiSel[k]; return; }  // 失效路径跳过
+    if (rel) node.relation = rel; else delete node.relation;      // 空值=清关系
+    applied++;
+  });
+  state.multiSel = {};
+  closeModal();
+  renderTree(); renderPreview(); updateStatus();
+  if (skipped) alert('已更新 ' + applied + ' 个节点；' + skipped + ' 个节点路径已失效被跳过。');
+}
+
+/* ============================================================
+ * 添加新词：从有道词典抓取讲解（音标/释义/巧记/例句/派生词），
+ * 讲解字段与做题网站 cet6_quiz.html 词库 ALL_WORDS 完全一致，
+ * 可加入导图词群 / 写入内存词库 / 生成词库记录 JSON。
+ * 需要本地词典服务 dict-server.js（node dict-server.js），
+ * 服务离线时可粘贴有道 jsonapi 原始 JSON 手动解析。
+ * ============================================================ */
+var DICT_SERVER = 'http://127.0.0.1:17989';
+
+/* 检测词典服务是否在线，并在弹窗顶部给出状态提示 */
+function checkDictServer() {
+  var el = document.getElementById('aw-server-status');
+  if (!el) return;
+  el.className = '';
+  el.textContent = '正在检测词典服务…';
+  fetch(DICT_SERVER + '/ping')
+    .then(function(r) { return r.ok; })
+    .catch(function() { return false; })
+    .then(function(ok) {
+      if (!el) return;
+      if (ok) {
+        el.className = 'server-on';
+        el.textContent = '✓ 词典服务在线：' + DICT_SERVER + '（可直接抓取）';
+      } else {
+        el.className = 'server-off';
+        el.textContent = '✗ 词典服务未启动。请双击「打开词群编辑器.bat」一键启动服务+编辑器；' +
+          '或用 PowerShell 执行：node dict-server.js。\n' +
+          '未启动时也可展开「粘贴抓取结果」手动解析有道 JSON。';
+      }
+    });
+}
+
+function openAddWordModal() {
+  document.getElementById('node-modal').style.display = 'none';
+  document.getElementById('attach-modal').style.display = 'none';
+  document.getElementById('batch-rel-modal').style.display = 'none';
+  document.getElementById('addword-modal').style.display = 'block';
+  document.getElementById('modal-mask').classList.add('open');
+  setAddWordMsg('输入单词后点「从有道词典抓取」；若提示未启动服务，可展开「粘贴抓取结果」手动解析。');
+  checkDictServer();
+  document.getElementById('aw-word').focus();
+  document.getElementById('aw-word').select();
+}
+
+function setAddWordMsg(msg, ok) {
+  var el = document.getElementById('aw-msg');
+  el.textContent = msg || '';
+  el.className = 'imp-msg ' + (ok ? 'ok' : 'err');
+}
+
+function togglePasteJson() {
+  var t = document.getElementById('aw-paste');
+  t.classList.toggle('open');
+  if (t.classList.contains('open')) t.focus();
+}
+
+/* 把有道 jsonapi 响应解析成词库讲解格式（与 dict-server.js 的 parseYoudaoJSON 保持同步） */
+function parseYoudaoJSON(j, word) {
+  var out = { word: word, pronunciation: '', meaning: '', pos: '', memo: '', example: '', derivative: '' };
+  var ec = j && j.ec && j.ec.word && j.ec.word[0];
+  if (ec) {
+    var ph = ec.ukphone || ec.usphone || '';
+    if (ph) {
+      var p = String(ph).replace(/ˈ/g, "'").replace(/ˌ/g, "'").replace(/'+/g, "'");
+      if (p.charAt(0) !== '/') p = '/' + p + '/';
+      out.pronunciation = p;
+    }
+    var ms = [];
+    if (Array.isArray(ec.trs)) {
+      ec.trs.forEach(function(t) {
+        if (!t || !Array.isArray(t.tr)) return;
+        t.tr.forEach(function(tr) {
+          var l = tr && tr.l;
+          if (!l) return;
+          var txt = '';
+          if (Array.isArray(l.i) && l.i.length) txt = l.i[0];
+          else if (typeof l['#text'] === 'string') txt = l['#text'];
+          txt = String(txt).replace(/<[^>]*>/g, '').trim();
+          if (txt) ms.push(txt);
+        });
+      });
+    }
+    if (ms.length) {
+      out.meaning = ms.join(';');
+      out.pos = inferPos(out.meaning);
+    }
+  }
+  /* 巧记：有道词源(etym)的中文条目里，优先取「词根词缀」式短讲解——
+   * 与做题站词库「构词/联想」巧记风格一致；没有词根词缀条目时取最短一条，
+   * 长度压到 120 字内，不再把整段长词源放进巧记。 */
+  if (j && j.etym && j.etym.etyms && Array.isArray(j.etym.etyms.zh)) {
+    var zhs = [];
+    j.etym.etyms.zh.forEach(function(e) { if (e && e.value) zhs.push(e); });
+    var pick = null;
+    zhs.forEach(function(e) { if (!pick && /词根词缀/.test(e.value)) pick = e; });
+    if (!pick) zhs.forEach(function(e) { if (!pick || e.value.length < pick.value.length) pick = e; });
+    if (pick) {
+      var mv = String(pick.value || '').replace(/\s+/g, ' ').trim();
+      if (mv) {
+        mv = mv.replace(/^词根词缀[：:、\-—\s]*/, '构词 ');
+        if (mv.length > 120) {
+          var cut = mv.slice(0, 120);
+          var cutIdx = cut.lastIndexOf('。');
+          mv = (cutIdx > 20 ? cut.slice(0, cutIdx + 1) : cut) + '…';
+        }
+        out.memo = mv;
+      }
+    }
+  }
+  var sp = (j && j.blng_sents_part && Array.isArray(j.blng_sents_part['sentence-pair'])) ? j.blng_sents_part['sentence-pair'] : null;
+  if (sp && sp[0]) {
+    var en = String(sp[0]['sentence'] || '').replace(/<[^>]*>/g, '').trim();
+    var cn = String(sp[0]['sentence-translation'] || '').replace(/<[^>]*>/g, '').trim();
+    if (en) out.example = cn ? (en + ' ' + cn) : en;
+  }
+  if (j && j.rel_word && Array.isArray(j.rel_word.rels)) {
+    var der = [];
+    j.rel_word.rels.forEach(function(r) {
+      if (!r || !r.rel) return;
+      var pos = r.rel.pos || '';
+      (Array.isArray(r.rel.words) ? r.rel.words : []).forEach(function(w) {
+        if (!w || !w.word) return;
+        var t = String(w.tran || '').replace(/<[^>]*>/g, '').trim();
+        der.push(w.word + (pos ? ' ' + pos : '') + (t ? ' ' + t : ''));
+      });
+    });
+    if (der.length) out.derivative = der.join('；');
+  }
+  return out;
+}
+
+function fillAddWordForm(d, word) {
+  document.getElementById('aw-word').value = word || d.word || '';
+  document.getElementById('aw-pronunciation').value = d.pronunciation || '';
+  document.getElementById('aw-meaning').value = d.meaning || '';
+  document.getElementById('aw-pos').value = d.pos || '';
+  document.getElementById('aw-memo').value = d.memo || '';
+  document.getElementById('aw-example').value = d.example || '';
+  document.getElementById('aw-derivative').value = d.derivative || '';
+}
+
+function readAddWordForm() {
+  return {
+    word: document.getElementById('aw-word').value.trim(),
+    pronunciation: document.getElementById('aw-pronunciation').value.trim(),
+    meaning: document.getElementById('aw-meaning').value.trim(),
+    pos: document.getElementById('aw-pos').value.trim(),
+    memo: document.getElementById('aw-memo').value.trim(),
+    example: document.getElementById('aw-example').value.trim(),
+    derivative: document.getElementById('aw-derivative').value.trim()
+  };
+}
+
+/* 查重：该词是否已在词库 / 导图中（保证添加后做题网站显示归属一致，避免重复词显示混乱） */
+function checkWordDuplicate(word) {
+  var k = String(word || '').toLowerCase().trim();
+  var res = { allWords: null, inMap: [] };
+  if (!k) return res;
+  if (state.idx && state.idx.byWord && state.idx.byWord[k] && state.idx.byWord[k].length) {
+    res.allWords = state.idx.byWord[k][0];
+  }
+  if (state.unitMaps) {
+    var um = state.unitMaps[state.currentUnit];
+    if (um) {
+      Object.keys(um).forEach(function(g) {
+        function walk(nodes, trail) {
+          nodes.forEach(function(n, i) {
+            if (String(n.word || '').toLowerCase() === k) res.inMap.push({ gid: g, path: trail.concat([i]), word: n.word });
+            if (n.children) walk(n.children, trail.concat([i]));
+          });
+        }
+        walk(um[g].level1Nodes || [], []);
+      });
+    }
+  }
+  return res;
+}
+
+/* 返回查重结果的提示文本（无重复返回空串） */
+function duplicateWarnText(word) {
+  var d = checkWordDuplicate(word);
+  var parts = [];
+  if (d.allWords) parts.push('词库已收录「' + d.allWords.word + '」：Unit ' + d.allWords.unit + ' · 词群' + (d.allWords.group_id || '?') + '「' + (d.allWords.group_name || '') + '」');
+  if (d.inMap.length) parts.push('导图 unit' + state.currentUnit + ' g' + d.inMap[0].gid + ' 已有（路径 ' + d.inMap[0].path.join('.') + '）');
+  return parts.length ? '⚠ 重复警告：' + parts.join('；') + '。\n继续添加会出现两条同词不同归属，做题网站显示不一致，建议改用现有词。' : '';
+}
+
+/* 抓取成功后的提示：填充表单并附带查重警告 */
+function showFetchOk(word) {
+  var warn = duplicateWarnText(word);
+  if (warn) setAddWordMsg(warn + '\n✅ 已抓取填充；确认是真正的新词再继续操作。', false);
+  else setAddWordMsg('✅ 已从有道词典抓取并填充，可微调后使用。', true);
+}
+
+/* 抓取：优先本地词典服务，其次直连有道（file:// 下通常被 CORS 拦截），都不行则引导粘贴 */
+function fetchFromDict() {
+  var word = document.getElementById('aw-word').value.trim();
+  if (!word) { setAddWordMsg('请先输入单词。', false); return; }
+  setAddWordMsg('正在从有道词典抓取「' + word + '」…');
+  var q = encodeURIComponent(word);
+  fetch(DICT_SERVER + '/lookup?word=' + q)
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(d) { if (d && d.error) throw new Error(d.error); fillAddWordForm(d, word); showFetchOk(word); })
+    .catch(function() {
+      return fetch('https://dict.youdao.com/jsonapi?q=' + q)
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function(j) { fillAddWordForm(parseYoudaoJSON(j, word), word); showFetchOk(word); })
+        .catch(function() {
+          setAddWordMsg('❌ 抓取失败：本地词典服务未启动或浏览器拦截了直连。\n' +
+            '两种解决方式：\n' +
+            '1) 终端运行 node dict-server.js 后重试；\n' +
+            '2) 展开「粘贴抓取结果」，粘贴 curl "https://dict.youdao.com/jsonapi?q=' + word + '" 返回的 JSON。', false);
+        });
+    });
+}
+
+function parseYoudaoPaste() {
+  var raw = document.getElementById('aw-paste').value.trim();
+  if (!raw) { setAddWordMsg('请先粘贴有道 jsonapi 返回的 JSON。', false); return; }
+  var j = null;
+  try { j = JSON.parse(raw); }
+  catch (e) {
+    var s = raw.indexOf('{'), e2 = raw.lastIndexOf('}');
+    if (s >= 0 && e2 > s) { try { j = JSON.parse(raw.slice(s, e2 + 1)); } catch (e3) { j = null; } }
+  }
+  if (!j) { setAddWordMsg('❌ JSON 解析失败，请确认粘贴的是有道 jsonapi 返回的完整 JSON。', false); return; }
+  var w = document.getElementById('aw-word').value.trim();
+  if (!w) {
+    var ec0 = j && j.ec && j.ec.word && j.ec.word[0];
+    w = (ec0 && (ec0['return-phrase'] || ec0.h3)) || j.input || '';
+  }
+  fillAddWordForm(parseYoudaoJSON(j, w), w);
+  var warn = duplicateWarnText(w);
+  if (warn) setAddWordMsg(warn + '\n✅ 已解析填充；确认是真正的新词再继续操作。', false);
+  else setAddWordMsg('✅ 已解析粘贴内容并填充。', true);
+}
+
+/* 词群名规范化（忽略空白差异），用于和词库已有词群匹配，保证显示一致 */
+function normGroupName(s) { return String(s || '').replace(/\s+/g, '').trim(); }
+
+/* 生成 ALL_WORDS 格式记录（complete=true 时补 unit/group_id/seq/id，可直接粘贴进 data-all-words）。
+ * 归属信息与做题网站显示一致：unit/group_name 取当前词群；group_id 优先取词库中
+ * 同 unit 同词群名已有词的编号（做题网站「词群X」显示与同词群其他词完全一致），
+ * 词库尚无该词群时才回退用导图 gid；seq 在同词群内顺延。 */
+function buildWordRecord(complete) {
+  var rec = readAddWordForm();
+  var r = {
+    word: rec.word,
+    pronunciation: rec.pronunciation,
+    meaning: rec.meaning,
+    memo: rec.memo,
+    example: rec.example,
+    derivative: rec.derivative
+  };
+  if (complete) {
+    r.unit = +state.currentUnit || 0;
+    r.lesson = 0;
+    r.group_name = state.groupName || '';
+    var maxId = 0, maxSeqAll = 0, same = [];
+    (state.allWords || []).forEach(function(w) {
+      if (+w.id > maxId) maxId = +w.id;
+      if (+w.seq > maxSeqAll) maxSeqAll = +w.seq;
+      if (+w.unit === r.unit && w.group_name && normGroupName(w.group_name) === normGroupName(r.group_name)) same.push(w);
+    });
+    r.group_id = (same.length && same[0].group_id != null) ? +same[0].group_id : (+state.currentGid || 0);
+    var maxSeq = 0;
+    same.forEach(function(w) { if (+w.seq > maxSeq) maxSeq = +w.seq; });
+    r.id = maxId + 1;
+    r.seq = (same.length ? maxSeq : maxSeqAll) + 1;
+  }
+  return r;
+}
+
+/* 添加到当前词群：有选中节点则挂其下，否则作为一级词 */
+function addWordToGroup() {
+  if (!state.unitMaps) { alert('请先导入 unit-maps.js（现有导图）再添加节点。'); return; }
+  var rec = readAddWordForm();
+  if (!rec.word) { setAddWordMsg('请先输入单词（word）。', false); return; }
+  var dup = checkWordDuplicate(rec.word);
+  if (dup.allWords) {
+    var gInfo = '词库已收录「' + dup.allWords.word + '」：Unit ' + dup.allWords.unit + ' · 词群' + (dup.allWords.group_id || '?') + '「' + (dup.allWords.group_name || '') + '」';
+    if (!confirm(gInfo + '\n\n再添加到当前词群，做题网站会出现两条同词不同归属的记录（显示不一致）。\n确认这不是重复添加？「确定」继续，「取消」中止。')) return;
+  } else if (dup.inMap.length) {
+    var mInfo = '该词已在导图 unit' + state.currentUnit + ' g' + dup.inMap[0].gid + ' 中（路径 ' + dup.inMap[0].path.join('.') + '）。';
+    if (!confirm(mInfo + '\n\n仍要在当前词群再添加一份？「确定」继续，「取消」中止。')) return;
+  }
+  pushHistory();
+  var node = { word: rec.word, phonetic: rec.pronunciation, meaning: rec.meaning, pos: rec.pos || inferPos(rec.meaning), children: [] };
+  var where = '一级节点';
+  if (state.selected && state.selected.length) {
+    var parent = getNodeByPath(state.selected);
+    if (parent) {
+      if (!parent.children) parent.children = [];
+      parent.children.push(node);
+      state.selected = state.selected.concat([parent.children.length - 1]);
+      where = '「' + (parent.word || '空节点') + '」下';
+    } else {
+      state.level1Nodes.push(node);
+      state.selected = [state.level1Nodes.length - 1];
+    }
+  } else {
+    state.level1Nodes.push(node);
+    state.selected = [state.level1Nodes.length - 1];
+  }
+  state.multiSel = {};
+  mergeBack();
+  renderTree(); renderPreview(); updateStatus();
+  var show = buildWordRecord(true);
+  closeModal();
+  alert('✅ 已把「' + rec.word + '」添加到词群（' + where + '）。\n' +
+    '做题网站将显示归属：📁 词群 ' + (show.group_id || '?') + '「' + (show.group_name || state.groupName || '') + '」 · Unit ' + (show.unit || '?') + '\n' +
+    '提示：要把该词正式加入题库，请再点「复制词库记录 JSON」并粘进 cet6_quiz.html 的 data-all-words 数据块（这样查询/做题都会显示这条归属）。');
+}
+
+/* 写入内存词库：lookup 立即可查；要永久生效需把记录合并进 cet6_quiz.html */
+function addWordToAllWords() {
+  if (!state.allWords.length) { alert('请先导入 cet6_quiz.html 词库（主词库）。'); return; }
+  var rec = readAddWordForm();
+  if (!rec.word) { setAddWordMsg('请先输入单词。', false); return; }
+  var dupWarn = duplicateWarnText(rec.word);
+  if (dupWarn && !confirm(dupWarn + '\n\n仍要写入内存词库？「确定」写入，「取消」中止。')) return;
+  var full = buildWordRecord(true);
+  var newRec = {
+    id: full.id, word: full.word, pronunciation: full.pronunciation, meaning: full.meaning,
+    unit: full.unit, lesson: 0, group_id: full.group_id, group_name: full.group_name,
+    seq: full.seq, memo: full.memo || '', example: full.example || '', derivative: full.derivative || ''
+  };
+  state.allWords.push(newRec);
+  state.idx = buildIndexes(state.allWords);
+  fillDatalist();
+  updateStatus();
+  setAddWordMsg('✅ 已写入内存词库，当前会话 lookup 可查。\n要永久生效请「复制词库记录 JSON」合并进 cet6_quiz.html 的 data-all-words。', true);
+}
+
+/* 复制 ALL_WORDS 格式记录（含 unit/group_id/seq/id），供合并进 cet6_quiz.html */
+async function copyWordRecordJSON() {
+  var rec = buildWordRecord(true);
+  if (!rec.word) { setAddWordMsg('请先输入单词。', false); return; }
+  var ok = await copyText(JSON.stringify(rec));
+  setAddWordMsg(ok
+    ? '✅ 已复制词库记录 JSON。粘贴进 cet6_quiz.html 的 data-all-words 数组末尾（注意给前一条记录补逗号）。\n记录：' + JSON.stringify(rec)
+    : '复制失败，请手动复制。', ok);
+}
+
+/* 下载本会话新增词累积的 add-words.json，便于一次性合并 */
+function downloadWordRecordJSON() {
+  var rec = buildWordRecord(true);
+  if (!rec.word) { setAddWordMsg('请先输入单词。', false); return; }
+  var list = [];
+  try { list = JSON.parse(localStorage.getItem('wmEditor.addWords') || '[]') || []; } catch (e) { list = []; }
+  var k = rec.word.toLowerCase();
+  var hit = false;
+  list = list.map(function(r) { if (String(r.word).toLowerCase() === k) { hit = true; return rec; } return r; });
+  if (!hit) list.push(rec);
+  try { localStorage.setItem('wmEditor.addWords', JSON.stringify(list)); } catch (e) {}
+  download('add-words.json', JSON.stringify(list, null, 2));
+  setAddWordMsg('✅ 已下载 add-words.json（累计 ' + list.length + ' 条），可合并进 cet6_quiz.html 的 data-all-words。', true);
+}
+
+function saveNodeModal() {
+  var node = getNodeByPath(_modalPath);
+  if (!node) return;
+  if (_nmFetching && !document.getElementById('nm-meaning').value.trim()) {
+    alert('正在从有道词典抓取讲解，请稍候再点保存。');
+    return;
+  }
+  pushHistory();
+  node.word = document.getElementById('nm-word').value.trim();
+  node.phonetic = document.getElementById('nm-phonetic').value.trim();
+  node.meaning = document.getElementById('nm-meaning').value.trim();
+  node.pos = document.getElementById('nm-pos').value.trim();
+  var rel = nmRelationGet();
+  if (rel) node.relation = rel; else delete node.relation;
+  if (!node.pos) node.pos = inferPos(node.meaning);
+  if (!node.children) node.children = [];
+  closeModal();
+  renderTree(); renderPreview(); updateStatus();
+}
+
+function modalInferRelation() {
+  var node = getNodeByPath(_modalPath);
+  if (!node) return;
+  if (_modalPath.length < 2) { alert('一级节点无父词，无法推断。'); return; }
+  var par = getParentByPath(_modalPath);
+  var parentWord = par && par.list[par.idx] ? null : null;
+  // 找父词
+  var pPath = _modalPath.slice(0, -1);
+  var parent = getNodeByPath(pPath);
+  if (!parent) { alert('未找到父词。'); return; }
+  var r = inferRelation(node.word || '', parent.word);
+  nmRelationSet(r);
+}
+
+/* 词根词缀即时提示 */
+function updateMorphHint(word) {
+  var el = document.getElementById('morph-hint');
+  if (!word) { el.textContent = ''; return; }
+  var parts = [];
+  var wl = word.toLowerCase();
+  var sp = stripPrefixWord(wl);
+  var ss = stripSuffixWord(wl);
+  var mid = wl;
+  var r = null;
+  if (sp) { parts.push(sp.pre + '(' + sp.cn + ')'); mid = sp.rest; }
+  if (ss) { parts.push(mid.slice(0, mid.length - ss.suf.length) + '(-' + ss.suf + ')'); mid = ''; }
+  if (mid) {
+    r = findRoot(mid);
+    if (r) parts.push(mid + '(' + (r.cn || '词根') + ')');
+  }
+  if (!parts.length && word) {
+    r = findRoot(wl);
+    if (r) parts.push('词根 ' + r.root + '(' + r.cn + ')');
+  }
+  el.textContent = parts.length ? '构词分析：' + parts.join(' + ') + (ss ? ' → 词性倾向 ' + ss.pos : '') : '';
+}
+
+/* ============================================================
+ * 自动补全（修正现有数据）
+ * ============================================================ */
+function autoCompleteGroup() {
+  if (!state.idx) { alert('请先导入 cet6_quiz.html 词库'); return; }
+  pushHistory();
+  var filledPh = 0, filledM = 0, filledPos = 0;
+  function walk(nodes) {
+    nodes.forEach(function(n) {
+      if (n.word && (!n.phonetic || !n.meaning)) {
+        var lu = lookupWord(n.word, +state.currentUnit);
+        if (lu.entry) {
+          if (!n.phonetic && lu.entry.pronunciation) { n.phonetic = lu.entry.pronunciation; filledPh++; }
+          if (!n.meaning && lu.entry.meaning) { n.meaning = lu.entry.meaning; filledPos++; }
+        }
+      }
+      if (!n.pos && n.meaning) {
+        var p = inferPos(n.meaning);
+        if (p) { n.pos = p; filledPos++; }
+      }
+      if (n.children) walk(n.children);
+    });
+  }
+  walk(state.level1Nodes);
+  renderTree(); renderPreview(); updateStatus();
+  alert('自动补全完成：音标 ' + filledPh + ' 处、释义 ' + filledM + ' 处、词性 ' + filledPos + ' 处。');
+}
+
+/* ============================================================
+ * 校验
+ * ============================================================ */
+var STD_RELS = { '扩':1,'同根':1,'近义':1,'相关':1,'形近':1,'加前缀':1,'反义':1,'拆分':1,'合成':1 };
+
+function validateGroup() {
+  var reports = [];
+  if (!state.level1Nodes.length) { reports.push({ lvl:'warn', msg:'词群暂无节点。', path:null }); }
+  var seen = {};
+  function walk(nodes, path, depth) {
+    nodes.forEach(function(n, i) {
+      var p = path.concat([i]);
+      if (depth > 9) reports.push({ lvl:'warn', msg:'嵌套深度超过 9（' + n.word + '）。', path:p });
+      if (!n.word) reports.push({ lvl:'error', msg:'存在空 word 节点。', path:p });
+      else {
+        var k = n.word.toLowerCase();
+        if (seen[k]) reports.push({ lvl:'warn', msg:'词 "' + n.word + '" 在词群内重复。', path:p });
+        seen[k] = 1;
+      }
+      if (n.word && !n.phonetic) reports.push({ lvl:'warn', msg:'缺音标：' + n.word, path:p });
+      if (n.word && !n.meaning) reports.push({ lvl:'warn', msg:'缺释义：' + n.word, path:p });
+      if (n.word && !n.pos) reports.push({ lvl:'warn', msg:'缺词性：' + n.word, path:p });
+      if (n.relation && !STD_RELS[n.relation]) reports.push({ lvl:'warn', msg:'自定义关系 "' + n.relation + '"（' + n.word + '），渲染为紫色；标准关系为 扩/同根/近义/相关/形近/加前缀/反义/拆分/合成', path:p });
+      if (n.children != null && !Array.isArray(n.children)) reports.push({ lvl:'error', msg:'children 不是数组（' + n.word + '）。', path:p });
+      // 字段顺序检查
+      var keys = Object.keys(n);
+      var expected = ['word','phonetic','meaning','pos','relation','children'];
+      for (var ki = 0; ki < keys.length && ki < 5; ki++) {
+        if (keys[ki] !== expected[ki]) { reports.push({ lvl:'error', msg:'字段顺序异常（' + n.word + '）：期望 ' + expected[ki] + '，实际 ' + keys[ki], path:p }); break; }
+      }
+      if (n.children && n.children.length) walk(n.children, p, depth + 1);
+    });
+  }
+  walk(state.level1Nodes, [], 0);
+  if (!state.groupName) reports.push({ lvl:'warn', msg:'词群名（group_name）为空。', path:null });
+  if (!reports.length) reports.push({ lvl:'ok', msg:'词群校验通过。', path:null });
+  renderValidation(reports);
+}
+
+function validateUnit() {
+  if (!state.unitMaps || !state.idx) { alert('请先导入词库和导图数据'); return; }
+  var unit = +state.currentUnit;
+  var reports = [];
+  // 收集导图中该 unit 全部词
+  var mapSet = {};
+  var unitMap = state.unitMaps[unit] || {};
+  Object.keys(unitMap).forEach(function(g) {
+    function walk(nodes) { nodes.forEach(function(n) { mapSet[n.word.toLowerCase()] = 1; if (n.children) walk(n.children); }); }
+    walk(unitMap[g].level1Nodes || []);
+  });
+  // 收集 ALL_WORDS 该 unit 全部词
+  var missing = [];
+  state.allWords.forEach(function(w) {
+    if (+w.unit === unit && !mapSet[String(w.word).toLowerCase()]) missing.push(w.word);
+  });
+  if (missing.length) {
+    reports.push({ lvl:'error', msg:'该 unit 有 ' + missing.length + ' 个核心词未在导图数据中（零缺失校验）：' + missing.slice(0, 40).join('、') + (missing.length > 40 ? '…' : ''), path:null });
+  } else {
+    reports.push({ lvl:'ok', msg:'unit' + unit + ' 零缺失校验通过：全部核心词都在导图数据中。', path:null });
+  }
+  // gid 完整性
+  var gids = Object.keys(unitMap).map(Number).sort(function(a,b){ return a-b; });
+  var expected = [];
+  var maxG = Math.max.apply(null, gids.concat([0]));
+  for (var g2 = 1; g2 <= maxG; g2++) expected.push(g2);
+  var missingGids = expected.filter(function(g){ return gids.indexOf(g) < 0; });
+  if (missingGids.length) reports.push({ lvl:'info', msg:'该 unit gid 缺失：' + missingGids.join(', ') + '（可能为书页空位，可忽略）', path:null });
+  renderValidation(reports);
+}
+
+/* ============================================================
+ * 导出
+ * ============================================================ */
+function canonicalNode(n) {
+  var out = { word: n.word || '', phonetic: n.phonetic || '', meaning: n.meaning || '', pos: n.pos || '' };
+  if (n.relation || !state.opts.omitEmptyRelation) out.relation = n.relation || '';
+  out.children = (n.children || []).map(canonicalNode);
+  return out;
+}
+function serializeGroup() {
+  return { group_name: state.groupName, level1Nodes: state.level1Nodes.map(canonicalNode) };
+}
+function jsonStr(obj, pretty) {
+  return pretty ? JSON.stringify(obj, null, 2) : JSON.stringify(obj);
+}
+function setExport(text) { document.getElementById('export-out').value = text; }
+
+function exportGroupJSON() {
+  if (!state.level1Nodes.length) { alert('当前词群为空，先添加节点。'); return; }
+  var pretty = !document.getElementById('opt-compact').checked;
+  setExport(jsonStr(serializeGroup(), pretty));
+}
+function exportUnitBlock() {
+  if (!state.unitMaps) { alert('请先导入 unit-maps.js'); return; }
+  mergeBack();
+  var unit = state.currentUnit;
+  var pretty = !document.getElementById('opt-compact').checked;
+  setExport(jsonStr(state.unitMaps[unit], pretty));
+}
+function exportFullFile() {
+  if (!state.unitMaps) { alert('请先导入 unit-maps.js'); return; }
+  mergeBack();
+  var pretty = !document.getElementById('opt-compact').checked;
+  var body = 'window.__UNIT_MAPS_DATA__ = ' + jsonStr(state.unitMaps, pretty) + ';\n';
+  var text = state.fileHeader + body;
+  setExport(text);
+  download('unit-maps.js', text);
+  // 自动用新导图替换做题网站的数据文件（unit-maps.js 规格要求 LF 行尾）
+  saveToProject('data/unit-maps.js', text.replace(/\r\n/g, '\n'));
+}
+
+/* 通过本地词典服务 /save 把导出内容写回本项目文件（做题网站 cet6_quiz.html 刷新即加载新导图） */
+function saveToProject(p, text) {
+  var msg = document.getElementById('save-project-msg');
+  if (msg) msg.textContent = '⏳ 正在保存到项目 ' + p + ' …';
+  fetch(DICT_SERVER + '/save?p=' + encodeURIComponent(p), { method: 'POST', body: text })
+    .then(function(r) { return r.json(); })
+    .then(function(j) {
+      if (!msg) return;
+      if (j && j.ok) {
+        msg.style.color = 'var(--green)';
+        msg.textContent = '✅ 已保存到项目 ' + p + '（做题网站刷新即看到新导图）';
+      } else {
+        msg.style.color = 'var(--red)';
+        msg.textContent = '保存失败：' + ((j && j.error) || '未知错误') + '（文件已下载到浏览器）';
+      }
+    })
+    .catch(function() {
+      if (!msg) return;
+      msg.style.color = 'var(--red)';
+      msg.textContent = '未保存到项目：词典服务未启动，请先运行「打开词群编辑器.bat」后重试（文件已下载到浏览器）';
+    });
+}
+
+function download(filename, text) {
+  var blob = new Blob([text], { type: 'application/javascript;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); return true; }
+  catch (e) {}
+  var ta = document.createElement('textarea');
+  ta.value = t;
+  ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  var ok = false;
+  try { ok = document.execCommand('copy'); } catch(e2) {}
+  ta.remove();
+  return ok;
+}
+
+/* ============================================================
+ * 词群管理 / 导入事件 / 初始化
+ * ============================================================ */
+function loadSelectedGroup() {
+  if (!state.unitMaps) return;
+  var u = document.getElementById('unit-select').value;
+  var g = document.getElementById('gid-select').value;
+  state.currentUnit = u;
+  state.currentGid = g;
+  var grp = state.unitMaps[u] && state.unitMaps[u][g];
+  if (grp) {
+    state.groupName = grp.group_name || '';
+    state.level1Nodes = JSON.parse(JSON.stringify(grp.level1Nodes || []));
+  } else {
+    state.groupName = '';
+    state.level1Nodes = [];
+  }
+  state.stack = [];
+  state.activeWord = '';
+  state.selected = null;
+  state.multiSel = {};  // 切词群清空勾选
+  _gnEditSession = false;
+  pushHistory();
+  renderTree(); renderPreview(); updateStatus(); renderToolbar();
+}
+
+function newUnit() {
+  if (!state.unitMaps) { alert('请先导入 unit-maps.js'); return; }
+  // 当前最大 unit 号 + 1（现有 1-9 为核心词库，新 unit 从 10 开始；若已到扩展词库区间则继续往后）
+  var maxU = 0;
+  Object.keys(state.unitMaps).forEach(function(u) { var n = +u; if (n > maxU) maxU = n; });
+  var u = String(maxU + 1);
+  var name = prompt('新 unit 编号：' + u + '\n（可修改，建议 ≥ 10，避免与现有 1-9 核心词库混淆）', u);
+  if (name === null) return;
+  u = String(name).trim();
+  if (!u || !/^\d+$/.test(u)) { alert('unit 编号必须是数字。'); return; }
+  if (state.unitMaps[u]) { alert('unit' + u + ' 已存在，不能重复新建。'); return; }
+  state.unitMaps[u] = { '1': { group_name: '', level1Nodes: [] } };
+  state.currentUnit = u;
+  state.currentGid = '1';
+  state.groupName = '';
+  state.level1Nodes = [];
+  state.stack = []; state.activeWord = ''; state.selected = null;
+  state.multiSel = {};
+  pushHistory();
+  renderToolbar(); renderTree(); renderPreview(); updateStatus();
+  fillDatalist();
+  alert('已新建 unit' + u + '（含空词群 g1）。\n提示：\n1. 先填词群名（group_name）\n2. 用「＋ 添加单词」添加节点，word 输入时会自动从词库补全音标/释义\n3. 完成后点「合并回数据」→「下载 unit-maps.js（整体替换）」');
+  document.getElementById('group-name-input').focus();
+}
+
+function newGroup() {
+  if (!state.unitMaps) { alert('请先导入 unit-maps.js'); return; }
+  var u = document.getElementById('unit-select').value;
+  if (!state.unitMaps[u]) state.unitMaps[u] = {};
+  // 找最小空 gid
+  var gids = Object.keys(state.unitMaps[u]).map(Number);
+  var g = 1;
+  while (gids.indexOf(g) >= 0) g++;
+  state.currentUnit = u;
+  state.currentGid = String(g);
+  state.unitMaps[u][String(g)] = { group_name: '', level1Nodes: [] };
+  state.groupName = '';
+  state.level1Nodes = [];
+  state.stack = []; state.activeWord = ''; state.selected = null;
+  state.multiSel = {};
+  pushHistory();
+  renderToolbar(); renderTree(); renderPreview(); updateStatus();
+  alert('已新建词群 g' + g + '（unit' + u + '），请先填词群名再添加节点。');
+  document.getElementById('group-name-input').focus();
+}
+
+function deleteGroup() {
+  if (!state.unitMaps) return;
+  var u = document.getElementById('unit-select').value;
+  var g = document.getElementById('gid-select').value;
+  if (!confirm('确定删除 unit' + u + ' 的 g' + g + ' 词群？')) return;
+  delete state.unitMaps[u][g];
+  state.level1Nodes = [];
+  state.groupName = '';
+  state.currentGid = Object.keys(state.unitMaps[u])[0] || '1';
+  renderToolbar(); loadSelectedGroup(); updateStatus();
+}
+
+var _gnEditSession = false;   // 词群名当前编辑会话是否已记入历史（首次改动才记，避免逐键刷历史）
+
+/* 保存词群名：写回内存数据 + 同步 gid 下拉 + 可撤销 + 记草稿 */
+function saveGroupName() {
+  var el = document.getElementById('group-name-input');
+  var val = (el ? el.value : '') || '';
+  if (!state.unitMaps) { state.groupName = val; renderPreview(); return; }
+  if (state.groupName === val) { mergeBack(); renderToolbar(); updateStatus(); return; }
+  pushHistory();                 // 改名可 Ctrl+Z 撤销
+  state.groupName = val;
+  mergeBack();                   // 立即写回 unitMaps，避免忘记点「合并回数据」
+  renderToolbar(); renderPreview(); updateStatus();
+  draftSave();
+}
+
+function mergeBack() {
+  if (!state.unitMaps) return;
+  var u = state.currentUnit, g = state.currentGid;
+  if (!state.unitMaps[u]) state.unitMaps[u] = {};
+  state.unitMaps[u][g] = { group_name: state.groupName, level1Nodes: JSON.parse(JSON.stringify(state.level1Nodes)) };
+  renderToolbar();
+}
+
+/* 导入事件绑定 */
+function bindImport() {
+  var fAW = document.getElementById('f-allwords');
+  var fMaps = document.getElementById('f-maps');
+  var fFW = document.getElementById('f-fullwords');
+  fAW.addEventListener('change', async function() {
+    try {
+      var text = await readFileAsText(fAW.files[0]);
+      state.allWords = parseAllWords(text);
+      state.idx = buildIndexes(state.allWords);
+      fillDatalist();
+      showImportMsg('✅ 主词库已导入：' + state.allWords.length + ' 词（状态条「主词库」已更新）', true);
+      updateStatus();
+    } catch(e) { showImportMsg('导入词库失败：' + e.message, false); }
+  });
+  fMaps.addEventListener('change', async function() {
+    try {
+      var text = await readFileAsText(fMaps.files[0]);
+      var r = parseUnitMaps(text);
+      state.unitMaps = r.obj;
+      state.fileHeader = r.header;
+      state.currentUnit = Object.keys(state.unitMaps)[0] || '1';
+      state.currentGid = Object.keys(state.unitMaps[state.currentUnit] || {})[0] || '1';
+      renderToolbar(); loadSelectedGroup(); updateStatus();
+      showImportMsg('导图数据已导入：' + Object.keys(state.unitMaps).length + ' 个 unit', true);
+    } catch(e) { showImportMsg('导入导图失败：' + e.message, false); }
+  });
+  fFW.addEventListener('change', async function() {
+    try {
+      var text = await readFileAsText(fFW.files[0]);
+      state.fullWords = parseFullWords(text);
+      showImportMsg('✅ 打卡词库已导入：' + state.fullWords.length + ' 词（状态条「打卡词库」已更新）', true);
+      updateStatus();
+    } catch(e) { showImportMsg('导入打卡词库失败：' + e.message, false); }
+  });
+  // 一键自动导入本项目文件（cet6_quiz.html + data/unit-maps.js + data/full-words.js）
+  document.getElementById('btn-autoimport').addEventListener('click', autoImport);
+  // 粘贴兜底
+  document.querySelectorAll('.paste-toggle').forEach(function(t) {
+    t.addEventListener('click', function() {
+      var ta = document.getElementById(t.dataset.tgt);
+      ta.classList.toggle('open');
+      if (ta.classList.contains('open')) ta.focus();
+    });
+  });
+}
+
+/* ⚡ 自动导入：通过本地词典服务 dict-server.js 的 /file 接口读取本项目文件（file:// 下可用，服务需先启动） */
+function autoImport() {
+  var base = DICT_SERVER + '/file?p=';
+  function get(p) {
+    return fetch(base + encodeURIComponent(p)).then(function(r) {
+      if (!r.ok) return r.json().then(function(j) { throw new Error((j && j.error) || ('读取失败 HTTP ' + r.status)); });
+      return r.text();
+    });
+  }
+  showImportMsg('⚡ 正在自动导入本项目文件…', false);
+  return get('cet6_quiz.html')
+    .then(function(text) {
+      state.allWords = parseAllWords(text);
+      state.idx = buildIndexes(state.allWords);
+      fillDatalist();
+      updateStatus();
+      showImportMsg('✅ 主词库已导入：' + state.allWords.length + ' 词', true);
+      return get('data/unit-maps.js');
+    })
+    .then(function(text) {
+      var r = parseUnitMaps(text);
+      state.unitMaps = r.obj;
+      state.fileHeader = r.header;
+      state.currentUnit = Object.keys(state.unitMaps)[0] || '1';
+      state.currentGid = Object.keys(state.unitMaps[state.currentUnit] || {})[0] || '1';
+      renderToolbar(); loadSelectedGroup(); updateStatus();
+      showImportMsg('✅ 导图数据已导入：' + Object.keys(state.unitMaps).length + ' 个 unit', true);
+      return get('data/full-words.js');
+    })
+    .then(function(text) {
+      state.fullWords = parseFullWords(text);
+      updateStatus();
+      showImportMsg('✅ 打卡词库已导入：' + state.fullWords.length + ' 词（自动导入完成）', true);
+    })
+    .catch(function(e) {
+      showImportMsg('自动导入失败：' + e.message + '（请先运行「打开词群编辑器.bat」启动词典服务）', false);
+    });
+}
+
+/* 打开页面时若词典服务在线则自动导入（服务离线静默跳过，不打扰手动选择） */
+function tryAutoImportOnLoad() {
+  fetch(DICT_SERVER + '/ping')
+    .then(function(r) { return r.ok; })
+    .catch(function() { return false; })
+    .then(function(ok) {
+      if (ok) autoImport();
+    });
+}
+
+function showImportMsg(msg, ok) {
+  var el = document.getElementById('import-msg');
+  el.textContent = msg;
+  el.className = 'imp-msg ' + (ok ? 'ok' : 'err');
+}
+
+function fillDatalist() {
+  var dl = document.getElementById('word-datalist');
+  // 只取当前 unit 的词做联想，避免 datalist 过大
+  var cur = +state.currentUnit;
+  var words = state.idx.byUnitWord[cur];
+  var html = '';
+  if (words) {
+    var keys = Object.keys(words).slice(0, 600);
+    keys.forEach(function(k) { html += '<option value="' + esc(words[k].word) + '"></option>'; });
+  }
+  dl.innerHTML = html;
+}
+
+/* 节点弹层事件 */
+function bindModal() {
+  var mask = document.getElementById('modal-mask');
+  mask.addEventListener('click', function(e) { if (e.target === mask) closeModal(); });
+  var w = document.getElementById('nm-word');
+  w.addEventListener('input', function() {
+    updateMorphHint(w.value);
+    if (w.value.trim()) {
+      var lu = lookupWord(w.value, +state.currentUnit);
+      var hint = document.getElementById('lookup-hint');
+      var fb = document.getElementById('nm-fetch-btn');
+      var ab = document.getElementById('nm-open-aw-btn');
+      if (lu.entry) {
+        hint.textContent = '来自 ' + (lu.source === 'allWords' ? 'ALL_WORDS unit' + lu.unit : '打卡词库') + '：' + lu.entry.meaning;
+        hint.className = 'ok';
+        w.removeAttribute('data-missing');
+        if (fb) fb.style.display = 'none';
+        if (ab) ab.style.display = 'none';
+      } else {
+        hint.textContent = '⚠ 词库未收录：点「📥 从有道词典抓取」自动补全，或回车自动抓取';
+        hint.className = 'err';
+        w.setAttribute('data-missing', 'true');
+        if (fb) fb.style.display = '';
+        if (ab) ab.style.display = '';
+      }
+    }
+  });
+  w.addEventListener('change', function() {
+    var val = w.value.trim();
+    if (val) {
+      var lu = lookupWord(val, +state.currentUnit);
+      if (lu.entry) {
+        document.getElementById('nm-phonetic').value = lu.entry.pronunciation || '';
+        document.getElementById('nm-meaning').value = lu.entry.meaning || '';
+        var p = inferPos(lu.entry.meaning);
+        if (p) document.getElementById('nm-pos').value = p;
+      } else {
+        fetchYoudaoIntoNode();   // 词库未收录：自动从有道词典抓取补全
+      }
+    }
+  });
+}
+
+/* ============================================================
+ * 「＋ 添加单词」智能补全：词库未收录的词，从有道词典抓取讲解填入节点
+ * ============================================================ */
+var _nmFetching = false;
+
+function fillNodeFromDict(d, word) {
+  document.getElementById('nm-phonetic').value = d.pronunciation || '';
+  document.getElementById('nm-meaning').value = d.meaning || '';
+  document.getElementById('nm-pos').value = d.pos || inferPos(d.meaning) || '';
+  var hint = document.getElementById('lookup-hint');
+  hint.className = 'ok';
+  hint.textContent = '✅ 已从有道词典抓取：' + (d.meaning || word) + (d.memo ? '（巧记：' + d.memo + '）' : '');
+}
+
+/* 从有道词典抓取音标/释义/词性填入当前节点（优先本地词典服务，其次直连有道） */
+function fetchYoudaoIntoNode() {
+  if (_nmFetching) return;   // 已在抓取中，跳过重复触发
+  var w = document.getElementById('nm-word');
+  var word = w.value.trim();
+  var hint = document.getElementById('lookup-hint');
+  if (!word) return;
+  hint.textContent = '正在从有道词典抓取「' + word + '」…';
+  hint.className = '';
+  _nmFetching = true;
+  var q = encodeURIComponent(word);
+  fetch(DICT_SERVER + '/lookup?word=' + q)
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(d) { if (d && d.error) throw new Error(d.error); fillNodeFromDict(d, word); })
+    .catch(function() {
+      return fetch('https://dict.youdao.com/jsonapi?q=' + q)
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function(j) { fillNodeFromDict(parseYoudaoJSON(j, word), word); })
+        .catch(function() {
+          hint.className = 'err';
+          hint.textContent = '❌ 抓取失败：词典服务未启动或直连被拦截。可运行 node dict-server.js 后重试，或点「📚 添加新词弹窗」粘贴有道 JSON 手动解析。';
+        });
+    })
+    .then(function() { _nmFetching = false; });
+}
+
+/* 词库未收录 → 打开「添加新词」弹窗（查看巧记/例句/派生词、写词库、生成词库记录），并自动抓取 */
+function openAddWordForNode() {
+  var w = document.getElementById('nm-word');
+  var word = w.value.trim();
+  openAddWordModal();
+  if (word) {
+    document.getElementById('aw-word').value = word;
+    fetchFromDict();
+  }
+}
+
+/* 快捷键 */
+function bindKeys() {
+  document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    else if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); redo(); }
+    else if (e.ctrlKey && e.key.toLowerCase() === 's') { e.preventDefault(); mergeBack(); alert('已合并回内存数据（导出前请勿刷新）。'); }
+  });
+}
+
+/* 草稿自动保存（debounce） */
+var _draftTimer = null;
+function draftSave() {
+  clearTimeout(_draftTimer);
+  _draftTimer = setTimeout(function() {
+    try {
+      localStorage.setItem('wmEditor.draft', JSON.stringify({
+        currentUnit: state.currentUnit, currentGid: state.currentGid,
+        groupName: state.groupName, level1Nodes: state.level1Nodes,
+        selected: state.selected
+      }));
+    } catch(e) {}
+  }, 600);
+}
+
+/* 初始化 */
+function init() {
+  bindImport();
+  tryAutoImportOnLoad();
+  bindModal();
+  bindKeys();
+  renderToolbar();
+  updateStatus();
+  // unit/gid 切换
+  document.getElementById('unit-select').addEventListener('change', function() {
+    state.currentUnit = this.value;
+    fillDatalist();
+    renderToolbar();
+  });
+  document.getElementById('gid-select').addEventListener('change', function() {
+    state.currentGid = this.value;
+    renderToolbar();
+  });
+  document.getElementById('group-name-input').addEventListener('input', function() {
+    var v = this.value;
+    if (v !== state.groupName) {
+      if (!_gnEditSession) { pushHistory(); _gnEditSession = true; }  // 首次改动记一次历史 → 可 Ctrl+Z 撤销
+      state.groupName = v;   // 实时更新，预览中心立刻显示新词群名
+      renderPreview();
+    }
+  });
+  document.getElementById('group-name-input').addEventListener('change', function() { _gnEditSession = false; saveGroupName(); });
+  document.getElementById('group-name-input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); this.blur(); }  // 回车即保存
+  });
+  // 导出选项
+  document.getElementById('opt-compact').addEventListener('change', function() {
+    state.opts.compact = this.checked;
+    var txt = document.getElementById('export-out').value;
+    if (txt) exportGroupJSON();
+  });
+  document.getElementById('opt-rel').addEventListener('change', function() {
+    state.opts.omitEmptyRelation = this.checked;
+    var txt = document.getElementById('export-out').value;
+    if (txt) exportGroupJSON();
+  });
+  // 监听编辑动作自动保存草稿
+  document.addEventListener('click', function() { draftSave(); }, true);
+  // 恢复草稿
+  try {
+    var d = localStorage.getItem('wmEditor.draft');
+    if (d) {
+      var draft = JSON.parse(d);
+      if (confirm('检测到上次未导出的编辑草稿，是否恢复？\n（选「取消」将清除草稿）')) {
+        state.groupName = draft.groupName || '';
+        state.level1Nodes = draft.level1Nodes || [];
+        state.currentUnit = draft.currentUnit || '1';
+        state.currentGid = draft.currentGid || '1';
+        pushHistory();
+        renderToolbar(); renderTree(); renderPreview(); updateStatus();
+      } else {
+        localStorage.removeItem('wmEditor.draft');
+      }
+    }
+  } catch(e) {}
+}
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
