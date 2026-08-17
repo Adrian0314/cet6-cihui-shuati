@@ -2749,7 +2749,7 @@ function renderQuizCard() {
         '<button class="dict-submit-btn" id="dictSubmitBtn" onclick="handleDictationSubmit()">提交</button>' +
         '<button class="dict-submit-btn" id="handwriteBtn" onclick="openHandwritePad()" style="background:transparent;border:1px solid var(--accent);color:var(--accent);">✍️ 手写</button>' +
         '</div>' +
-        '<button class="skip-btn" id="skipBtn" onclick="handleSkip()" style="display:block;margin:8px auto 0;padding:8px 20px;background:transparent;border:1px dashed var(--border);color:var(--text2);border-radius:20px;cursor:pointer;font-size:0.85em;">不会，跳过</button>' +
+        '<button class="skip-btn" id="skipBtn" onclick="handleSkip()" style="display:block;margin:18px auto 0;padding:10px 26px;background:transparent;border:1px dashed var(--border);color:var(--text2);border-radius:20px;cursor:pointer;font-size:0.85em;">不会，跳过</button>' +
         '<div class="feedback" id="feedback"></div>';
     }
 
@@ -2835,7 +2835,7 @@ function renderQuizCard() {
       (answered || isSkip ? groupMapSVG(word) + getWordDetailHTML(word) : '') +
       '</div>' +
       '<div class="quiz-actions">' +
-      (answered || isSkip ? '' : '<button class="skip-btn" id="skipBtn" onclick="handleSkip()" style="display:block;margin:0 auto;padding:8px 20px;background:transparent;border:1px dashed var(--border);color:var(--text2);border-radius:20px;cursor:pointer;font-size:0.85em;">不会，跳过</button>') +
+      (answered || isSkip ? '' : '<button class="skip-btn" id="skipBtn" onclick="handleSkip()" style="display:block;margin:22px auto 0;padding:10px 26px;background:transparent;border:1px dashed var(--border);color:var(--text2);border-radius:20px;cursor:pointer;font-size:0.85em;">不会，跳过</button>') +
       '<button class="next-btn' + (answered || isSkip ? ' show' : '') + '" id="nextBtn" onclick="advanceQuestion()">' + (quizState.isMemory ? '继续学习 →' : '下一题 →') + '</button>' +
       '</div>';
 
