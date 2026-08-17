@@ -2060,7 +2060,7 @@ test.describe('group map (new: unit-maps.js data · unit6)', () => {
 
 // ============ unit7 词群导图 ============
 test.describe('group map (new: unit-maps.js data · unit7)', () => {
-  test('unit7 has 16 groups and covers all 205 core words', async ({ page }) => {
+  test('unit7 has 16 groups and covers all 251 core words', async ({ page }) => {
     await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
     const stats = await page.evaluate(() => {
       const d = window.__UNIT_MAPS_DATA__[7];
@@ -2075,7 +2075,7 @@ test.describe('group map (new: unit-maps.js data · unit7)', () => {
     expect(stats).not.toBeNull();
     expect(stats.ids).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
     expect(stats.missing).toEqual([]);
-    expect(stats.total).toBe(205);
+    expect(stats.total).toBe(251);
   });
 
   test('every unit7 quiz word is visible in its map', async ({ page }) => {
