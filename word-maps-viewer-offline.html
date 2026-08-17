@@ -93,10 +93,6 @@ svg text{user-select:none}
 .node.collapsed .card{stroke-dasharray:4 3}
 .node.hit .card{stroke:var(--orange);stroke-width:2.5}
 .node.hit .w{fill:var(--orange)}
-.node .fold{fill:var(--surface2);stroke:var(--text2);stroke-width:1}
-.node .fold:hover{fill:var(--accent);stroke:var(--accent)}
-.node .fold text{font-size:9px;fill:var(--text);font-weight:700;pointer-events:none}
-.node .fold:hover text{fill:#fff}
 .node .spk{fill:var(--surface2);stroke:var(--text2);stroke-width:1;cursor:pointer}
 .node .spk:hover{fill:var(--accent);stroke:var(--accent)}
 .node .spk-t{pointer-events:none}
@@ -167,7 +163,7 @@ svg text{user-select:none}
 </main>
 
 <div id="legend"></div>
-<div class="hint">滚轮/双指缩放 · 拖拽平移 · 点 🔊/卡片朗读发音 · 点 ○ 折叠/展开 · 悬停看释义</div>
+<div class="hint">滚轮/双指缩放 · 拖拽平移 · 点 🔊/卡片朗读发音 · 悬停看释义</div>
 <div id="tooltip"></div>
 <div id="toast"></div>
 
@@ -368,17 +364,11 @@ function render(){
       out.push('<rect class="rel rel-badge" x="' + (x + w - rw - 6) + '" y="' + (y + 5) + '" width="' + rw + '" height="15" rx="7.5" style="fill:' + col + '"/>');
       out.push('<text class="rel-badge-t" x="' + (x + w - rw/2 - 6) + '" y="' + (y + 16) + '" text-anchor="middle" font-size="8.5" font-weight="700" fill="#fff" pointer-events="none">' + esc(rel) + '</text>');
     }
-    // 朗读按钮（固定在卡片左侧垂直居中，不与右侧徽标/折叠按钮冲突）
+    // 朗读按钮（固定在卡片左侧垂直居中，不与右侧徽标冲突）
     if (!isRoot) {
       var spx = x + 13, spy = y + h / 2;
       out.push('<circle class="spk" data-speak="' + id + '" cx="' + spx + '" cy="' + spy + '" r="7.5"/>');
       out.push('<text class="spk-t" x="' + spx + '" y="' + (spy + 3.2) + '" text-anchor="middle" font-size="9" pointer-events="none">🔊</text>');
-    }
-    // 折叠按钮
-    if (!isRoot && hasKids(n)) {
-      var fx = x + w - 13, fy = y + h - 13;
-      out.push('<circle class="fold" data-fold="' + id + '" cx="' + fx + '" cy="' + fy + '" r="7.5"/>');
-      out.push('<text class="fold-t" x="' + fx + '" y="' + (fy + 3) + '" text-anchor="middle" font-size="9" font-weight="700" pointer-events="none">' + (isCollapsed(n) ? '▸' : '▾') + '</text>');
     }
     out.push('</g>');
 
@@ -447,14 +437,7 @@ function fixBadges(){
     var bt = g.querySelector('.rel-badge-t');
     if (bt) bt.setAttribute('x', bx + rw / 2);
     p.w = cw;
-    // 折叠按钮跟随卡片右缘（朗读按钮固定在左侧不动）
-    var fold = g.querySelector('.fold');
-    if (fold) {
-      var fx = cx + cw - 13;
-      fold.setAttribute('cx', fx);
-      var ft = g.querySelector('.fold-t');
-      if (ft) ft.setAttribute('x', fx);
-    }
+    // （折叠按钮已移除，卡片右缘无需跟随元素）
   });
 }
 /* 画布尺寸：按所有已绘制卡片的实际包围盒 + 边距计算，设置 SVG 尺寸/viewBox 与舞台大小 */
@@ -620,22 +603,12 @@ groupSel.addEventListener('change', function(){
 });
 svg.addEventListener('click', function(ev){
   var t = ev.target;
-  while (t && t !== svg && !t.getAttribute('data-speak') && !t.getAttribute('data-fold') && !t.getAttribute('data-id')) t = t.parentNode;
+  while (t && t !== svg && !t.getAttribute('data-speak') && !t.getAttribute('data-id')) t = t.parentNode;
   if (!t || t === svg) return;
   var speakId = t.getAttribute('data-speak');
   if (speakId != null) {
     var sp = nodePos[Number(speakId)];
     if (sp && !sp.isRoot) { speak(sp.word); return; }
-  }
-  var foldId = t.getAttribute('data-fold');
-  if (foldId != null) {
-    var p = nodePos[Number(foldId)];
-    if (p && p.node) {
-      if (collapsed.has(p.node)) collapsed.delete(p.node);
-      else collapsed.add(p.node);
-      render();
-      return;
-    }
   }
   var id = t.getAttribute('data-id');
   if (id != null) {
