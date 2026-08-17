@@ -169,6 +169,7 @@ svg text{user-select:none}
 <div id="toast"></div>
 
 <script src="data/unit-maps.js"></script>
+<script src="data/core-words.js"></script>
 <script>
 (function(){
 'use strict';
@@ -178,6 +179,23 @@ var DATA = window.__UNIT_MAPS_DATA__;
 var DATA_ERR = null;
 if (!DATA) {
   DATA_ERR = '未找到词群导图数据';
+}
+// 核心词库索引（发音/释义/词性以刷题网站词库为准，data/core-words.js 由 cet6_quiz.html 词表生成）
+var CORE = window.__CORE_WORDS__ || null;
+function coreInfo(word){
+  if (!CORE) return null;
+  var e = CORE[word];
+  if (!e) e = CORE[String(word).toLowerCase()];
+  return e || null;
+}
+// 词库发音有效性：过滤 OCR 残缺值（如 "/-ize/"、"'-zation/" 这类）
+function isValidPron(p){
+  if (!p) return false;
+  var s = String(p).replace(/^\//,'').replace(/\/$/,'');
+  if (s.length < 3) return false;
+  if (/^[-/]/.test(s)) return false;
+  if (!/[a-z]/.test(s)) return false;
+  return true;
 }
 
 /* ================= 关系配色（与刷题网站一致） ================= */
@@ -231,9 +249,9 @@ function speak(word){
 }
 function nodeWidth(node){
   var s = String(node.word || '');
-  // 中文/全角字符按 14.5px/字估算，半角按 8.2px/字估算（根节点 15px 字号也能放下）
+  // 中文/全角字符按 14.5px/字估算，半角按 8.5px/字估算（粗体 13px 字号，预留徽标余量）
   var cjk = (s.match(/[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]/g) || []).length;
-  var w = Math.max(96, (s.length - cjk) * 8.2 + cjk * 14.5 + 34);
+  var w = Math.max(96, (s.length - cjk) * 8.5 + cjk * 14.5 + 34);
   return Math.min(w, 230);
 }
 function hasKids(n){ return n.children && n.children.length > 0; }
@@ -263,23 +281,10 @@ function placeTree(roots, x, top){
   });
 }
 function treeSize(roots){
-  var h = 0, w = 0;
-  roots.forEach(function(n){
-    h += subtreeHeight(n);
-    var m = measureWidth(n, 0);
-    if (m > w) w = m;
-  });
+  var h = 0;
+  roots.forEach(function(n){ h += subtreeHeight(n); });
   h += GAP * (roots.length - 1);
-  return { w: w + PAD * 2, h: h + PAD * 2 };
-}
-function measureWidth(n, depth){
-  var w = nodeWidth(n);
-  if (hasKids(n) && !isCollapsed(n)) {
-    var sub = 0;
-    n.children.forEach(function(c){ var m = measureWidth(c, depth+1); if (m > sub) sub = m; });
-    w = Math.max(w, sub + COL_W);
-  }
-  return w;
+  return { w: 0, h: h + PAD * 2 };
 }
 
 /* ================= 渲染 ================= */
@@ -300,16 +305,8 @@ function render(){
   // 根节点卡片左缘对齐 PAD：中心 x = PAD + 卡片宽/2，避免卡片/文字被画布左边界裁掉（此前"优秀的相关"只剩半边）
   rootNode._x = PAD + nodeWidth(rootNode) / 2;
   rootNode._y = PAD + size.h / 2 - ROW_H / 2 - GAP;
-  var contentW = Math.max(size.w, COL_W + nodeWidth(rootNode) + 40);
-  var contentH = size.h + 40;
-  svg.setAttribute('width', contentW);
-  svg.setAttribute('height', contentH);
-  svg.setAttribute('viewBox', '0 0 ' + contentW + ' ' + contentH);
 
   var out = [];
-  // 背景
-  out.push('<rect x="0" y="0" width="' + contentW + '" height="' + contentH + '" fill="var(--bg)"/>');
-
   var edges = [];
   var idx = 0;
 
@@ -322,7 +319,12 @@ function render(){
     var rel = n.relation || '';
     var col = isRoot ? '#7c3aed' : relColor(rel);
     var id = idx++;
-    nodePos.push({ id:id, key:key, x:x, y:y, w:w, h:h, node:n, isRoot:isRoot, word:n.word });
+    // 发音/释义/词性：优先用刷题网站词库数据（与网站显示一致），词库无此词或发音残缺时回退导图数据
+    var cinfo = isRoot ? null : coreInfo(n.word);
+    var effPhon = (cinfo && isValidPron(cinfo.p)) ? cinfo.p : n.phonetic;
+    var effMeaning = (cinfo && cinfo.m) ? cinfo.m : n.meaning;
+    var effPos = (cinfo && cinfo.o) ? cinfo.o : n.pos;
+    nodePos.push({ id:id, key:key, x:x, y:y, w:w, h:h, node:n, isRoot:isRoot, word:n.word, phon:effPhon, meaning:effMeaning, pos:effPos });
 
     out.push('<g class="' + cls + '" data-id="' + id + '" data-word="' + esc(n.word) + '">');
     out.push('<rect class="card" x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="9" style="stroke:' + (isRoot ? '#7c3aed' : '') + '"/>');
@@ -331,19 +333,19 @@ function render(){
     // 单词
     out.push('<text class="w" x="' + (x + 12) + '" y="' + (y + h/2 - 3) + '">' + esc(n.word) + '</text>');
     // 音标
-    var ph = String(n.phonetic || '').replace(/^\//,'').replace(/\/$/,'');
+    var ph = String(effPhon || '').replace(/^\//,'').replace(/\/$/,'');
     if (ph && !isRoot) out.push('<text class="ph" x="' + (x + 12) + '" y="' + (y + h/2 + 13) + '">' + esc(ph) + '</text>');
-    // 关系徽标
+    // 关系徽标（渲染后按单词真实宽度重定位，避免遮挡单词）
     if (!isRoot && rel) {
       var rw = rel.length * 9.5 + 10;
-      out.push('<rect class="rel" x="' + (x + w - rw - 6) + '" y="' + (y + 5) + '" width="' + rw + '" height="15" rx="7.5" style="fill:' + col + '"/>');
-      out.push('<text x="' + (x + w - rw/2 - 6) + '" y="' + (y + 16) + '" text-anchor="middle" font-size="8.5" font-weight="700" fill="#fff" pointer-events="none">' + esc(rel) + '</text>');
+      out.push('<rect class="rel rel-badge" x="' + (x + w - rw - 6) + '" y="' + (y + 5) + '" width="' + rw + '" height="15" rx="7.5" style="fill:' + col + '"/>');
+      out.push('<text class="rel-badge-t" x="' + (x + w - rw/2 - 6) + '" y="' + (y + 16) + '" text-anchor="middle" font-size="8.5" font-weight="700" fill="#fff" pointer-events="none">' + esc(rel) + '</text>');
     }
     // 折叠按钮
     if (!isRoot && hasKids(n)) {
       var fx = x + w - 13, fy = y + h - 13;
       out.push('<circle class="fold" data-fold="' + id + '" cx="' + fx + '" cy="' + fy + '" r="7.5"/>');
-      out.push('<text x="' + fx + '" y="' + (fy + 3) + '" text-anchor="middle" font-size="9" font-weight="700" pointer-events="none">' + (isCollapsed(n) ? '▸' : '▾') + '</text>');
+      out.push('<text class="fold-t" x="' + fx + '" y="' + (fy + 3) + '" text-anchor="middle" font-size="9" font-weight="700" pointer-events="none">' + (isCollapsed(n) ? '▸' : '▾') + '</text>');
     }
     out.push('</g>');
 
@@ -374,15 +376,78 @@ function render(){
   });
 
   svg.innerHTML = out.join('');
+  fixBadges();       // 关系徽标按单词真实渲染宽度重定位，避免遮挡单词
+  updateCanvasSize(); // 画布尺寸按实际节点包围盒计算（修复深层节点如 parliamentary 被画布裁掉）
 
   // 统计
   var total = countWords(roots);
   var gidList = Object.keys(DATA[currentUnit]).map(Number).sort(function(a,b){return a-b;});
   var pos = gidList.indexOf(Number(currentGid)) + 1;
   statsEl.textContent = 'Unit ' + currentUnit + ' · 词群 ' + pos + '/' + gidList.length + ' · 共 ' + total + ' 词';
-  stage.style.width = contentW + 'px';
-  stage.style.height = contentH + 'px';
   applyTransform();
+}
+/* 关系徽标重定位：徽标贴在单词文字右侧 8px，卡片不够宽则扩展（上限 230，避免与下一列重叠），
+   文字过长放不下时回退右对齐。折叠按钮跟随卡片右缘。 */
+function fixBadges(){
+  svg.querySelectorAll('g.node').forEach(function(g){
+    var id = Number(g.getAttribute('data-id'));
+    var p = nodePos[id];
+    if (!p) return;
+    var badge = g.querySelector('.rel-badge');
+    var card = g.querySelector('rect.card');
+    var cx = Number(card.getAttribute('x'));
+    var cw = Number(card.getAttribute('width'));
+    if (!badge) {
+      // 无徽标但卡片未变：无需处理（折叠按钮位置不变）
+      return;
+    }
+    var tw = g.querySelector('text.w');
+    var tb = tw.getBBox();
+    var rw = Number(badge.getAttribute('width'));
+    var bx = tb.x + tb.width + 8;
+    var maxW = 230;
+    var need = bx + rw + 8 - cx;
+    if (need > cw && need <= maxW) { cw = need; card.setAttribute('width', cw); }
+    if (bx + rw > cx + cw - 4) bx = cx + cw - rw - 6;
+    badge.setAttribute('x', bx);
+    var bt = g.querySelector('.rel-badge-t');
+    if (bt) bt.setAttribute('x', bx + rw / 2);
+    p.w = cw;
+    var fold = g.querySelector('.fold');
+    if (fold) {
+      var fx = cx + cw - 13;
+      fold.setAttribute('cx', fx);
+      var ft = g.querySelector('.fold-t');
+      if (ft) ft.setAttribute('x', fx);
+    }
+  });
+}
+/* 画布尺寸：按所有已绘制卡片的实际包围盒 + 边距计算，设置 SVG 尺寸/viewBox 与舞台大小 */
+function updateCanvasSize(){
+  var minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
+  nodePos.forEach(function(p){
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x + p.w > maxX) maxX = p.x + p.w;
+    if (p.y + p.h > maxY) maxY = p.y + p.h;
+  });
+  if (maxX < minX) { minX = 0; minY = 0; maxX = PAD * 2; maxY = PAD * 2; }
+  var vx = Math.max(0, minX - PAD), vy = Math.max(0, minY - PAD);
+  var cw = maxX - minX + PAD * 2, ch = maxY - minY + PAD * 2;
+  svg.setAttribute('width', cw);
+  svg.setAttribute('height', ch);
+  svg.setAttribute('viewBox', vx + ' ' + vy + ' ' + cw + ' ' + ch);
+  var bg = svg.querySelector('#bgRect');
+  if (!bg) {
+    bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    bg.id = 'bgRect';
+    svg.insertBefore(bg, svg.firstChild);
+  }
+  bg.setAttribute('x', vx); bg.setAttribute('y', vy);
+  bg.setAttribute('width', cw); bg.setAttribute('height', ch);
+  bg.setAttribute('fill', 'var(--bg)');
+  stage.style.width = cw + 'px';
+  stage.style.height = ch + 'px';
 }
 function countWords(list){
   var n = 0;
@@ -546,8 +611,8 @@ svg.addEventListener('mouseover', function(ev){
   if (!info) return;
   var n = info.node, rel = n.relation || '';
   var html = '<span class="t-w">' + esc(n.word) + '</span>';
-  if (n.phonetic) html += '<span class="t-ph">' + esc(n.phonetic) + '</span>';
-  if (n.meaning) html += '<div class="t-me">' + esc(n.meaning) + '</div>';
+  if (info.phon) html += '<span class="t-ph">' + esc(info.phon) + '</span>';
+  if (info.meaning) html += '<div class="t-me">' + esc(info.meaning) + '</div>';
   if (rel) html += '<span class="t-rel" style="background:' + relColor(rel) + '">' + esc(rel) + '</span>';
   tooltip.innerHTML = html;
   tooltip.style.display = 'block';

@@ -79,7 +79,7 @@ theme-button{position:relative;display:inline-block;outline:none}
   .header .subtitle{font-size:0.8em}
 }
 
-.tabs{display:flex;gap:4px;margin-bottom:20px;background:var(--surface);border-radius:var(--radius);padding:4px;box-shadow:var(--shadow);border:1px solid var(--border)}
+.tabs{display:flex;gap:4px;margin-bottom:20px;background:var(--surface);border-radius:var(--radius);padding:4px;box-shadow:var(--shadow);border:1px solid var(--border);position:sticky;top:0;z-index:100;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
 .tab-btn{flex:1;padding:11px 14px;border:none;background:transparent;color:var(--text2);border-radius:calc(var(--radius) - 4px);cursor:pointer;font-size:0.88em;font-weight:500;display:flex;align-items:center;justify-content:center;gap:5px;transition:background 200ms,color 200ms,box-shadow 200ms;white-space:nowrap}@media (hover: hover) and (pointer: fine){
 .tab-btn:hover{color:var(--text)}}
 .tab-btn.active{background:var(--accent);color:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.1)}

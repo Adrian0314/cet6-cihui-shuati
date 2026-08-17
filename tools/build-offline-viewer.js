@@ -14,19 +14,23 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const tplPath = path.join(root, 'word-maps-viewer.html');
 const dataPath = path.join(root, 'data', 'unit-maps.js');
+const corePath = path.join(root, 'data', 'core-words.js');
 const outPath = path.join(root, 'word-maps-viewer-offline.html');
 
 const tpl = fs.readFileSync(tplPath, 'utf8');
 const data = fs.readFileSync(dataPath, 'utf8');
+const core = fs.readFileSync(corePath, 'utf8');
 
 const marker = '<script src="data/unit-maps.js"></script>';
-if (!tpl.includes(marker)) {
-  console.error('[build-offline-viewer] 模板中未找到数据引用标记：' + marker);
+const markerCore = '<script src="data/core-words.js"></script>';
+if (!tpl.includes(marker) || !tpl.includes(markerCore)) {
+  console.error('[build-offline-viewer] 模板中未找到数据引用标记：' + marker + ' 或 ' + markerCore);
   process.exit(1);
 }
 
-const inline = '<script>\n// 数据内联自 data/unit-maps.js（离线单文件版，由 tools/build-offline-viewer.js 生成）\nwindow.__UNIT_MAPS_DATA_INLINE__ = true;\n' + data + '\n</script>';
+const inlineData = '<script>\n// 数据内联自 data/unit-maps.js（离线单文件版，由 tools/build-offline-viewer.js 生成）\nwindow.__UNIT_MAPS_DATA_INLINE__ = true;\n' + data + '\n</script>';
+const inlineCore = '<script>\n// 词库索引内联自 data/core-words.js（离线单文件版，由 tools/build-offline-viewer.js 生成）\n' + core + '\n</script>';
 
-const out = tpl.replace(marker, inline);
+let out = tpl.replace(marker, inlineData).replace(markerCore, inlineCore);
 fs.writeFileSync(outPath, out);
 console.log('[build-offline-viewer] 已生成：' + path.relative(root, outPath) + '（' + (out.length / 1024).toFixed(0) + ' KB）');

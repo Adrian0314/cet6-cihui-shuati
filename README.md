@@ -125,7 +125,7 @@
 - **离线外置版**：双击 `word-maps-viewer.html`（需与 `data/` 目录同放）
 - 功能：Unit/词群下拉切换、🔍 搜索单词自动定位并高亮、点卡片朗读发音、点 ○ 折叠/展开分支、滚轮/双指缩放、拖拽平移、⬇ 导出 SVG/PNG
 
-> 数据更新后，运行 `node tools/build-offline-viewer.js` 可重新生成离线单文件版。
+> 词库/导图数据更新后，运行 `node tools/build-core-words.js` 再运行 `node tools/build-offline-viewer.js`，可同步词库索引并重新生成离线单文件版。
 
 ## 🗂 项目结构
 
@@ -141,8 +141,8 @@ dict-server.js      本地词典抓取服务（node dict-server.js，端口 1798
 manifest.json       PWA 应用清单
 sw.js               Service Worker（离线缓存）
 icons/              应用图标（192 / 512 / 苹果）
-data/               外置词库数据（full-words.js / unit-maps.js）
-tools/              构建脚本（build-offline-viewer.js 生成离线单文件版）
+data/               外置词库数据（full-words.js / unit-maps.js / core-words.js）
+tools/              构建脚本（build-core-words.js 生成词库索引 / build-offline-viewer.js 生成离线单文件版）
 ```
 
 ## 🛠 技术栈
