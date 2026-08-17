@@ -237,9 +237,11 @@ function speak(word){
   }catch(e){}
 }
 function nodeWidth(node){
-  var n = String(node.word || '').length;
-  var w = Math.max(96, n * 8.6 + 34);
-  return Math.min(w, 210);
+  var s = String(node.word || '');
+  // 中文/全角字符按 14.5px/字估算，半角按 8.2px/字估算（根节点 15px 字号也能放下）
+  var cjk = (s.match(/[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]/g) || []).length;
+  var w = Math.max(96, (s.length - cjk) * 8.2 + cjk * 14.5 + 34);
+  return Math.min(w, 230);
 }
 function hasKids(n){ return n.children && n.children.length > 0; }
 function isCollapsed(n){ return collapsed.has(n); }
@@ -301,7 +303,10 @@ function render(){
   placeTree(roots, PAD + COL_W, PAD);
   var size = treeSize(roots);
   // 根节点（词群名）放在最左侧
-  var rootNode = { word: g.group_name, phonetic:'', meaning:'', pos:'', relation:'', children: roots, _x: PAD, _y: PAD + size.h / 2 - ROW_H / 2 - GAP };
+  var rootNode = { word: g.group_name, phonetic:'', meaning:'', pos:'', relation:'', children: roots };
+  // 根节点卡片左缘对齐 PAD：中心 x = PAD + 卡片宽/2，避免卡片/文字被画布左边界裁掉（此前"优秀的相关"只剩半边）
+  rootNode._x = PAD + nodeWidth(rootNode) / 2;
+  rootNode._y = PAD + size.h / 2 - ROW_H / 2 - GAP;
   var contentW = Math.max(size.w, COL_W + nodeWidth(rootNode) + 40);
   var contentH = size.h + 40;
   svg.setAttribute('width', contentW);
