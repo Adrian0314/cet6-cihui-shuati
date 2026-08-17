@@ -58,8 +58,12 @@ for (const w of bank) {
   dict[w.word] = e;
 }
 
-// 第二步：打卡词库补充（核心库没有的词；或核心库发音残缺时回退）
-let added = 0, fixed = 0;
+// 第二步：打卡词库补充与择优
+//  - 核心库没有的词：打卡库补充
+//  - 两库都有且发音不同：取"更完整"（更长）者——两库各有 OCR 残缺
+//    （如 aggressive：核心残缺 /ə'gresv/ vs 打卡完整 /əˈɡresɪv/；ambition：核心完整 /æm'bɪʃn/ vs 打卡残缺 /æmˈbɪn/）
+//  - 同长/核心更长：保持核心（与刷题网站核心词库默认显示一致）
+let added = 0, fixed = 0, upgraded = 0;
 for (const w of fullWords) {
   const key = w.word;
   const e = dict[key];
@@ -69,8 +73,17 @@ for (const w of fullWords) {
     if (w.meaning) ne.m = w.meaning;
     dict[key] = ne;
     added++;
-  } else if ((!isValidPron(e.p) || !e.m) && w.pronunciation && isValidPron(w.pronunciation)) {
-    if (!isValidPron(e.p)) { e.p = w.pronunciation; fixed++; }
+  } else {
+    const cpS = String(e.p || '').replace(/^\//, '').replace(/\/$/, '');
+    const fpS = String(w.pronunciation || '').replace(/^\//, '').replace(/\/$/, '');
+    const cpOk = isValidPron(e.p), fpOk = isValidPron(w.pronunciation);
+    if (cpOk && fpOk && fpS.length > cpS.length) {
+      e.p = w.pronunciation;   // 打卡更完整 → 采用打卡
+      upgraded++;
+    } else if (!cpOk && fpOk) {
+      e.p = w.pronunciation;   // 核心残缺 → 回退打卡
+      fixed++;
+    }
     if (!e.m && w.meaning) e.m = w.meaning;
   }
 }
@@ -85,6 +98,6 @@ for (const k of Object.keys(dict)) {
   if (nk !== k.toLowerCase() && !(nk in dict) && !(nk in normMap)) normMap[nk] = k;
 }
 
-const out = '// 词库发音/释义/词性索引（自动生成：核心词库 ' + bank.length + ' 词 + 打卡词库补充 ' + added + ' 词，共 ' + Object.keys(dict).length + ' 词；核心库残缺发音回退打卡库 ' + fixed + ' 处；括号变体映射 ' + Object.keys(normMap).length + ' 条）\n// 重新生成：node tools/build-core-words.js\nwindow.__CORE_WORDS__=' + JSON.stringify(dict) + ';\nwindow.__CORE_WORDS_NORM__=' + JSON.stringify(normMap) + ';\n';
+const out = '// 词库发音/释义/词性索引（自动生成：核心词库 ' + bank.length + ' 词 + 打卡词库补充 ' + added + ' 词，共 ' + Object.keys(dict).length + ' 词；发音择优：打卡更完整采用 ' + upgraded + ' 处、核心残缺回退 ' + fixed + ' 处；括号变体映射 ' + Object.keys(normMap).length + ' 条）\n// 重新生成：node tools/build-core-words.js\nwindow.__CORE_WORDS__=' + JSON.stringify(dict) + ';\nwindow.__CORE_WORDS_NORM__=' + JSON.stringify(normMap) + ';\n';
 fs.writeFileSync(outPath, out);
-console.log('[build-core-words] 已生成：data/core-words.js（' + (out.length / 1024).toFixed(0) + ' KB，共 ' + Object.keys(dict).length + ' 词，打卡库补充 ' + added + ' 词，修复残缺 ' + fixed + ' 处，括号变体映射 ' + Object.keys(normMap).length + ' 条）');
+console.log('[build-core-words] 已生成：data/core-words.js（' + (out.length / 1024).toFixed(0) + ' KB，共 ' + Object.keys(dict).length + ' 词，打卡库补充 ' + added + ' 词，发音择优 ' + upgraded + ' 处，残缺回退 ' + fixed + ' 处，括号变体映射 ' + Object.keys(normMap).length + ' 条）');
