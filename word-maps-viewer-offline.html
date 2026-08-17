@@ -93,9 +93,6 @@ svg text{user-select:none}
 .node.collapsed .card{stroke-dasharray:4 3}
 .node.hit .card{stroke:var(--orange);stroke-width:2.5}
 .node.hit .w{fill:var(--orange)}
-.node .spk{fill:var(--surface2);stroke:var(--text2);stroke-width:1;cursor:pointer}
-.node .spk:hover{fill:var(--accent);stroke:var(--accent)}
-.node .spk-t{pointer-events:none}
 #tooltip{
   position:fixed;z-index:40;display:none;max-width:320px;
   background:var(--surface);border:1px solid var(--border);border-radius:10px;
@@ -163,7 +160,7 @@ svg text{user-select:none}
 </main>
 
 <div id="legend"></div>
-<div class="hint">滚轮/双指缩放 · 拖拽平移 · 点 🔊/卡片朗读发音 · 悬停看释义</div>
+<div class="hint">滚轮/双指缩放 · 拖拽平移 · 点击单词即可发音 · 悬停看释义</div>
 <div id="tooltip"></div>
 <div id="toast"></div>
 
@@ -270,9 +267,9 @@ function speak(word){
 }
 function nodeWidth(node){
   var s = String(node.word || '');
-  // 中文/全角字符按 14.5px/字估算，半角按 8.5px/字估算（粗体 13px 字号；+46 为左侧喇叭按钮与文字起点预留）
+  // 中文/全角字符按 14.5px/字估算，半角按 8.5px/字估算（粗体 13px 字号）
   var cjk = (s.match(/[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]/g) || []).length;
-  var w = Math.max(96, (s.length - cjk) * 8.5 + cjk * 14.5 + 46);
+  var w = Math.max(96, (s.length - cjk) * 8.5 + cjk * 14.5 + 34);
   return Math.min(w, 230);
 }
 function hasKids(n){ return n.children && n.children.length > 0; }
@@ -352,8 +349,8 @@ function render(){
     out.push('<rect class="card" x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="9" style="stroke:' + (isRoot ? '#7c3aed' : '') + '"/>');
     // 关系色条
     if (!isRoot && rel) out.push('<rect x="' + x + '" y="' + y + '" width="4" height="' + h + '" rx="2" style="fill:' + col + '"/>');
-    // 单词（非根节点文字起点右移，给左侧喇叭按钮让位）
-    var txtX = isRoot ? x + 12 : x + 24;
+    // 单词
+    var txtX = x + 12;
     out.push('<text class="w" x="' + txtX + '" y="' + (y + h/2 - 3) + '">' + esc(n.word) + '</text>');
     // 音标
     var ph = String(effPhon || '').replace(/^\//,'').replace(/\/$/,'');
@@ -363,12 +360,6 @@ function render(){
       var rw = rel.length * 9.5 + 10;
       out.push('<rect class="rel rel-badge" x="' + (x + w - rw - 6) + '" y="' + (y + 5) + '" width="' + rw + '" height="15" rx="7.5" style="fill:' + col + '"/>');
       out.push('<text class="rel-badge-t" x="' + (x + w - rw/2 - 6) + '" y="' + (y + 16) + '" text-anchor="middle" font-size="8.5" font-weight="700" fill="#fff" pointer-events="none">' + esc(rel) + '</text>');
-    }
-    // 朗读按钮（固定在卡片左侧垂直居中，不与右侧徽标冲突）
-    if (!isRoot) {
-      var spx = x + 13, spy = y + h / 2;
-      out.push('<circle class="spk" data-speak="' + id + '" cx="' + spx + '" cy="' + spy + '" r="7.5"/>');
-      out.push('<text class="spk-t" x="' + spx + '" y="' + (spy + 3.2) + '" text-anchor="middle" font-size="9" pointer-events="none">🔊</text>');
     }
     out.push('</g>');
 
@@ -604,13 +595,8 @@ groupSel.addEventListener('change', function(){
 svg.addEventListener('click', function(ev){
   if (suppressClick) { suppressClick = false; return; }   // 拖拽/滑动后的 click 不触发朗读
   var t = ev.target;
-  while (t && t !== svg && !t.getAttribute('data-speak') && !t.getAttribute('data-id')) t = t.parentNode;
+  while (t && t !== svg && !t.getAttribute('data-id')) t = t.parentNode;
   if (!t || t === svg) return;
-  var speakId = t.getAttribute('data-speak');
-  if (speakId != null) {
-    var sp = nodePos[Number(speakId)];
-    if (sp && !sp.isRoot) { speak(sp.word); return; }
-  }
   var id = t.getAttribute('data-id');
   if (id != null) {
     var info = nodePos[Number(id)];
@@ -629,7 +615,7 @@ function bindTooltips(){
       if (info.phon) html += '<span class="t-ph">' + esc(info.phon) + '</span>';
       if (info.meaning) html += '<div class="t-me">' + esc(info.meaning) + '</div>';
       if (rel) html += '<span class="t-rel" style="background:' + relColor(rel) + '">' + esc(rel) + '</span>';
-      if (!info.isRoot) html += '<div style="margin-top:5px;font-size:.78em;color:var(--text2)">🔊 点击卡片或喇叭图标朗读发音</div>';
+      if (!info.isRoot) html += '<div style="margin-top:5px;font-size:.78em;color:var(--text2)">点击单词即可发音</div>';
       tooltip.innerHTML = html;
       tooltip.style.display = 'block';
       var r = g.querySelector('rect.card').getBoundingClientRect();
