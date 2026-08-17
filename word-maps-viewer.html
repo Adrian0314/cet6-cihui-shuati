@@ -307,6 +307,7 @@ function currentGroup(){
 function render(){
   var g = currentGroup();
   if (!g) { svg.setAttribute('width', 0); svg.setAttribute('height', 0); return; }
+  tooltip.style.display = 'none';   // 重建前隐藏残留 tooltip
   nodePos = [];
   var roots = g.level1Nodes || [];
   placeTree(roots, PAD + COL_W, PAD);
@@ -396,6 +397,7 @@ function render(){
   svg.innerHTML = out.join('');
   fixBadges();       // 关系徽标按单词真实渲染宽度重定位，避免遮挡单词
   updateCanvasSize(); // 画布尺寸按实际节点包围盒计算（修复深层节点如 parliamentary 被画布裁掉）
+  bindTooltips();    // 每个节点卡片绑定 mouseenter/mouseleave：放上去才显示，靠近不显示
 
   // 统计
   var total = countWords(roots);
@@ -627,36 +629,40 @@ svg.addEventListener('click', function(ev){
     if (info && !info.isRoot) speak(info.word);
   }
 });
-svg.addEventListener('mouseover', function(ev){
-  var t = ev.target;
-  while (t && t !== svg && !t.getAttribute('data-id')) t = t.parentNode;
-  if (!t || t === svg) return;
-  var info = nodePos[Number(t.getAttribute('data-id'))];
-  if (!info) return;
-  var n = info.node, rel = n.relation || '';
-  var html = '<span class="t-w">' + esc(n.word) + '</span>';
-  if (info.phon) html += '<span class="t-ph">' + esc(info.phon) + '</span>';
-  if (info.meaning) html += '<div class="t-me">' + esc(info.meaning) + '</div>';
-  if (rel) html += '<span class="t-rel" style="background:' + relColor(rel) + '">' + esc(rel) + '</span>';
-  if (!info.isRoot) html += '<div style="margin-top:5px;font-size:.78em;color:var(--text2)">🔊 点击卡片或喇叭图标朗读发音</div>';
-  tooltip.innerHTML = html;
-  tooltip.style.display = 'block';
-  moveTooltip(ev);
-});
-svg.addEventListener('mousemove', moveTooltip);
-svg.addEventListener('mouseout', function(ev){
-  if (!ev.relatedTarget || (ev.relatedTarget.nodeType === 1 && !ev.relatedTarget.closest('svg'))) {
-    tooltip.style.display = 'none';
-  }
-});
-function moveTooltip(ev){
-  var x = ev.clientX + 14, y = ev.clientY + 14;
-  var r = tooltip.getBoundingClientRect();
-  if (x + r.width > window.innerWidth - 8) x = ev.clientX - r.width - 14;
-  if (y + r.height > window.innerHeight - 8) y = ev.clientY - r.height - 14;
-  tooltip.style.left = x + 'px';
-  tooltip.style.top = y + 'px';
+/* 每个节点卡片绑定 tooltip：mouseenter 进入卡片才显示（不冒泡、严格命中），
+   mouseleave 离开卡片立即隐藏——鼠标靠近（连线/空隙/背景）不会误显示 */
+function bindTooltips(){
+  svg.querySelectorAll('g.node').forEach(function(g){
+    g.addEventListener('mouseenter', function(){
+      var info = nodePos[Number(g.getAttribute('data-id'))];
+      if (!info) return;
+      var n = info.node, rel = n.relation || '';
+      var html = '<span class="t-w">' + esc(n.word) + '</span>';
+      if (info.phon) html += '<span class="t-ph">' + esc(info.phon) + '</span>';
+      if (info.meaning) html += '<div class="t-me">' + esc(info.meaning) + '</div>';
+      if (rel) html += '<span class="t-rel" style="background:' + relColor(rel) + '">' + esc(rel) + '</span>';
+      if (!info.isRoot) html += '<div style="margin-top:5px;font-size:.78em;color:var(--text2)">🔊 点击卡片或喇叭图标朗读发音</div>';
+      tooltip.innerHTML = html;
+      tooltip.style.display = 'block';
+      var r = g.querySelector('rect.card').getBoundingClientRect();
+      moveTooltipTo(r.left + r.width / 2, r.top - 8);
+    });
+    g.addEventListener('mouseleave', function(){
+      tooltip.style.display = 'none';
+    });
+  });
 }
+function moveTooltipTo(x, y){
+  var tw = tooltip.offsetWidth || 220, th = tooltip.offsetHeight || 80;
+  var px = Math.min(x + 14, window.innerWidth - tw - 10);
+  var py = y - th - 10;
+  if (py < 8) py = y + 18;
+  tooltip.style.left = px + 'px';
+  tooltip.style.top = py + 'px';
+}
+svg.addEventListener('mousemove', function(ev){
+  if (tooltip.style.display === 'block') moveTooltipTo(ev.clientX, ev.clientY);
+});
 
 /* ================= 缩放 / 平移 / 手势 ================= */
 function zoomAt(factor, cx, cy){
