@@ -182,10 +182,18 @@ if (!DATA) {
 }
 // 核心词库索引（发音/释义/词性以刷题网站词库为准，data/core-words.js 由 cet6_quiz.html 词表生成）
 var CORE = window.__CORE_WORDS__ || null;
+var CORENORM = window.__CORE_WORDS_NORM__ || null;
+function normKeyOf(s){
+  return String(s).toLowerCase().replace(/\(.*?\)/g, '').replace(/[\s\-'’]/g, '');
+}
 function coreInfo(word){
   if (!CORE) return null;
   var e = CORE[word];
   if (!e) e = CORE[String(word).toLowerCase()];
+  if (!e && CORENORM) {
+    var wk = CORENORM[normKeyOf(word)];
+    if (wk) e = CORE[wk];
+  }
   return e || null;
 }
 // 词库发音有效性：过滤 OCR 残缺值（如 "/-ize/"、"'-zation/" 这类）
@@ -782,6 +790,10 @@ function init(){
     e.innerHTML = '<b>加载失败：</b>未找到词群导图数据。<br>请确认 <code>data/unit-maps.js</code> 与本页面在同一目录（<code>data</code> 文件夹与页面同级）。<br>若使用的是离线单文件版，请重新生成或使用在线版：<br><a href="https://adrian0314.github.io/cet6-cihui-shuati/word-maps-viewer.html" style="color:var(--accent)">在线版链接</a>';
     $('stage').style.display = 'none';
     return;
+  }
+  // 旧版词库缓存检测：Service Worker 缓存了旧 core-words.js 时提示强刷
+  if (CORE && Object.keys(CORE).length < 7000 && location.protocol !== 'file:') {
+    toastMsg('⚠️ 检测到浏览器缓存了旧版词库数据（' + Object.keys(CORE).length + ' 词），部分单词发音可能不完整——请再刷新一次页面');
   }
   // 模式标识
   if (location.protocol === 'file:') {

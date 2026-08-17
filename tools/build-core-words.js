@@ -75,6 +75,16 @@ for (const w of fullWords) {
   }
 }
 
-const out = '// 词库发音/释义/词性索引（自动生成：核心词库 ' + bank.length + ' 词 + 打卡词库补充 ' + added + ' 词，共 ' + Object.keys(dict).length + ' 词；核心库残缺发音回退打卡库 ' + fixed + ' 处）\n// 重新生成：node tools/build-core-words.js\nwindow.__CORE_WORDS__=' + JSON.stringify(dict) + ';\n';
+// 归一化映射：括号变体（如 "enrol(l)" → "enrol"、"kilometre(-ter)" → "kilometre"）供查看器兜底匹配
+function normKey(s) {
+  return String(s).toLowerCase().replace(/\(.*?\)/g, '').replace(/[\s\-'’]/g, '');
+}
+const normMap = {};
+for (const k of Object.keys(dict)) {
+  const nk = normKey(k);
+  if (nk !== k.toLowerCase() && !(nk in dict) && !(nk in normMap)) normMap[nk] = k;
+}
+
+const out = '// 词库发音/释义/词性索引（自动生成：核心词库 ' + bank.length + ' 词 + 打卡词库补充 ' + added + ' 词，共 ' + Object.keys(dict).length + ' 词；核心库残缺发音回退打卡库 ' + fixed + ' 处；括号变体映射 ' + Object.keys(normMap).length + ' 条）\n// 重新生成：node tools/build-core-words.js\nwindow.__CORE_WORDS__=' + JSON.stringify(dict) + ';\nwindow.__CORE_WORDS_NORM__=' + JSON.stringify(normMap) + ';\n';
 fs.writeFileSync(outPath, out);
-console.log('[build-core-words] 已生成：data/core-words.js（' + (out.length / 1024).toFixed(0) + ' KB，共 ' + Object.keys(dict).length + ' 词，打卡库补充 ' + added + ' 词，修复残缺 ' + fixed + ' 处）');
+console.log('[build-core-words] 已生成：data/core-words.js（' + (out.length / 1024).toFixed(0) + ' KB，共 ' + Object.keys(dict).length + ' 词，打卡库补充 ' + added + ' 词，修复残缺 ' + fixed + ' 处，括号变体映射 ' + Object.keys(normMap).length + ' 条）');
