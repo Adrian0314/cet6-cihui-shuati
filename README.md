@@ -111,6 +111,10 @@
 
 > 说明：`dict-server.js` 仅用 Node 内置模块（http/https/fs），无 npm 依赖；词典数据来自有道公开接口。
 
+### 方式四：手机快速使用
+
+手机上点击这个链接 **https://adrian0314.github.io/cet6-cihui-shuati/cet6_quiz.html**，用浏览器打开，点击右上角三个点，点击 **「添加到主屏幕」** 即可在桌面快速点击使用（全屏运行、可离线）。
+
 ## 🗂 项目结构
 
 ```
