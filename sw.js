@@ -1,5 +1,6 @@
 // CET-6 Quiz Service Worker — offline support (PWA)
-var CACHE_NAME = 'cet6-cihui-shuati-v3';
+// v4: 例句切分修复(英文撇号 U+2019 被误当中文引号边界)+7条截断例句数据修正;升级版本号强制旧缓存失效
+var CACHE_NAME = 'cet6-cihui-shuati-v4';
 var ASSETS = [
   './cet6_quiz.html',
   './manifest.json',
