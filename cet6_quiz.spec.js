@@ -405,6 +405,111 @@ test('switch to Ebbinghaus pool shows Unit 1-10 chips', async ({ page }) => {
   expect(chips).not.toContain('U11');
 });
 
+test('core and Ebbinghaus word IDs resolve within their selected pool', async ({ page }) => {
+  await page.click('.pool-btn[data-pool="full"]');
+  await page.waitForFunction(() => window.__FULL_WORDS_DATA__ && window.__FULL_WORDS_DATA__.length === 2920);
+
+  const words = await page.evaluate(() => {
+    currentPool = 'core';
+    const core = getWord(2);
+    currentPool = 'full';
+    const full = getWord(2);
+    return { core: core && core.word, full: full && full.word };
+  });
+
+  expect(words).toEqual({ core: 'aggressive', full: 'ambitious' });
+});
+
+test('word attempts stay isolated between pools', async ({ page }) => {
+  await page.click('.pool-btn[data-pool="full"]');
+  await page.waitForFunction(() => window.__FULL_WORDS_DATA__ && window.__FULL_WORDS_DATA__.length === 2920);
+
+  const result = await page.evaluate(() => {
+    state.stats.wordAttempts = {};
+    state.wrongHistory = [];
+
+    currentPool = 'core';
+    quizState.poolType = 'core';
+    recordStat(getWord(2, 'core'), 'cn2en', true, false, false);
+    state.wrongHistory.push({ wordId: 2, pool: 'core', mode: 'cn2en' });
+
+    currentPool = 'full';
+    quizState.poolType = 'full';
+    recordStat(getWord(2, 'full'), 'cn2en', false, false, false);
+    state.wrongHistory.push({ wordId: 2, pool: 'full', mode: 'cn2en' });
+
+    return {
+      core: state.stats.wordAttempts['core:2'],
+      full: state.stats.wordAttempts['full:2'],
+      labels: state.wrongHistory.map(record => recordWord(record).word)
+    };
+  });
+
+  expect(result.core).toMatchObject({ attempts: 1, correct: 1, wrong: 0 });
+  expect(result.full).toMatchObject({ attempts: 1, correct: 0, wrong: 1 });
+  expect(result.labels).toEqual(['aggressive', 'ambitious']);
+});
+
+test('legacy state migration normalizes pools, history, and malformed counters', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const migrated = normalizeState({
+      stats: {
+        wordAttempts: {
+          '2': { attempts: 2, correct: 1, wrong: 1 },
+          'full:2': { attempts: 1, correct: 0, wrong: 1 },
+          broken: null
+        },
+        dailyHistory: { '2026-08-20': { attempts: 3, correct: 2 }, bad: null }
+      },
+      wrongWordIds: { cn2en: { 2: true }, cn2en_full: { 2: true }, bad: [] },
+      wrongHistory: [{ wordId: 2, mode: 'en2cn' }, { wordId: 'bad' }],
+      prefs: { pool: 'invalid', units: [], size: 0, gate: 9, mode: 'invalid', type: 'invalid' },
+      ebbingStart: '2026-08-19'
+    });
+    return {
+      schema: migrated.schemaVersion,
+      keys: Object.keys(migrated.stats.wordAttempts).sort(),
+      legacy: migrated.stats.wordAttempts['core:2'],
+      full: migrated.stats.wordAttempts['full:2'],
+      history: migrated.wrongHistory,
+      wrongKeys: Object.keys(migrated.wrongWordIds).sort(),
+      prefs: migrated.prefs,
+      active: migrated.ebbingActive,
+      dailyKeys: Object.keys(migrated.stats.dailyHistory)
+    };
+  });
+
+  expect(result.schema).toBe(3);
+  expect(result.keys).toEqual(['core:2', 'full:2']);
+  expect(result.legacy).toMatchObject({ attempts: 2, correct: 1, wrong: 1 });
+  expect(result.full).toMatchObject({ attempts: 1, correct: 0, wrong: 1 });
+  expect(result.history).toHaveLength(1);
+  expect(result.history[0].pool).toBe('core');
+  expect(result.wrongKeys).toEqual(['cn2en_core', 'cn2en_full', 'en2cn_core', 'en2cn_full']);
+  expect(result.prefs).toMatchObject({ pool: 'core', units: [0], size: 20, gate: 1, mode: 'cn2en', type: 'choice' });
+  expect(result.active).toBe(true);
+  expect(result.dailyKeys).toEqual(['2026-08-20']);
+});
+
+test('stats helpers use local calendar keys and selected pool only', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    state.stats.wordAttempts = {
+      'core:2': { attempts: 4, correct: 3, wrong: 1 },
+      'full:2': { attempts: 8, correct: 2, wrong: 6 }
+    };
+    currentPool = 'core';
+    const core = wordAttemptEntries('core').map(entry => entry[0]);
+    currentPool = 'full';
+    const full = wordAttemptEntries('full').map(entry => entry[0]);
+    const local = localDateKey(new Date(2026, 7, 20, 0, 30, 0));
+    return { core, full, local };
+  });
+
+  expect(result.core).toEqual(['core:2']);
+  expect(result.full).toEqual(['full:2']);
+  expect(result.local).toBe('2026-08-20');
+});
+
 test('ebbinghaus 4-week-25-day table logic', async ({ page }) => {
   // Unit 1 复习日：第2、4、7、13天（+1/+3/+6/+12）；第14天后 Unit14 在第15/17/20/26天复习（26>25 表内截止）
   const res = await page.evaluate(() => {
@@ -2363,7 +2468,7 @@ test.describe('group map (new: unit-maps.js data · unit9)', () => {
     expect(stats).not.toBeNull();
     expect(stats.ids).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
     expect(stats.missing).toEqual([]);
-    expect(stats.total).toBe(122);
+    expect(stats.total).toBe(175);
   });
 
   test('every unit9 quiz word is visible in its map', async ({ page }) => {
@@ -2487,5 +2592,35 @@ test.describe('group map (new: unit-maps.js data · unit9)', () => {
       return [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0] === 'vulgar');
     });
     expect(has).toBe(true);
+  });
+});
+
+test.describe('重点词与智能练习', () => {
+  test('can favorite a word and show it in the favorites tab', async ({ page }) => {
+    const result = await page.evaluate(() => {
+      currentPool = 'core';
+      const added = toggleFavorite(1, 'core');
+      return { added, saved: !!state.favorites['core:1'] };
+    });
+    expect(result).toEqual({ added: true, saved: true });
+
+    await page.click('button[data-tab="favorites"]');
+    await expect(page.locator('#favoriteList')).toContainText('ambition');
+    await expect(page.locator('#favoriteCount')).toContainText('1');
+  });
+
+  test('smart queue prioritizes favorites and weak words', async ({ page }) => {
+    const ids = await page.evaluate(() => {
+      currentPool = 'core';
+      selectedUnits = [0];
+      state.favorites = { 'core:3': true };
+      state.stats.wordAttempts = {
+        'core:1': { attempts: 4, correct: 0, wrong: 4 },
+        'core:2': { attempts: 4, correct: 4, wrong: 0 }
+      };
+      return getSmartQueueIds('core', 3, [1, 2, 3]);
+    });
+    expect(ids[0]).toBe(3);
+    expect(ids.indexOf(1)).toBeLessThan(ids.indexOf(2));
   });
 });

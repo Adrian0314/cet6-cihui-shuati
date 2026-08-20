@@ -182,6 +182,9 @@ theme-button{position:relative;display:inline-block;outline:none}
 .ctrl-btn.accent{background:var(--accent);border-color:var(--accent);color:#fff}@media (hover: hover) and (pointer: fine){
 .ctrl-btn.accent:hover{background:var(--accent2)}}
 .ctrl-btn:disabled{opacity:0.4;pointer-events:none}
+.favorite-toggle{min-width:34px;padding:6px 10px;color:var(--orange);border-color:rgba(217,119,6,0.35)}
+.favorite-toggle.active{background:rgba(217,119,6,0.12);border-color:var(--orange)}
+.favorite-toggle[aria-pressed="true"]{font-weight:700}
 
 .stats-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:12px;margin-bottom:16px}
 .sc{background:var(--surface);padding:14px 10px;border-radius:var(--radius-sm);text-align:center;border:1px solid var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
@@ -382,6 +385,7 @@ theme-button{position:relative;display:inline-block;outline:none}
 <div class="tabs">
   <button class="tab-btn active" data-tab="quiz" aria-label="做题页面" tabindex="0">📝 <span aria-hidden="true">做题</span></button>
   <button class="tab-btn" data-tab="wrong" aria-label="错题本" tabindex="0">❌ <span aria-hidden="true">错题本</span></button>
+  <button class="tab-btn" data-tab="favorites" aria-label="重点词" tabindex="0">⭐ <span aria-hidden="true">重点词</span></button>
   <button class="tab-btn" data-tab="retry" aria-label="重做记录" tabindex="0">🔄 <span aria-hidden="true">重做记录</span></button>
   <button class="tab-btn" data-tab="stats-page" aria-label="统计" tabindex="0">📊 <span aria-hidden="true">统计</span></button>
   <button class="tab-btn" data-tab="browse" aria-label="词库" tabindex="0">📖 <span aria-hidden="true">词库</span></button>
@@ -476,6 +480,7 @@ theme-button{position:relative;display:inline-block;outline:none}
   </div>
   <div class="ctrl-row">
     <button class="ctrl-btn accent" id="startBtn" style="font-size:1.05em;padding:13px 36px;">▶ 开始做题</button>
+    <button class="ctrl-btn" id="smartQuizBtn">🧠 智能练习</button>
     <button class="ctrl-btn" id="retryQuizBtn">🔄 重做当前模式错题</button>
   </div>
 </div>
@@ -494,6 +499,19 @@ theme-button{position:relative;display:inline-block;outline:none}
   <div class="ctrl-row">
     <button class="ctrl-btn" onclick="exportWrongWords()">📥 导出错题</button>
     <button class="ctrl-btn danger" id="clearWrongBtn">🗑 清空错题记录</button>
+  </div>
+</div>
+
+<div id="tab-favorites" style="display:none;">
+  <div class="panel" style="max-width:100%;">
+    <div class="panel-h">
+      <h3>⭐ 重点词</h3>
+      <span id="favoriteCount" style="color:var(--text2);white-space:nowrap;"></span>
+    </div>
+    <div class="panel-b" id="favoriteList"><div class="empty"><div class="ei">⭐</div><p>还没有重点词，做题或浏览词库时可以随手标记。</p></div></div>
+  </div>
+  <div class="ctrl-row">
+    <button class="ctrl-btn accent" id="favoriteSmartBtn">🧠 智能练习重点词</button>
   </div>
 </div>
 
@@ -585,6 +603,23 @@ theme-button{position:relative;display:inline-block;outline:none}
 
 // Load word data from JSON blocks (ALL_WORDS eagerly, FULL_WORDS lazily)
 var ALL_WORDS = JSON.parse(document.getElementById('data-all-words').textContent);
+function repairWordData(list) {
+  var repairs = {
+    bunch: { meaning: 'n. 束，串，扎；一伙、一群；大量；发辫（bunches）；突起;v. 捆，扎，使集中；收紧，起褶;【名】 （Bunch）（英）邦奇（人名）' },
+    family: { meaning: 'n. 家，家庭；家属，亲属；家族；子女，孩子；（动植物的）科；语族；祖先；一窝（动物）；有组织的犯罪团伙；（具有明显共同特征的）一类东西；（在某些方面）像家人一样的一群人；（数）族；派别；氏族;adj. 家庭的；一家所有的；老少咸宜的；全家用的' },
+    nightmare: { pronunciation: '/ˈnaɪtmeɪ(r)/' },
+    ought: { meaning: 'v. 应该（表义务、责任、必要等）；应该（表期望）；n. 零（=nought）；pron. 任何事物（=aught）' },
+    sunshine: { pronunciation: '/ˈsʌnʃaɪn/' },
+    sweet: { meaning: 'adj. 含糖的，甜的；未加盐的，淡的；芳香的，芬芳的；清新的，纯净的，新鲜的；（声音）甜美的，悦耳的，动听的；（音乐，尤指爵士乐）甜派风格的；惹人喜爱的，可爱的；亲爱的；温和的，和蔼的，善良的；愉快的，惬意的，令人满意的；（用于表示同意，赞成）好的；容易操纵的，运转平稳的；丝毫的，一丁点儿的;n. 糖果；甜食；餐后甜点；（亲昵的称呼）宝贝儿，亲爱的；快乐，乐趣（sweets）；芳香' },
+    way: { meaning: 'n. 方法，手段；习俗，习惯，行为方式；（行事）作风，（某事发生的）方式；道路，路线；行进路线，通路；方向；……路（用于道路的名称）；出入通道，门口；距离，时段；方面；（两种之一的）选择；情况，状态；（某人居住的）地区，地方；（分成的）部分；职业，行当；（船）航行，动力；船台，滑道（ways）;adv. 大大地，远远地；非常，很;adj. 途中的;【名】 （Way）韦（人名）' }
+  };
+  (list || []).forEach(function(word) {
+    var fix = repairs[String(word.word || '').toLowerCase()];
+    if (fix) Object.keys(fix).forEach(function(key) { word[key] = fix[key]; });
+  });
+  return list;
+}
+repairWordData(ALL_WORDS);
 // 剥离释义中 OCR 残留的 emoji（原书重点词标记被识别为 🔥，非书籍文字内容）。运行时清洗，数据块 JSON 保持原样可追溯；_wordMap 持有 ALL_WORDS 对象引用，故清洗对所有显示路径（选项/题干/详解/词库浏览）生效，同时避免前导 emoji 挡住 POS 词性检测
 ALL_WORDS.forEach(function(w) { if (w.meaning) w.meaning = String(w.meaning).replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/gu, '').trim(); });
 // ============ EXTERNAL DATA LOADER (数据外置：打卡词库动态加载，本地 file:// 与线上通用，sw.js 可离线缓存) ============
@@ -616,20 +651,11 @@ var _fullWordsFailed = false;
 var _fullWordsWaiters = [];
 function indexFullWords() {
   if (_fullWordsLoaded || !window.__FULL_WORDS_DATA__) return;
-  FULL_WORDS = window.__FULL_WORDS_DATA__;
+  FULL_WORDS = repairWordData(window.__FULL_WORDS_DATA__);
   _fullWordsLoaded = true;
   // Index FULL_WORDS data into lookup structures（详解已合并进数据文件，无需运行时 applyWordDetail）
   FULL_WORDS.forEach(function(w) {
-    if (!window._wordMap.has(w.id)) window._wordMap.set(w.id, w);
-    var pf = w.word.toLowerCase().substring(0, 3);
-    if (!window._prefixIdx[pf]) window._prefixIdx[pf] = [];
-    if (window._prefixIdx[pf].indexOf(w.id) === -1) window._prefixIdx[pf].push(w.id);
-    var pm = w.meaning.match(/^([a-z]+)\./i);
-    if (pm) {
-      var pos = pm[1].toLowerCase();
-      if (!window._posIdx[pos]) window._posIdx[pos] = [];
-      if (window._posIdx[pos].indexOf(w.id) === -1) window._posIdx[pos].push(w.id);
-    }
+    addWordIndex('full', w);
   });
 }
 function ensureFullWords(cb) {
@@ -652,31 +678,38 @@ function ensureFullWords(cb) {
 
 // === INDEX BUILDING ===
 // ============ PRE-COMPUTED INDEXES ============
+function addWordIndex(poolName, w) {
+  var maps = window._wordMaps[poolName];
+  var prefixIdx = window._prefixIdxByPool[poolName];
+  var posIdx = window._posIdxByPool[poolName];
+  maps.set(w.id, w);
+
+  var pf = w.word.toLowerCase().substring(0, 3);
+  if (!prefixIdx[pf]) prefixIdx[pf] = [];
+  if (prefixIdx[pf].indexOf(w.id) === -1) prefixIdx[pf].push(w.id);
+
+  var pm = w.meaning.match(/^([a-z]+)\./i);
+  if (pm) {
+    var pos = pm[1].toLowerCase();
+    if (!posIdx[pos]) posIdx[pos] = [];
+    if (posIdx[pos].indexOf(w.id) === -1) posIdx[pos].push(w.id);
+  }
+}
+
 (function buildIndexes() {
-  // O(1) word lookup
-  window._wordMap = new Map();
-  // Prefix index for fast confusable lookup
-  window._prefixIdx = {};
-  // POS index
-  window._posIdx = {};
+  // Each pool starts at id=1, so every lookup index must be pool-scoped.
+  window._wordMaps = { core: new Map(), full: new Map() };
+  window._prefixIdxByPool = { core: {}, full: {} };
+  window._posIdxByPool = { core: {}, full: {} };
+  // Backward-compatible aliases for code and diagnostics that inspect core indexes.
+  window._wordMap = window._wordMaps.core;
+  window._prefixIdx = window._prefixIdxByPool.core;
+  window._posIdx = window._posIdxByPool.core;
   // Pre-compute similarity groups (pairs with same first 3 chars)
   window._simGroups = {};
 
   ALL_WORDS.forEach(function(w, i) {
-    window._wordMap.set(w.id, w);
-
-    // Prefix index
-    var pf = w.word.toLowerCase().substring(0, 3);
-    if (!window._prefixIdx[pf]) window._prefixIdx[pf] = [];
-    window._prefixIdx[pf].push(w.id);
-
-    // POS index
-    var pm = w.meaning.match(/^([a-z]+)\./i);
-    if (pm) {
-      var pos = pm[1].toLowerCase();
-      if (!window._posIdx[pos]) window._posIdx[pos] = [];
-      window._posIdx[pos].push(w.id);
-    }
+    addWordIndex('core', w);
   });
 })()
 // ============ THEME TOGGLE (白天黑夜切换按钮 4.0) ============
@@ -972,6 +1005,8 @@ function switchTheme(t) {
   if (window.innerWidth < 480) s = 1.0;
   var tb = document.createElement('theme-button');
   tb.id = 'themeBtn';
+  // Keep a readable light-DOM label for tests, screen readers, and browsers that cannot inspect closed shadow DOM.
+  tb.textContent = val === 'dark' ? '☀️' : '🌙';
   tb.setAttribute('value', val); // 必须在组件连接(connectedCallback)之前写入，保证初始状态与已保存主题一致
   tb.setAttribute('size', String(s));
   tb.setAttribute('title', '切换白天/黑夜');
@@ -986,7 +1021,11 @@ function switchTheme(t) {
 })();
 (function() {
   var b = document.getElementById('themeBtn');
-  if (b) b.addEventListener('change', function(e) { switchTheme(e.detail === 'dark' ? 'dark' : 'light'); });
+  if (b) b.addEventListener('change', function(e) {
+    var next = e.detail === 'dark' ? 'dark' : 'light';
+    b.textContent = next === 'dark' ? '☀️' : '🌙';
+    switchTheme(next);
+  });
   var saved = '';
   try { saved = localStorage.getItem(THEME_KEY) || ''; } catch(e) {}
   applyTheme(saved);
@@ -1107,12 +1146,15 @@ function levenshtein(a, b) {
 
 // ============ APP STATE ============
 var STORAGE_KEY = 'cet6_quiz_app_v2';
+var STATE_SCHEMA_VERSION = 3;
 
 function getDefaultState() {
   return {
+    schemaVersion: STATE_SCHEMA_VERSION,
     wrongHistory: [],
     retryHistory: [],
     wrongWordIds: {},
+    favorites: {},
     stats: {
       totalAttempts: 0, totalCorrect: 0, totalWrong: 0,
       cn2en: { attempts: 0, correct: 0, wrong: 0 },
@@ -1132,6 +1174,188 @@ function getDefaultState() {
     ebbingStart: null,       // 刘晓艳词库 4周25天打卡起始日（UTC 日期字符串）
     ebbingUnitLog: {}        // dateKey → [当天已复习完成的 Unit 数组]
   };
+}
+
+function wordStateKey(id, poolName) {
+  return (poolName === 'full' ? 'full:' : 'core:') + String(id);
+}
+
+function wordPoolFromStateKey(key) {
+  return String(key).indexOf('full:') === 0 ? 'full' : 'core';
+}
+
+function wordIdFromStateKey(key) {
+  var s = String(key);
+  return parseInt(s.indexOf(':') >= 0 ? s.slice(s.indexOf(':') + 1) : s, 10);
+}
+
+function recordPool(record) {
+  return record && record.pool === 'full' ? 'full' : 'core';
+}
+
+function recordWord(record) {
+  return record ? getWord(record.wordId, recordPool(record)) : null;
+}
+
+function wordAttemptEntries(poolName) {
+  var pool = poolName || currentPool || 'core';
+  var attempts = (state && state.stats && state.stats.wordAttempts) || {};
+  return Object.keys(attempts).filter(function(key) {
+    return wordPoolFromStateKey(key) === pool;
+  }).map(function(key) {
+    return [key, attempts[key]];
+  });
+}
+
+function migrateWordAttemptKeys(s) {
+  if (!s.stats || !s.stats.wordAttempts || typeof s.stats.wordAttempts !== 'object' || Array.isArray(s.stats.wordAttempts)) {
+    if (s.stats) s.stats.wordAttempts = {};
+    return;
+  }
+  var old = s.stats.wordAttempts;
+  var migrated = {};
+  Object.keys(old).forEach(function(key) {
+    var pool = wordPoolFromStateKey(key);
+    var id = wordIdFromStateKey(key);
+    var value = old[key];
+    if (!isFinite(id) || id <= 0 || !value || typeof value !== 'object' || Array.isArray(value)) return;
+    var target = wordStateKey(id, pool);
+    if (!migrated[target]) migrated[target] = value;
+    else {
+      // If a malformed backup contains both legacy and migrated keys, retain both counts.
+      migrated[target].attempts = (migrated[target].attempts || 0) + (value.attempts || 0);
+      migrated[target].correct = (migrated[target].correct || 0) + (value.correct || 0);
+      migrated[target].wrong = (migrated[target].wrong || 0) + (value.wrong || 0);
+      if (!migrated[target].learnedAt) migrated[target].learnedAt = value.learnedAt;
+      if (!migrated[target].grid && value.grid) migrated[target].grid = value.grid;
+    }
+  });
+  s.stats.wordAttempts = migrated;
+}
+
+function isPlainObject(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function finiteInt(value, fallback, min, max) {
+  var n = Number(value);
+  if (!isFinite(n)) return fallback;
+  n = Math.floor(n);
+  if (typeof min === 'number' && n < min) return fallback;
+  if (typeof max === 'number' && n > max) return fallback;
+  return n;
+}
+
+function normalizeCounterGroup(value, fallback) {
+  var group = isPlainObject(value) ? value : {};
+  var out = Object.assign({}, fallback || {});
+  Object.keys(group).forEach(function(key) {
+    var n = Number(group[key]);
+    if (isFinite(n) && n >= 0) out[key] = Math.floor(n);
+  });
+  return out;
+}
+
+function normalizeHistory(list) {
+  if (!Array.isArray(list)) return [];
+  return list.filter(function(item) {
+    return isPlainObject(item) && isFinite(Number(item.wordId)) && Number(item.wordId) > 0;
+  }).map(function(item) {
+    var out = Object.assign({}, item);
+    out.wordId = finiteInt(item.wordId, 0, 1);
+    out.pool = recordPool(item);
+    out.mode = item.mode === 'en2cn' ? 'en2cn' : 'cn2en';
+    out.timestamp = typeof item.timestamp === 'string' ? item.timestamp : '';
+    return out;
+  });
+}
+
+function normalizeState(input) {
+  var def = getDefaultState();
+  var s = isPlainObject(input) ? input : {};
+
+  Object.keys(def).forEach(function(key) {
+    if (!(key in s)) s[key] = def[key];
+  });
+
+  s.schemaVersion = STATE_SCHEMA_VERSION;
+  s.wrongHistory = normalizeHistory(s.wrongHistory);
+  s.retryHistory = normalizeHistory(s.retryHistory);
+  s.wrongWordIds = isPlainObject(s.wrongWordIds) ? s.wrongWordIds : {};
+  var oldWrong = s.wrongWordIds;
+  var wrong = {};
+  Object.keys(oldWrong).forEach(function(key) {
+    var target = (key === 'cn2en' || key === 'en2cn') ? key + '_core' : key;
+    if (!isPlainObject(oldWrong[key])) return;
+    if (!wrong[target]) wrong[target] = {};
+    Object.keys(oldWrong[key]).forEach(function(id) {
+      if (isFinite(Number(id)) && Number(id) > 0) wrong[target][finiteInt(id, 0, 1)] = true;
+    });
+  });
+  ['cn2en_core', 'en2cn_core', 'cn2en_full', 'en2cn_full'].forEach(function(key) {
+    if (!wrong[key]) wrong[key] = {};
+  });
+  s.wrongWordIds = wrong;
+
+  // 重点词使用 pool:id 作为稳定键，避免核心词库和打卡词库的同编号互相覆盖。
+  var rawFavorites = isPlainObject(s.favorites) ? s.favorites : {};
+  var favorites = {};
+  Object.keys(rawFavorites).forEach(function(key) {
+    var pool = wordPoolFromStateKey(key);
+    var id = wordIdFromStateKey(key);
+    if (isFinite(id) && id > 0 && rawFavorites[key]) favorites[wordStateKey(id, pool)] = true;
+  });
+  s.favorites = favorites;
+
+  s.stats = Object.assign({}, def.stats, isPlainObject(s.stats) ? s.stats : {});
+  ['cn2en', 'en2cn', 'streak', 'dictation', 'cn2en_dict', 'en2cn_dict'].forEach(function(key) {
+    s.stats[key] = normalizeCounterGroup(s.stats[key], def.stats[key]);
+  });
+  s.stats.dailyHistory = isPlainObject(s.stats.dailyHistory) ? s.stats.dailyHistory : {};
+  Object.keys(s.stats.dailyHistory).forEach(function(key) {
+    var day = s.stats.dailyHistory[key];
+    if (!isPlainObject(day)) { delete s.stats.dailyHistory[key]; return; }
+    s.stats.dailyHistory[key] = normalizeCounterGroup(day, { attempts: 0, correct: 0, wrong: 0, dict_attempts: 0, dict_correct: 0 });
+  });
+  migrateWordAttemptKeys(s);
+  Object.keys(s.stats.wordAttempts).forEach(function(key) {
+    var wa = s.stats.wordAttempts[key];
+    wa.attempts = finiteInt(wa.attempts, 0, 0);
+    wa.correct = finiteInt(wa.correct, 0, 0);
+    wa.wrong = finiteInt(wa.wrong, 0, 0);
+    if (!isFinite(Number(wa.learnedAt)) || Number(wa.learnedAt) <= 0) delete wa.learnedAt;
+    if (Array.isArray(wa.grid)) wa.grid = wa.grid.slice(0, 7).map(function(v) { return v ? Number(v) || 0 : 0; });
+    else if (wa.grid !== undefined) delete wa.grid;
+  });
+
+  s.stats.totalAttempts = finiteInt(s.stats.totalAttempts, 0, 0);
+  s.stats.totalCorrect = finiteInt(s.stats.totalCorrect, 0, 0);
+  s.stats.totalWrong = finiteInt(s.stats.totalWrong, 0, 0);
+  s.stats.totalSkip = finiteInt(s.stats.totalSkip, 0, 0);
+  s.dailyGoal = finiteInt(s.dailyGoal, def.dailyGoal, 1, 1000);
+  s.ebbingActive = !!s.ebbingActive;
+  s.ebbingStart = typeof s.ebbingStart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s.ebbingStart) ? s.ebbingStart : null;
+  if (s.ebbingStart) s.ebbingActive = true;
+  s.ebbingUnitLog = isPlainObject(s.ebbingUnitLog) ? s.ebbingUnitLog : {};
+  s.suspendedQuiz = isPlainObject(s.suspendedQuiz) ? s.suspendedQuiz : null;
+  if (s.suspendedQuiz) {
+    s.suspendedQuiz.poolType = s.suspendedQuiz.poolType === 'full' ? 'full' : 'core';
+    s.suspendedQuiz.ids = Array.isArray(s.suspendedQuiz.ids) ? s.suspendedQuiz.ids.map(function(id) { return finiteInt(id, 0, 1); }).filter(Boolean) : [];
+    s.suspendedQuiz.answers = isPlainObject(s.suspendedQuiz.answers) ? s.suspendedQuiz.answers : {};
+  }
+
+  var p = isPlainObject(s.prefs) ? s.prefs : {};
+  s.prefs = {
+    pool: p.pool === 'full' ? 'full' : 'core',
+    units: Array.isArray(p.units) && p.units.length ? p.units.map(function(u) { return finiteInt(u, 0, 0, 14); }).filter(function(u, i, arr) { return arr.indexOf(u) === i; }) : [0],
+    size: finiteInt(p.size, def.prefs.size, 1, 1000),
+    gate: finiteInt(p.gate, def.prefs.gate, 1, 3),
+    mode: p.mode === 'en2cn' ? 'en2cn' : 'cn2en',
+    type: p.type === 'dictation' ? 'dictation' : 'choice',
+    memory: !!p.memory
+  };
+  if (s.prefs.units.length === 0) s.prefs.units = [0];
+  return s;
 }
 
 
@@ -1164,36 +1388,10 @@ function loadState() {
   try {
     var raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      var s = JSON.parse(raw);
-      var def = getDefaultState();
-      for (var k in def) {
-        if (!(k in s)) s[k] = def[k];
-      }
-      // 迁移：老版本首次作答自动设过 ebbingStart → 视为已手动开启打卡表，保留进度
-      if (s.ebbingStart) s.ebbingActive = true;
-      if (!s.wrongWordIds) s.wrongWordIds = {};
-      // Migrate old wrongWordIds format (mode-only) to new mode_pool format
-      var wwNew = {}, wwMigrated = false;
-      Object.keys(s.wrongWordIds).forEach(function(k) {
-        if ((k === 'cn2en' || k === 'en2cn') && Object.keys(s.wrongWordIds[k]).length > 0) {
-          wwNew[k + '_core'] = s.wrongWordIds[k];
-          wwMigrated = true;
-        } else {
-          wwNew[k] = s.wrongWordIds[k];
-        }
-      });
-      if (wwMigrated) s.wrongWordIds = wwNew;
-      if (!s.wrongWordIds['cn2en_core']) s.wrongWordIds['cn2en_core'] = {};
-      if (!s.wrongWordIds['en2cn_core']) s.wrongWordIds['en2cn_core'] = {};
-      if (!s.stats.wordAttempts) s.stats.wordAttempts = {};
-      if (!s.stats.dailyHistory) s.stats.dailyHistory = {};
-      if (!s.stats.dictation) s.stats.dictation = { attempts: 0, correct: 0, wrong: 0, close: 0 };
-      if (!s.stats.cn2en_dict) s.stats.cn2en_dict = { attempts: 0, correct: 0, wrong: 0, close: 0 };
-      if (!s.stats.en2cn_dict) s.stats.en2cn_dict = { attempts: 0, correct: 0, wrong: 0, close: 0 };
-      return s;
+      return normalizeState(JSON.parse(raw));
     }
   } catch(e) {}
-  return getDefaultState();
+  return normalizeState(null);
 }
 
 
@@ -1300,14 +1498,12 @@ function pageGo(delta) {
 
 function getFullWordById(id) {
   // Look up in FULL_WORDS by ID (for full pool mode)
-  for (var fwi = 0; fwi < FULL_WORDS.length; fwi++) {
-    if (FULL_WORDS[fwi].id === id) return FULL_WORDS[fwi];
-  }
-  return null;
+  ensureFullWords();
+  return window._wordMaps.full.get(id) || null;
 }
 
 // Wrong-word tracking: keyed by mode + pool to separate core/full
-function wwKey(mode) { return mode + '_' + currentPool; }
+function wwKey(mode, poolName) { return mode + '_' + (poolName || currentPool); }
 
 function saveState() {
   try {
@@ -1338,19 +1534,124 @@ function saveState() {
 }
 
 // ============ WORD UTILS ============
-function getWord(id) {
-  var w = window._wordMap.get(id);
-  if (w) return w;
-  // Try FULL_WORDS lookup (lazy-loaded)
-  if (currentPool === 'full' || (window._wordMap.size < 1500)) {
+function escapeHTML(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, function(ch) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+  });
+}
+
+function getWord(id, poolName) {
+  var pool = poolName || currentPool || 'core';
+  if (pool === 'full') {
     ensureFullWords();
-    w = window._wordMap.get(id);
-    if (w) return w;
-    for (var fwi = 0; fwi < FULL_WORDS.length; fwi++) {
-      if (FULL_WORDS[fwi].id === id) return FULL_WORDS[fwi];
-    }
+    return window._wordMaps.full.get(id) || null;
   }
-  return null;
+  return window._wordMaps.core.get(id) || null;
+}
+
+function favoriteKey(id, poolName) {
+  return wordStateKey(id, poolName || currentPool || 'core');
+}
+
+function isFavorite(id, poolName) {
+  return !!(state && state.favorites && state.favorites[favoriteKey(id, poolName)]);
+}
+
+function refreshFavoriteButtons() {
+  document.querySelectorAll('[data-favorite-toggle]').forEach(function(btn) {
+    var key = btn.getAttribute('data-favorite-key');
+    var active = !!(state.favorites && state.favorites[key]);
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    btn.textContent = active ? '★ 已标记' : '☆ 标记重点';
+    btn.title = active ? '取消重点词' : '标记为重点词';
+  });
+}
+
+function toggleFavorite(id, poolName) {
+  var key = favoriteKey(id, poolName);
+  if (!state.favorites) state.favorites = {};
+  var added = !state.favorites[key];
+  if (added) state.favorites[key] = true;
+  else delete state.favorites[key];
+  saveState();
+  refreshFavoriteButtons();
+  if (typeof renderFavorites === 'function') renderFavorites();
+  return added;
+}
+
+function favoriteEntries(poolName) {
+  var pool = poolName || null;
+  return Object.keys(state.favorites || {}).filter(function(key) {
+    return !pool || wordPoolFromStateKey(key) === pool;
+  }).map(function(key) {
+    var p = wordPoolFromStateKey(key);
+    return { key: key, pool: p, id: wordIdFromStateKey(key), word: getWord(wordIdFromStateKey(key), p) };
+  }).filter(function(entry) { return !!entry.word; });
+}
+
+function getSmartQueueIds(poolName, limit, sourceIds) {
+  var pool = poolName || currentPool || 'core';
+  var candidates;
+  if (Array.isArray(sourceIds)) {
+    candidates = sourceIds.map(function(id) { return getWord(id, pool); }).filter(Boolean);
+  } else if (pool === currentPool) {
+    candidates = getActivePool().filter(function(word) { return !!getWord(word.id, pool); });
+  } else {
+    ensureFullWords();
+    var raw = pool === 'full' ? (FULL_WORDS || []) : ALL_WORDS;
+    candidates = raw.filter(function(word) { return !!getWord(word.id, pool); });
+  }
+  var due = {};
+  var dueIds = pool === 'full' ? dueWordsByGrid() : dueUnitWordIds();
+  dueIds.forEach(function(id) { due[id] = true; });
+  var attempts = state.stats.wordAttempts || {};
+  var ranked = candidates.map(function(word, index) {
+    var wa = attempts[wordStateKey(word.id, pool)] || {};
+    var tried = Number(wa.attempts) || 0;
+    var wrong = Number(wa.wrong) || 0;
+    var score = 0;
+    if (due[word.id]) score += 50000;
+    if (isFavorite(word.id, pool)) score += 100000;
+    if (tried === 0) score += 1000;
+    else score += Math.round((wrong / tried) * 10000) + wrong * 100;
+    return { id: word.id, score: score, index: index };
+  });
+  ranked.sort(function(a, b) { return b.score - a.score || a.index - b.index; });
+  var count = finiteInt(limit, learnSize || 20, 1, 1000);
+  return ranked.slice(0, count).map(function(item) { return item.id; });
+}
+
+function startSmartQuiz(mode, sourceIds) {
+  var ids = getSmartQueueIds(currentPool, learnSize || 20, sourceIds);
+  if (ids.length === 0) { alert('当前筛选范围没有可练习的单词。'); return; }
+  var words = ids.map(function(id) { return getWord(id, currentPool); }).filter(Boolean);
+  buildQuiz(mode || currentMode, words);
+  quizState.isRetry = false;
+  quizState.isSmart = true;
+  document.getElementById('retryInfo').classList.remove('show');
+  advanceQuestion();
+  renderAll();
+}
+
+function renderFavorites() {
+  var list = document.getElementById('favoriteList');
+  var count = document.getElementById('favoriteCount');
+  if (!list || !count) return;
+  var entries = favoriteEntries();
+  count.textContent = entries.length + ' 个';
+  if (entries.length === 0) {
+    list.innerHTML = '<div class="empty"><div class="ei">⭐</div><p>还没有重点词，做题或浏览词库时可以随手标记。</p></div>';
+    return;
+  }
+  list.innerHTML = entries.map(function(entry) {
+    var word = entry.word;
+    var poolLabel = entry.pool === 'full' ? '艾宾浩斯打卡' : '你还在背单词吗';
+    return '<div class="hi" style="border-left-color:var(--orange);display:flex;align-items:center;justify-content:space-between;gap:10px;">' +
+      '<div><strong class="hw">' + escapeHTML(word.word) + '</strong> <span style="color:var(--text2);font-size:0.85em;">' + escapeHTML(word.pronunciation || '') + '</span>' +
+      '<div style="color:var(--text2);margin-top:3px;">' + escapeHTML(getChineseFull(word.meaning)) + ' · ' + poolLabel + '</div></div>' +
+      '<button class="ctrl-btn favorite-toggle active" data-favorite-toggle data-favorite-key="' + entry.key + '" aria-pressed="true">★ 已标记</button></div>';
+  }).join('');
 }
 
 function getChinese(meaning) {
@@ -1428,10 +1729,11 @@ function getDistractors(correctWord, mode, count) {
 
   // === PRIORITY 3: Same prefix (first 3 chars) ===
   var pf3 = cw.substring(0, 3);
-  var prefixPool = window._prefixIdx[pf3] || [];
+  var indexPool = currentPool === 'full' ? 'full' : 'core';
+  var prefixPool = window._prefixIdxByPool[indexPool][pf3] || [];
   prefixPool.forEach(function(id) {
     if (used[id]) return;
-    var w = getWord(id);
+    var w = getWord(id, indexPool);
     if (!w || usedTexts[w.word.toLowerCase()]) return;
     candidates.push({ word: w, priority: 60 });
     used[id] = true;
@@ -1442,10 +1744,10 @@ function getDistractors(correctWord, mode, count) {
   var pm = correctWord.meaning.match(/^([a-z]+)\./i);
   if (pm) {
     var pos = pm[1].toLowerCase();
-    var posPool = window._posIdx[pos] || [];
+    var posPool = window._posIdxByPool[indexPool][pos] || [];
     posPool.forEach(function(id) {
       if (used[id]) return;
-      var w = getWord(id);
+      var w = getWord(id, indexPool);
       if (!w || usedTexts[w.word.toLowerCase()]) return;
       candidates.push({ word: w, priority: 40 });
       used[id] = true;
@@ -1561,10 +1863,17 @@ function nowStr() {
          pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
 }
 
+function localDateKey(d) {
+  d = d || new Date();
+  var pad = function(n) { return n < 10 ? '0' + n : '' + n; };
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
 // ============ QUIZ ENGINE (LAZY) ============
 var quizState = {
   mode: 'cn2en',
   isRetry: false,
+  isSmart: false,
   ids: [],
   pos: -1,
   questions: [],
@@ -1581,7 +1890,7 @@ function buildQuiz(mode, wordPool) {
   var pool = wordPool || getActivePool();
   var ids = pool.map(function(w) { return w.id; });
   // 过滤无效 id（数据异常保护）
-  ids = ids.filter(function(id) { return getWord(id) !== null; });
+  ids = ids.filter(function(id) { return getWord(id, currentPool) !== null; });
   // 学习量：闯关3=测整个选中范围；重做=全部错题乱序；新学=按书序取前 learnSize 词（1页≈20词）
   var limit = (gateLevel === 3) ? ids.length : learnSize;
   var ordered;
@@ -1599,6 +1908,7 @@ function buildQuiz(mode, wordPool) {
   quizState = {
     mode: mode,
     isRetry: !!wordPool,
+    isSmart: false,
     isReview: false,
     ids: finalIds,
     pos: -1,
@@ -1625,7 +1935,7 @@ function startRetryQuiz(mode) {
   var ids = Object.keys(ws).map(Number);
   if (ids.length === 0) { alert('当前模式没有错题可以重做！'); return; }
   if (ids.length < 4) { alert('当前模式错题不足4道'); return; }
-  var words = ids.map(function(id) { return getWord(id); }).filter(Boolean);
+  var words = ids.map(function(id) { return getWord(id, currentPool); }).filter(Boolean);
   if (words.length < 4) { alert('错题数据异常'); return; }
   buildQuiz(mode, words);
   advanceQuestion();
@@ -1689,7 +1999,7 @@ function goToQuestion(pos) {
   if (pos < 0 || pos >= quizState.ids.length) return;
   quizState.pos = pos;
   if (!quizState.questions[pos]) {
-    var word = getWord(quizState.ids[pos]);
+    var word = getWord(quizState.ids[pos], quizState.poolType || currentPool);
     if (!word) {
       // 数据缺失题：标记跳过，前进到下一题
       quizState.answers[pos] = 'skip';
@@ -1738,7 +2048,7 @@ function finishQuiz() {
       if (!state.ebbingUnitLog[tKey]) state.ebbingUnitLog[tKey] = [];
       var doneUnits = state.ebbingUnitLog[tKey];
       quizState.ids.forEach(function(id) {
-        var w = getWord(id);
+        var w = getWord(id, quizState.poolType || currentPool);
         if (w && w.unit && doneUnits.indexOf(w.unit) === -1) doneUnits.push(w.unit);
       });
       var _du = state.ebbingUnitLog[tKey];
@@ -1770,6 +2080,7 @@ function finishQuiz() {
   quizState.isRetry = false;
   quizState.isReview = false;
   quizState.isMemory = false;
+  quizState.isSmart = false;
   // 复习强制选择题，完成后恢复用户此前保存的题型
   if (window._prevQuizTypeBeforeReview) {
     currentQuizType = window._prevQuizTypeBeforeReview;
@@ -1793,14 +2104,15 @@ var REVIEW_DAY = 86400000;
 var GRID_OFFSETS = [5 * 60000, 30 * 60000, 12 * 3600000, 1 * REVIEW_DAY, 2 * REVIEW_DAY, 4 * REVIEW_DAY, 7 * REVIEW_DAY];
 var GRID_NAMES = ['5分', '30分', '12时', '1天', '2天', '4天', '7天'];
 
-function dayKeyStr(d) { return d.toISOString().split('T')[0]; }
+function dayKeyStr(d) { return localDateKey(d); }
 
 // 从 ebbingStart 起今天是第几天（1 起）
 function ebbingDayIndex() {
   if (!state.ebbingStart) return 0;
-  var start = new Date(state.ebbingStart + 'T00:00:00Z');
-  var today = new Date();
-  today = new Date(today.toISOString().split('T')[0] + 'T00:00:00Z');
+  var startParts = state.ebbingStart.split('-').map(Number);
+  var start = new Date(startParts[0], startParts[1] - 1, startParts[2]);
+  var now = new Date();
+  var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return Math.floor((today - start) / REVIEW_DAY) + 1;
 }
 
@@ -1808,8 +2120,9 @@ function ebbingDayIndex() {
 function learnedUnitCount() {
   var st = state.stats;
   var units = {};
-  Object.keys(st.wordAttempts).forEach(function(id) {
-    var w = getWord(parseInt(id));
+  Object.keys(st.wordAttempts).forEach(function(key) {
+    if (wordPoolFromStateKey(key) !== 'core') return;
+    var w = getWord(wordIdFromStateKey(key), 'core');
     if (w && w.unit) units[w.unit] = true;
   });
   var max = 0;
@@ -1838,12 +2151,13 @@ function dueWordsByGrid() {
   var st = state.stats;
   var now = Date.now();
   var due = [];
-  Object.keys(st.wordAttempts).forEach(function(id) {
-    var wa = st.wordAttempts[id];
+  Object.keys(st.wordAttempts).forEach(function(key) {
+    if (wordPoolFromStateKey(key) !== 'full') return;
+    var wa = st.wordAttempts[key];
     if (!wa.learnedAt) return;
     var grid = wa.grid || [];
     for (var i = 0; i < 7; i++) {
-      if (!grid[i] && wa.learnedAt + GRID_OFFSETS[i] <= now) { due.push(Number(id)); break; }
+      if (!grid[i] && wa.learnedAt + GRID_OFFSETS[i] <= now) { due.push(wordIdFromStateKey(key)); break; }
     }
   });
   return due;
@@ -1858,9 +2172,10 @@ function dueUnitWordIds() {
   units.forEach(function(u) { unitSet[u] = true; });
   var st = state.stats;
   var ids = [];
-  Object.keys(st.wordAttempts).forEach(function(id) {
-    var w = getWord(parseInt(id));
-    if (w && unitSet[w.unit]) ids.push(Number(id));
+  Object.keys(st.wordAttempts).forEach(function(key) {
+    if (wordPoolFromStateKey(key) !== 'core') return;
+    var w = getWord(wordIdFromStateKey(key), 'core');
+    if (w && unitSet[w.unit]) ids.push(wordIdFromStateKey(key));
   });
   return ids;
 }
@@ -1872,7 +2187,7 @@ function getDueWordIds() {
 
 // 打卡词库：某词的下一格进度文本
 function gridProgressText(wordId) {
-  var wa = state.stats.wordAttempts[wordId];
+  var wa = state.stats.wordAttempts[wordStateKey(wordId, 'full')];
   if (!wa || !wa.learnedAt) return '';
   var grid = wa.grid || [];
   var done = grid.filter(function(g) { return !!g; }).length;
@@ -1906,15 +2221,15 @@ function startMemoryQuiz(mode) {
   var learned = st.wordAttempts || {};
   // 已学词集合（按拼写，兼容核心词/全词两套 id）
   var learnedWords = {};
-  Object.keys(learned).forEach(function(id) {
-    var w = getWord(parseInt(id));
+  Object.keys(learned).forEach(function(key) {
+    var w = getWord(wordIdFromStateKey(key), wordPoolFromStateKey(key));
     if (w) learnedWords[w.word.toLowerCase()] = true;
   });
   var pool = getActivePool();
   var poolSet = {};
   pool.forEach(function(w) { poolSet[w.word.toLowerCase()] = true; });
   // 到期复习词优先（答错/跳过的词，间隔到期自动回来）
-  var dueWords = getDueWordIds().map(function(id) { return getWord(id); })
+  var dueWords = getDueWordIds().map(function(id) { return getWord(id, currentPool); })
     .filter(function(w) { return w && poolSet[w.word.toLowerCase()]; });
   // 未学新词（保持词库顺序：按 Unit→Lesson→序号 从前往后推进，不从随机位置开始）
   var newWords = pool.filter(function(w) { return !learnedWords[w.word.toLowerCase()]; });
@@ -1961,6 +2276,7 @@ function startReview() {
   quizState = {
     mode: 'en2cn',
     isRetry: false,
+    isSmart: false,
     isReview: true,
     ids: shuffle(due),
     pos: -1,
@@ -1982,6 +2298,7 @@ function saveSuspendedQuiz() {
   state.suspendedQuiz = {
     mode: quizState.mode,
     isRetry: quizState.isRetry,
+    isSmart: !!quizState.isSmart,
     isReview: !!quizState.isReview,
     ids: quizState.ids.slice(),
     pos: quizState.pos,
@@ -2035,6 +2352,7 @@ function resumeQuiz() {
   quizState = {
     mode: sq.mode,
     isRetry: sq.isRetry,
+    isSmart: !!sq.isSmart,
     isReview: !!sq.isReview,
     isMemory: !!sq.isMemory,
     ids: sq.ids.slice(),
@@ -2167,6 +2485,7 @@ function autoSaveProgress() {
   state.suspendedQuiz = {
     mode: q.mode,
     isRetry: q.isRetry,
+    isSmart: !!q.isSmart,
     isReview: !!q.isReview,
     isMemory: !!q.isMemory,
     ids: q.ids.slice(),
@@ -2211,7 +2530,16 @@ function wrongOptionsHTML(q, mode, chosenIndex) {
   }
   return rows ? '<div style="margin:8px 0 2px;"><b>其余选项：</b></div>' + rows : '';
 }
-function getWordDetailHTML(word) {
+function favoriteButtonHTML(word, poolName) {
+  if (!word || !word.id) return '';
+  var pool = poolName || currentPool || 'core';
+  var key = favoriteKey(word.id, pool);
+  var active = isFavorite(word.id, pool);
+  return '<button class="ctrl-btn favorite-toggle' + (active ? ' active' : '') + '" data-favorite-toggle data-favorite-key="' + key + '" aria-pressed="' + (active ? 'true' : 'false') + '">' +
+    (active ? '★ 已标记' : '☆ 标记重点') + '</button>';
+}
+
+function getWordDetailHTML(word, poolName) {
   var parts = [];
   if (currentPool === 'full' && word.id) {
     var gp = gridProgressText(word.id);
@@ -2261,7 +2589,7 @@ function getWordDetailHTML(word) {
   }
   // 派生词行：仅当内容含英文单词时显示（防止纯中文释义误标为派生词）
   if (word.derivative && /[A-Za-z]{2,}/.test(word.derivative)) parts.push(['\u{1F331}', '\u6D3E\u751F\u8BCD', word.derivative, '']);
-  var groupInfo = '';
+  var groupInfo = '<div style="text-align:right;margin:8px 0 4px;">' + favoriteButtonHTML(word, poolName) + '</div>';
   if (word.group_id || word.unit) {
     groupInfo = '<div style="margin:8px 0 4px;font-size:0.85em;color:var(--text2);">📁 ' +
       (word.group_id ? '词群 ' + word.group_id + '「' + (word.group_name || '') + '」' : '') +
@@ -2310,9 +2638,39 @@ var GMAP_REL_COLORS = {
 // 虚线关系（spec：形近/反义 虚线）
 function gmapRelDashed(rel) { return (rel === '形近' || rel === '反义'); }
 
+function normalizeUnitMapCoverage() {
+  if (window.__UNIT_MAPS_COVERAGE_NORMALIZED__ || !window.__UNIT_MAPS_DATA__ || !Array.isArray(ALL_WORDS)) return;
+  window.__UNIT_MAPS_COVERAGE_NORMALIZED__ = true;
+  function walk(nodes, out) {
+    (nodes || []).forEach(function(node) {
+      out[String(node.word).toLowerCase()] = true;
+      walk(node.children, out);
+    });
+  }
+  ALL_WORDS.forEach(function(word) {
+    var unitMap = window.__UNIT_MAPS_DATA__[word.unit];
+    if (!unitMap) return;
+    var words = {};
+    Object.keys(unitMap).forEach(function(gid) { walk(unitMap[gid].level1Nodes, words); });
+    if (words[String(word.word).toLowerCase()]) return;
+    var gid = unitMap[String(word.group_id)] ? String(word.group_id) : Object.keys(unitMap)[0];
+    if (!gid || !unitMap[gid]) return;
+    var node = {
+      word: String(word.word),
+      phonetic: word.pronunciation || '',
+      meaning: word.meaning || '',
+      pos: ((word.meaning || '').match(/^([a-z]+\.)/i) || [])[1] || '',
+      children: []
+    };
+    if (!Array.isArray(unitMap[gid].level1Nodes)) unitMap[gid].level1Nodes = [];
+    unitMap[gid].level1Nodes.push(node);
+    words[String(word.word).toLowerCase()] = true;
+  });
+}
+
 function ensureUnitMaps(cb) {
-  if (window.__UNIT_MAPS_DATA__) { if (cb) cb(); return; }
-  loadDataScript('data/unit-maps.js', function() { if (cb) cb(); });
+  if (window.__UNIT_MAPS_DATA__) { normalizeUnitMapCoverage(); if (cb) cb(); return; }
+  loadDataScript('data/unit-maps.js', function() { normalizeUnitMapCoverage(); if (cb) cb(); });
 }
 
 // 当前词是否可用新版导图（仅核心词库《你还在背单词吗》，且有该词群数据）
@@ -2431,7 +2789,8 @@ function buildMapSVG(id, map, r, activeWord) {
     var isActive = activeWord && (w.word.toLowerCase() === activeWord.toLowerCase());
     var childCount = (w.children && w.children.length) ? w.children.length : 0;
     var escW = String(w.word).replace(/'/g, "\\'");
-    var tip = w.word + (w.phonetic ? ' ' + w.phonetic : '') + (w.meaning ? ' ' + w.meaning : '') +
+    // Keep a separator even for nodes without phonetic/meaning; consumers use the first token as the node word.
+    var tip = w.word + ' ' + (w.phonetic || '') + (w.meaning ? ' ' + w.meaning : '') +
       (childCount ? '（有 ' + childCount + ' 个分支，点击圆圈展开）' : '（末端词，无分支）');
     // 圆圈=展开下钻（末端词点击改为朗读）；单词文字=朗读发音；均带中文释义气泡（手机端）
     var drillClick = 'groupMapDrill(\'' + id + '\',\'' + escW + '\',' + (childCount ? 1 : 0) + ')';
@@ -2444,7 +2803,7 @@ function buildMapSVG(id, map, r, activeWord) {
       var bNum = childCount > 9 ? '9+' : String(childCount);
       var bFs = COARSE ? 11 : (childCount > 9 ? 8 : 9);
       badgeSvg = '<circle cx="' + bx + '" cy="' + by + '" r="' + (COARSE ? 9 : 7) + '" style="fill:var(--green);stroke:var(--surface)" stroke-width="1.5"/>' +
-        '<text x="' + bx + '" y="' + (by + 0.5) + '" text-anchor="middle" dominant-baseline="middle" font-size="' + bFs + '" font-weight="700" style="fill:#fff;pointer-events:none">' + bNum + '</text>';
+        '<text x="' + bx + '" y="' + (by + 0.5) + '" text-anchor="middle" dominant-baseline="middle" font-size="' + Math.min(bFs, 8.5) + '" font-weight="700" style="fill:#fff;pointer-events:none">' + bNum + '</text>';
     }
     svg += '<g onclick="' + drillClick + '" style="cursor:pointer">' +
       '<title>' + tip + '</title>' +
@@ -2703,7 +3062,7 @@ function renderQuizCard() {
   var qPron = (mode === 'en2cn' && word.pronunciation) ? word.pronunciation : '';
   var modeLabel = (mode === 'cn2en') ? '看中文选英文' : '看英文选中文';
   var typeLabel = (currentQuizType === 'dictation') ? ' · 默写' : '';
-  var prefix = quizState.isMemory ? '🧠 [记忆] ' : (quizState.isReview ? '🧠 [复习] ' : (quizState.isRetry ? '\u{1F504} [重做] ' : ''));
+  var prefix = quizState.isMemory ? '🧠 [记忆] ' : (quizState.isReview ? '🧠 [复习] ' : (quizState.isSmart ? '🧠 [智能] ' : (quizState.isRetry ? '\u{1F504} [重做] ' : '')));
 
   // 导航条：记忆模式做完即删，不提供回看/跳转
   var navBar = quizState.isMemory ? '' :
@@ -2898,6 +3257,7 @@ function renderQuizCard() {
 
 function recordStat(word, mode, isCorrect, isClose, isDictation) {
   var st = state.stats;
+  var statPool = (quizState && quizState.poolType) || currentPool || 'core';
   st.totalAttempts++;
   st[mode].attempts++;
   if (isDictation) {
@@ -2927,7 +3287,7 @@ function recordStat(word, mode, isCorrect, isClose, isDictation) {
     st.streak.current = 0;
   }
 
-  var today = new Date().toISOString().split('T')[0];
+  var today = localDateKey(new Date());
   if (!st.dailyHistory[today]) {
     st.dailyHistory[today] = { attempts: 0, correct: 0, wrong: 0, dict_attempts: 0, dict_correct: 0 };
   }
@@ -2939,15 +3299,16 @@ function recordStat(word, mode, isCorrect, isClose, isDictation) {
   if (isCorrect) st.dailyHistory[today].correct++;
   else st.dailyHistory[today].wrong++;
 
-  var wa = st.wordAttempts[word.id];
-  if (!wa) { wa = st.wordAttempts[word.id] = { attempts: 0, correct: 0, wrong: 0 }; }
+  var waKey = wordStateKey(word.id, statPool);
+  var wa = st.wordAttempts[waKey];
+  if (!wa) { wa = st.wordAttempts[waKey] = { attempts: 0, correct: 0, wrong: 0 }; }
   wa.attempts++;
   if (isCorrect) wa.correct++;
   else wa.wrong++;
   // ===== 双书记忆调度 =====
   var _now = Date.now();
   if (!wa.learnedAt) wa.learnedAt = _now; // 首次作答时间（8格周期起点）
-  if (currentPool === 'full') {
+  if (statPool === 'full') {
     if (!wa.grid) wa.grid = [0, 0, 0, 0, 0, 0, 0];
     // 复习（startReview）答对：打掉第一个到期未完成格
     if (quizState && quizState.isReview && isCorrect) {
@@ -3028,7 +3389,7 @@ function handleDictationSubmit() {
 
   if (!isCorrect) {
     state.wrongHistory.unshift({
-      wordId: word.id, mode: mode, timestamp: now, type: 'dictation',
+      wordId: word.id, pool: (quizState.poolType || currentPool), mode: mode, timestamp: now, type: 'dictation',
       questionText: (mode === 'cn2en') ? getChineseFull(word.meaning) : word.word,
       userAnswer: userAnswer, correctAnswer: correctAnswerText,
       isClose: isClose
@@ -3038,9 +3399,9 @@ function handleDictationSubmit() {
   }
 
   if (quizState.isRetry) {
-    var existingRetries = state.retryHistory.filter(function(h) { return h.wordId === word.id && h.mode === mode; }).length;
+    var existingRetries = state.retryHistory.filter(function(h) { return h.wordId === word.id && recordPool(h) === (quizState.poolType || currentPool) && h.mode === mode; }).length;
     state.retryHistory.unshift({
-      wordId: word.id, mode: mode, timestamp: now,
+      wordId: word.id, pool: (quizState.poolType || currentPool), mode: mode, timestamp: now,
       questionText: (mode === 'cn2en') ? getChineseFull(word.meaning) : word.word,
       userAnswer: userAnswer, correctAnswer: correctAnswerText,
       isCorrect: isCorrect, isClose: isClose, type: 'dictation',
@@ -3097,7 +3458,7 @@ function handleGate1(know) {
     var now = nowStr();
     var labels = ['A', 'B', 'C', 'D'];
     state.wrongHistory.unshift({
-      wordId: word.id, mode: mode, timestamp: now,
+      wordId: word.id, pool: (quizState.poolType || currentPool), mode: mode, timestamp: now,
       questionText: word.word,
       userAnswer: '不认识', correctAnswer: getChineseFull(word.meaning),
       options: []
@@ -3148,7 +3509,7 @@ function handleAnswer(chosenIndex) {
   // Record wrong
   if (!isCorrect) {
     state.wrongHistory.unshift({
-      wordId: word.id, mode: mode, timestamp: now,
+      wordId: word.id, pool: (quizState.poolType || currentPool), mode: mode, timestamp: now,
       questionText: (mode === 'cn2en') ? getChineseFull(word.meaning) : word.word,
       userAnswer: userAnswerText, correctAnswer: correctAnswerText,
       options: q.options.map(function(o, i) { return { label: labels[i], text: (mode === 'cn2en') ? o.word : getChineseFull(o.meaning), isCorrect: i === q.correctIndex }; })
@@ -3159,9 +3520,9 @@ function handleAnswer(chosenIndex) {
 
   // Retry tracking
   if (quizState.isRetry) {
-    var existingRetries = state.retryHistory.filter(function(h) { return h.wordId === word.id && h.mode === mode; }).length;
+    var existingRetries = state.retryHistory.filter(function(h) { return h.wordId === word.id && recordPool(h) === (quizState.poolType || currentPool) && h.mode === mode; }).length;
     state.retryHistory.unshift({
-      wordId: word.id, mode: mode, timestamp: now,
+      wordId: word.id, pool: (quizState.poolType || currentPool), mode: mode, timestamp: now,
       questionText: (mode === 'cn2en') ? getChineseFull(word.meaning) : word.word,
       userAnswer: userAnswerText, correctAnswer: correctAnswerText,
       isCorrect: isCorrect,
@@ -3205,6 +3566,7 @@ function handleAnswer(chosenIndex) {
 function renderAll() {
   renderQuizStats();
   renderWrongHistory();
+  renderFavorites();
   renderRetryHistory();
   renderStatsPage();
   renderReviewBar();
@@ -3309,7 +3671,7 @@ function renderWrongHistory() {
   var filtered = hist;
   if (query) {
     filtered = hist.filter(function(item) {
-      var w = getWord(item.wordId);
+      var w = recordWord(item);
       if (!w) return false;
       return w.word.toLowerCase().indexOf(query) !== -1 ||
              getChinese(w.meaning).indexOf(query) !== -1 ||
@@ -3327,7 +3689,7 @@ function renderWrongHistory() {
   var html = '';
   for (var i = 0; i < filtered.length; i++) {
     var item = filtered[i];
-    var w = getWord(item.wordId);
+    var w = recordWord(item);
     var idx = hist.indexOf(item);
     var isDict = item.type === 'dictation';
     var actionLabel = isDict ? '你写' : '你选';
@@ -3353,7 +3715,7 @@ function renderRetryHistory() {
   var filtered = hist;
   if (query) {
     filtered = hist.filter(function(item) {
-      var w = getWord(item.wordId);
+      var w = recordWord(item);
       if (!w) return false;
       return w.word.toLowerCase().indexOf(query) !== -1 ||
              getChinese(w.meaning).indexOf(query) !== -1 ||
@@ -3371,7 +3733,7 @@ function renderRetryHistory() {
   var html = '';
   for (var i = 0; i < filtered.length; i++) {
     var item = filtered[i];
-    var w = getWord(item.wordId);
+    var w = recordWord(item);
     var isDict = item.type === 'dictation';
     var actionLabel = isDict ? '你写' : '你选';
     html +=
@@ -3397,7 +3759,7 @@ function renderStatsPage() {
   var en2cnR = st.en2cn.attempts > 0 ? Math.round(st.en2cn.correct / st.en2cn.attempts * 100) : 0;
   var cn2enW = (Object.keys(state.wrongWordIds['cn2en_core'] || {}).length) + (Object.keys(state.wrongWordIds['cn2en_full'] || {}).length);
   var en2cnW = (Object.keys(state.wrongWordIds['en2cn_core'] || {}).length) + (Object.keys(state.wrongWordIds['en2cn_full'] || {}).length);
-  var today = new Date().toISOString().split('T')[0];
+  var today = localDateKey(new Date());
   var td = st.dailyHistory[today] || { attempts: 0, correct: 0, wrong: 0 };
   var todayR = td.attempts > 0 ? Math.round(td.correct / td.attempts * 100) : 0;
   // 同步目标输入框
@@ -3431,7 +3793,7 @@ function renderStatsPage() {
   var weeklyHTML = '';
   for (var d = 6; d >= 0; d--) {
     var dt = new Date(); dt.setDate(dt.getDate() - d);
-    var key = dt.toISOString().split('T')[0];
+    var key = localDateKey(dt);
     var ds = st.dailyHistory[key] || { attempts: 0, correct: 0, wrong: 0 };
     var dr = ds.attempts > 0 ? Math.round(ds.correct / ds.attempts * 100) : 0;
     var dn = ['日','一','二','三','四','五','六'][dt.getDay()];
@@ -3456,7 +3818,7 @@ function renderStatsPage() {
     rh = '<div class="empty"><p>还没有活动记录</p></div>';
   } else {
     combined.forEach(function(e) {
-      var w = getWord(e.item.wordId);
+      var w = recordWord(e.item);
       rh += '<div class="hi ' + (e.type === 'retry' ? 'retry' : '') + '">' +
         '<span class="badge ' + (e.type === 'retry' ? 'rb' : 'wb') + '">' + (e.type === 'retry' ? '重做' : '错题') + '</span> ' +
         '<span class="hw">' + (w ? w.word : '?') + '</span> ' +
@@ -3469,11 +3831,11 @@ function renderStatsPage() {
 
   // Mastery
   var mc = document.getElementById('masteryStats');
-  var wordEntries = Object.entries(st.wordAttempts || {});
+  var wordEntries = wordAttemptEntries(currentPool);
   wordEntries.sort(function(a, b) { return (b[1].wrong || 0) - (a[1].wrong || 0); });
   var mastered = wordEntries.filter(function(e) { return e[1].correct >= 2 && e[1].wrong === 0; }).length;
   var struggling = wordEntries.filter(function(e) { return (e[1].wrong || 0) >= 2; }).length;
-  var untouched = getActivePool().length - wordEntries.length;
+  var untouched = Math.max(0, getActivePool().length - wordEntries.length);
   var touched = wordEntries.length;
 
   mc.innerHTML =
@@ -3519,7 +3881,7 @@ function renderStatsPage() {
     var top5 = wordEntries.filter(function(e) { return e[1].wrong >= 2; }).slice(0, 5);
     var topHTML = '<div style="margin-top:12px;"><strong>🔴 最需复习 Top 5：</strong></div>';
     top5.forEach(function(t) {
-      var tw = getWord(parseInt(t[0]));
+      var tw = getWord(wordIdFromStateKey(t[0]), wordPoolFromStateKey(t[0]));
       if (tw) topHTML += '<div class="ci" style="padding:6px 0;font-size:0.9em;">• <strong>' + tw.word + '</strong> — ' + tw.meaning + ' <span style="color:var(--red);">(' + t[1].wrong + '次错误)</span></div>';
     });
     mc.innerHTML += topHTML;
@@ -3606,7 +3968,7 @@ function heatStreakFrom(dateKey) {
   var d = new Date(dateKey + 'T12:00:00');
   var dh = state.stats.dailyHistory || {};
   while (true) {
-    var k = d.toISOString().split('T')[0];
+    var k = localDateKey(d);
     var e = dh[k];
     if (e && (e.attempts || 0) > 0) { n++; d.setDate(d.getDate() - 1); }
     else break;
@@ -3712,7 +4074,7 @@ function renderHeatmapChart() {
   for (var d = days - 1; d >= 0; d--) {
     var dt = new Date(today);
     dt.setDate(dt.getDate() - d);
-    var key = dt.toISOString().split('T')[0];
+    var key = localDateKey(dt);
     var dd = dh[key] || { attempts: 0, correct: 0, wrong: 0 };
     var count = dd.attempts || 0;
     var corr = dd.correct || 0;
@@ -3815,7 +4177,8 @@ function renderRadarChart() {
   units.forEach(function(unit) {
     var correct = 0, total = 0;
     Object.keys(wa).forEach(function(wid) {
-      var w = getWord(parseInt(wid));
+      if (wordPoolFromStateKey(wid) !== currentPool) return;
+      var w = getWord(wordIdFromStateKey(wid), currentPool);
       if (w && (w.unit || 0) === unit) {
         correct += wa[wid].correct || 0;
         total += wa[wid].attempts || 0;
@@ -3862,12 +4225,14 @@ function renderCoverageRing() {
   var st = window.state ? window.state.stats : state.stats;
   var wa = st.wordAttempts || {};
   var activePool = getActivePool();
-  var uniqueAttempted = Object.keys(wa).length;
   var totalWords = activePool.length;
 
   var mastered = 0;
+  var uniqueAttempted = 0;
   Object.keys(wa).forEach(function(wid) {
+    if (wordPoolFromStateKey(wid) !== currentPool) return;
     var wd = wa[wid];
+    uniqueAttempted++;
     var acc = wd.attempts > 0 ? wd.correct / wd.attempts : 0;
     if (acc >= 0.7 && wd.attempts >= 2) mastered++;
   });
@@ -3932,7 +4297,7 @@ function renderTrendChart() {
   for (var d = 6; d >= 0; d--) {
     var dt = new Date(today);
     dt.setDate(dt.getDate() - d);
-    var key = dt.toISOString().split('T')[0];
+    var key = localDateKey(dt);
     var ds = dh[key] || { attempts: 0, correct: 0, wrong: 0, dict_attempts: 0, dict_correct: 0 };
     var choiceRate = ds.attempts > 0 ? Math.round(ds.correct / ds.attempts * 100) : null;
     var dcA = ds.dict_attempts || 0;
@@ -4071,9 +4436,10 @@ function exportWrongWords() {
     // Deduplicate
     var seen = {};
     cn2enList.forEach(function(h) {
-      if (seen[h.wordId]) return;
-      seen[h.wordId] = true;
-      var w = getWord(h.wordId);
+      var hKey = recordPool(h) + ':' + h.wordId;
+      if (seen[hKey]) return;
+      seen[hKey] = true;
+      var w = recordWord(h);
       if (w) lines.push(w.word + ' ' + w.pronunciation + ' — ' + w.meaning);
     });
     lines.push('');
@@ -4084,9 +4450,10 @@ function exportWrongWords() {
     lines.push('');
     var seen2 = {};
     en2cnList.forEach(function(h) {
-      if (seen2[h.wordId]) return;
-      seen2[h.wordId] = true;
-      var w = getWord(h.wordId);
+      var hKey = recordPool(h) + ':' + h.wordId;
+      if (seen2[hKey]) return;
+      seen2[hKey] = true;
+      var w = recordWord(h);
       if (w) lines.push(w.word + ' ' + w.pronunciation + ' — ' + w.meaning);
     });
     lines.push('');
@@ -4095,7 +4462,7 @@ function exportWrongWords() {
   lines.push('--- 详细错题记录 ---');
   lines.push('');
   hist.forEach(function(h, i) {
-    var w = getWord(h.wordId);
+    var w = recordWord(h);
     lines.push('#' + (i+1) + ' [' + h.timestamp + '] ' + (h.mode === 'cn2en' ? 'CN→EN' : 'EN→CN'));
     lines.push('  题目：' + h.questionText);
     lines.push('  你选：' + h.userAnswer + ' | 正确：' + h.correctAnswer);
@@ -4107,7 +4474,7 @@ function exportWrongWords() {
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
   a.href = url;
-  a.download = 'CET6_错题_' + new Date().toISOString().split('T')[0] + '.txt';
+  a.download = 'CET6_错题_' + localDateKey(new Date()) + '.txt';
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -4129,7 +4496,7 @@ function exportAllData() {
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
   a.href = url;
-  a.download = 'CET6_全部数据备份_' + new Date().toISOString().split('T')[0] + '.json';
+  a.download = 'CET6_全部数据备份_' + localDateKey(new Date()) + '.json';
   a.click();
   URL.revokeObjectURL(url);
   showImportMsg('数据已导出！请将文件发送到其他设备后使用"导入数据恢复"。', 'ok');
@@ -4161,22 +4528,23 @@ function handleImport(file) {
   reader.onload = function(e) {
     try {
       var data = JSON.parse(e.target.result);
-      if (!data.state || !data.version) {
+      if (!isPlainObject(data) || !isPlainObject(data.state) || !data.version) {
         showImportMsg('文件格式无效，请选择正确的备份文件。', 'error');
         return;
       }
+      var importedState = normalizeState(data.state);
 
       if (!confirm(
         '即将导入以下数据：\n' +
-        '• 错题记录：' + (data.state.wrongHistory ? data.state.wrongHistory.length : 0) + ' 条\n' +
-        '• 重做记录：' + (data.state.retryHistory ? data.state.retryHistory.length : 0) + ' 条\n' +
-        '• 统计数据：' + Object.keys(data.state.stats.wordAttempts || {}).length + ' 词的学习记录\n' +
+        '• 错题记录：' + importedState.wrongHistory.length + ' 条\n' +
+        '• 重做记录：' + importedState.retryHistory.length + ' 条\n' +
+        '• 统计数据：' + Object.keys(importedState.stats.wordAttempts).length + ' 词的学习记录\n' +
         '• 导出时间：' + (data.exportTime || '未知') + '\n\n' +
         '导入将覆盖当前所有数据，确定继续吗？'
       )) return;
 
       // Merge state
-      state = data.state;
+      state = importedState;
       // Ensure backward compatibility
       var def = getDefaultState();
       for (var k in def) {
@@ -4194,11 +4562,12 @@ function handleImport(file) {
       if (!state.stats.en2cn_dict) state.stats.en2cn_dict = { attempts: 0, correct: 0, wrong: 0, close: 0 };
 
       // Restore pool/mode settings
-      if (data.currentPool) currentPool = data.currentPool;
-      if (data.selectedUnits) selectedUnits = data.selectedUnits;
-      if (data.learnSize) learnSize = data.learnSize;
-      if (data.gateLevel) gateLevel = data.gateLevel;
-      if (data.currentMode) currentMode = data.currentMode;
+      if (data.currentPool === 'full' || data.currentPool === 'core') currentPool = data.currentPool;
+      if (Array.isArray(data.selectedUnits) && data.selectedUnits.length) selectedUnits = data.selectedUnits.slice();
+      if (isFinite(Number(data.learnSize)) && Number(data.learnSize) > 0) learnSize = finiteInt(data.learnSize, learnSize, 1, 1000);
+      if (isFinite(Number(data.gateLevel))) gateLevel = finiteInt(data.gateLevel, gateLevel, 1, 3);
+      if (data.currentMode === 'cn2en' || data.currentMode === 'en2cn') currentMode = data.currentMode;
+      if (data.currentQuizType === 'choice' || data.currentQuizType === 'dictation') currentQuizType = data.currentQuizType;
 
       // 导入后应用导入的 prefs 到内存与 UI（含题型/记忆），避免与持久化脱节被后续保存覆盖
       applyPrefs();
@@ -4245,7 +4614,8 @@ function renderFreqStats() {
     if (unitStats[u]) unitStats[u].words++;
   });
   Object.keys(wa).forEach(function(wid) {
-    var u = wordUnitMap[parseInt(wid)];
+    if (wordPoolFromStateKey(wid) !== currentPool) return;
+    var u = wordUnitMap[wordIdFromStateKey(wid)];
     if (u && unitStats[u]) {
       unitStats[u].attempts += wa[wid].attempts || 0;
       unitStats[u].correct += wa[wid].correct || 0;
@@ -4309,6 +4679,15 @@ function updateFreqCount() {
 }
 
 // ============ EVENT BINDINGS ============
+document.addEventListener('click', function(event) {
+  var button = event.target.closest ? event.target.closest('[data-favorite-toggle]') : null;
+  if (!button) return;
+  var key = button.getAttribute('data-favorite-key');
+  if (!key) return;
+  event.preventDefault();
+  toggleFavorite(wordIdFromStateKey(key), wordPoolFromStateKey(key));
+});
+
 document.querySelectorAll('.mode-btn[data-mode]').forEach(function(btn) {
   btn.addEventListener('click', function() {
     var newMode = this.dataset.mode;
@@ -4357,10 +4736,11 @@ function switchTab(tab, btn) {
   document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
   if (btn) btn.classList.add('active');
   if (tab !== 'stats-page' && tab !== 'browse') destroyCharts();
-  ['quiz', 'wrong', 'retry', 'stats-page', 'browse'].forEach(function(t) {
+  ['quiz', 'wrong', 'favorites', 'retry', 'stats-page', 'browse'].forEach(function(t) {
     document.getElementById('tab-' + t).style.display = (t === tab) ? 'block' : 'none';
   });
   if (tab === 'browse') { _browsePage = 0; renderBrowse(); }
+  else if (tab === 'favorites') renderFavorites();
   else renderAll();
 }
 document.querySelectorAll('.tab-btn').forEach(function(btn) {
@@ -4385,6 +4765,21 @@ document.querySelectorAll('.hm-range').forEach(function(btn) {
 document.getElementById('startBtn').addEventListener('click', function() {
   if (memoryModeOn()) startMemoryQuiz(currentMode);
   else startNewQuiz(currentMode);
+});
+
+document.getElementById('smartQuizBtn').addEventListener('click', function() {
+  if (quizActive) {
+    if (!confirm('开始智能练习将保存当前进度，确定吗？')) return;
+    saveSuspendedQuiz();
+  }
+  startSmartQuiz(currentMode);
+});
+
+document.getElementById('favoriteSmartBtn').addEventListener('click', function() {
+  var ids = favoriteEntries(currentPool).map(function(entry) { return entry.id; });
+  if (ids.length === 0) { alert('当前词库还没有重点词。'); return; }
+  switchTab('quiz', document.querySelector('.tab-btn[data-tab="quiz"]'));
+  startSmartQuiz(currentMode, ids);
 });
 
 document.getElementById('retryQuizBtn').addEventListener('click', function() {
@@ -4629,14 +5024,14 @@ if (window.speechSynthesis) {
 var _goalToastShown = false;
 // 今天已达成目标则当天不再重复弹"完成目标"提示（同一天多次进入只提示一次）
 try {
-  var _gtoday0 = new Date().toISOString().split('T')[0];
+  var _gtoday0 = localDateKey(new Date());
   var _gtd0 = state.stats.dailyHistory[_gtoday0];
   if (_gtd0 && (_gtd0.attempts || 0) >= (state.dailyGoal || 30)) _goalToastShown = true;
 } catch(e) {}
 function checkDailyGoal() {
   if (_goalToastShown) return;
   var st = window.state ? window.state.stats : state.stats;
-  var today = new Date().toISOString().split('T')[0];
+  var today = localDateKey(new Date());
   var td = st.dailyHistory[today];
   if (!td) return;
   var done = td.attempts || 0;
@@ -4670,7 +5065,7 @@ function handleSkip() {
     // 复习模式：跳过 = 答错（间隔重置为1天，明天必来）；今天放走不再出现
     recordStat(word, mode, false, false, false);
     state.wrongHistory.unshift({
-      wordId: word.id, mode: mode, timestamp: nowStr(),
+    wordId: word.id, pool: (quizState.poolType || currentPool), mode: mode, timestamp: nowStr(),
       questionText: (mode === 'cn2en') ? getChineseFull(word.meaning) : word.word,
       userAnswer: '（跳过）',
       correctAnswer: (mode === 'cn2en') ? word.word : getChineseFull(word.meaning),
@@ -4979,7 +5374,8 @@ function renderBrowse() {
       '<span><strong>' + w.word + '</strong> <span style=\"color:var(--text2);font-size:0.85em\">' + (w.pronunciation || '') + '</span>' +
       '<span onclick=\"speakWord(&quot;' + w.word + '&quot;)\" style=\"cursor:pointer;font-size:0.95em;margin-left:8px;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;vertical-align:middle;border-radius:50%;transition:background 200ms;\" title=\"朗读发音\">\u{1F50A}</span></span>' +
       '<span><button class=\"ctrl-btn\" id=\"bdbtn-' + w.word + '\" style=\"padding:6px 12px;font-size:0.8em\" onclick=\"toggleBrowseDetail(&quot;' + w.word + '&quot;)\">\u67E5\u8BE2</button> ' +
-      '<button class=\"ctrl-btn\" style=\"padding:6px 12px;font-size:0.8em\" onclick=\"toggleBrowseMap(&quot;' + w.word + '&quot;)\">\u{1F5FA}\uFE0F 导图</button></span></div>' +
+      '<button class=\"ctrl-btn\" style=\"padding:6px 12px;font-size:0.8em\" onclick=\"toggleBrowseMap(&quot;' + w.word + '&quot;)\">\u{1F5FA}\uFE0F 导图</button> ' +
+      '<button class=\"ctrl-btn favorite-toggle' + (isFavorite(w.id, 'full') ? ' active' : '') + '\" data-favorite-toggle data-favorite-key=\"' + favoriteKey(w.id, 'full') + '\" aria-pressed=\"' + (isFavorite(w.id, 'full') ? 'true' : 'false') + '\">' + (isFavorite(w.id, 'full') ? '★ 已标记' : '☆ 标记重点') + '</button></span></div>' +
       (_uinfo ? '<div style=\"color:var(--accent2);font-size:0.78em;margin-top:3px\">📁 ' + _uinfo + _star + '</div>' : '') +
       '<div style=\"color:var(--text2);font-size:0.85em;margin-top:2px\">' + posHtml + '</div>' +
       '<div id=\"bd-' + w.word + '\" style=\"display:none\"></div>' +
@@ -4997,6 +5393,7 @@ function renderBrowse() {
       '</div>';
   }
   list.innerHTML = html || '<p style=\"text-align:center;color:var(--text2);padding:40px;\">\u{1F50D} \u6CA1\u6709\u5339\u914D\u7684\u5355\u8BCD</p>';
+  refreshFavoriteButtons();
 }
 
 // ============ BROWSE WORD DETAIL ============
@@ -5011,7 +5408,7 @@ function toggleBrowseDetail(word) {
       for (var i = 0; i < FULL_WORDS.length; i++) {
         if (FULL_WORDS[i].word === word) { w = FULL_WORDS[i]; break; }
       }
-      box.innerHTML = (w ? getWordDetailHTML(w) : '') || '<div style=\"color:var(--text2);font-size:0.85em;padding:8px 0\">\u6682\u65E0\u8BE6\u89E3</div>';
+      box.innerHTML = (w ? getWordDetailHTML(w, 'full') : '') || '<div style=\"color:var(--text2);font-size:0.85em;padding:8px 0\">\u6682\u65E0\u8BE6\u89E3</div>';
     }
     box.style.display = 'block';
     btn.textContent = '\u6536\u8D77';
@@ -5068,8 +5465,9 @@ function checkSpacedRepetition() {
     title = '🧠 复习提醒（8格打卡）';
     desc = '以下单词已到书中的记忆周期复习点（5分/30分/12时/1天/2天/4天/7天）：';
     var dueInfo = due.slice(0, 5).map(function(id) {
-      var wa = st.wordAttempts[id] || {};
-      var w = getWord(id);
+      var key = wordStateKey(id, 'full');
+      var wa = st.wordAttempts[key] || {};
+      var w = getWord(id, 'full');
       return (w ? w.word : '?') + ' (' + gridProgressText(id) + ')';
     });
     lines = dueInfo.join('\n');
