@@ -2005,10 +2005,12 @@ var quizState = {
   mode: 'cn2en',
   isRetry: false,
   isSmart: false,
+  isMemory: false,
   ids: [],
   pos: -1,
   questions: [],
   answers: {},
+  memoryResults: [],
   done: 0,
   current: null
 };
@@ -2041,10 +2043,12 @@ function buildQuiz(mode, wordPool) {
     isRetry: !!wordPool,
     isSmart: false,
     isReview: false,
+    isMemory: false,
     ids: finalIds,
     pos: -1,
     questions: [],
     answers: {},
+    memoryResults: [],
     done: 0,
     current: null,
     poolType: currentPool,
@@ -2155,6 +2159,12 @@ function jumpToQuestion(n) {
 
 function isAnswered(pos) {
   return quizState.answers.hasOwnProperty(pos);
+}
+
+function recordMemoryProgress(status) {
+  if (!quizState || !quizState.isMemory) return;
+  if (!Array.isArray(quizState.memoryResults)) quizState.memoryResults = [];
+  quizState.memoryResults.push(status);
 }
 
 function isAnsweredCorrectly(pos) {
@@ -2378,6 +2388,7 @@ function startMemoryQuiz(mode) {
     pos: -1,
     questions: [],
     answers: {},
+    memoryResults: [],
     done: 0,
     current: null,
     poolType: currentPool,
@@ -2437,6 +2448,7 @@ function saveSuspendedQuiz() {
     isMemory: !!quizState.isMemory,
     memWrong: quizState.memWrong || 0,
     memTotal: quizState.memTotal || quizState.ids.length,
+    memoryResults: (quizState.memoryResults || []).slice(),
     poolType: quizState.poolType || currentPool,
     currentId: quizState.current ? quizState.current.word.id : null,
     pageStart: quizState.pageStart || 0
@@ -2493,6 +2505,7 @@ function resumeQuiz() {
     poolType: sq.poolType || 'core',
     memWrong: sq.memWrong || 0,
     memTotal: sq.memTotal || sq.ids.length,
+    memoryResults: Array.isArray(sq.memoryResults) ? sq.memoryResults.slice() : [],
     pageStart: sq.pageStart || 0
   };
   quizActive = true;
@@ -3161,26 +3174,44 @@ function legacyGroupMapSVG(word) {
 // ============ RENDER QUIZ CARD ============
 function questionProgressHTML() {
   if (!quizState || !quizState.ids || !quizState.ids.length) return '';
-  var total = quizState.ids.length;
+  var isMemory = !!quizState.isMemory;
+  var memoryResults = isMemory && Array.isArray(quizState.memoryResults) ? quizState.memoryResults : [];
+  var total = isMemory ? (quizState.memTotal || quizState.ids.length) : quizState.ids.length;
   var pos = quizState.pos;
-  var completed = 0;
+  var completed = isMemory ? Math.min(total, memoryResults.length || quizState.done || 0) : 0;
+  var activeIndex = isMemory ? (isAnswered(pos) ? Math.max(0, completed - 1) : completed) : pos;
   var dots = '';
   for (var i = 0; i < total; i++) {
-    var answer = quizState.answers[i];
     var status = '';
-    if (isAnswered(i)) {
-      completed++;
-      if (answer === 'skip') status = ' skip';
-      else if (typeof answer === 'object' && answer !== null && answer.gate1 !== undefined) status = answer.gate1 ? ' correct' : ' wrong';
-      else status = isAnsweredCorrectly(i) ? ' correct' : ' wrong';
+    if (isMemory) {
+      if (memoryResults[i]) status = ' ' + memoryResults[i];
+      if (i === activeIndex) status += ' current';
+    } else {
+      var answer = quizState.answers[i];
+      if (isAnswered(i)) {
+        completed++;
+        if (answer === 'skip') status = ' skip';
+        else if (typeof answer === 'object' && answer !== null && answer.gate1 !== undefined) status = answer.gate1 ? ' correct' : ' wrong';
+        else status = isAnsweredCorrectly(i) ? ' correct' : ' wrong';
+      }
+      if (i === pos) status += ' current';
     }
-    if (i === pos) status += ' current';
     dots += '<span class="progress-dot' + status + '" title="第 ' + (i + 1) + ' 题"></span>';
   }
   return '<div class="question-progress" aria-label="答题进度">' +
     '<div class="progress-meta"><span>答题进度</span><strong>' + completed + ' / ' + total + ' 已完成</strong></div>' +
     '<div class="progress-track">' + dots + '</div>' +
     '</div>';
+}
+
+function refreshQuestionProgress() {
+  if (!quizActive) return;
+  var current = document.querySelector('.question-progress');
+  if (!current) return;
+  var wrapper = document.createElement('div');
+  wrapper.innerHTML = questionProgressHTML();
+  var next = wrapper.firstElementChild;
+  if (next) current.replaceWith(next);
 }
 
 function renderQuizCard() {
@@ -3546,6 +3577,7 @@ function handleDictationSubmit() {
   quizState.done++;
   if (quizState.isMemory && !isCorrect) quizState.memWrong++;
   quizState.answers[quizState.pos] = { text: userAnswer, correct: isCorrect, close: isClose };
+  recordMemoryProgress(isCorrect ? 'correct' : 'wrong');
   recordStat(word, mode, isCorrect, isClose, true);
 
   var correctAnswerText = (mode === 'cn2en') ? word.word : getChineseFull(word.meaning);
@@ -3598,6 +3630,7 @@ function handleDictationSubmit() {
     getWordDetailHTML(word);
 
   document.getElementById('nextBtn').classList.add('show');
+  refreshQuestionProgress();
   renderAll();
 }
 // 闯关1速记：认识（直接下一词，快速检测）/ 不认识（显示讲解）
@@ -3609,6 +3642,7 @@ function handleGate1(know) {
   var mode = quizState.mode;
   quizState.done++;
   quizState.answers[quizState.pos] = { gate1: !!know };
+  recordMemoryProgress(know ? 'correct' : 'wrong');
   recordStat(word, mode, !!know, false, false);
   if (know) {
     // 认识：直接进入下一词（速记节奏）
@@ -3652,6 +3686,7 @@ function handleAnswer(chosenIndex) {
   quizState.done++;
   if (quizState.isMemory && !isCorrect) quizState.memWrong++;
   quizState.answers[quizState.pos] = chosenIndex;
+  recordMemoryProgress(isCorrect ? 'correct' : 'wrong');
   if (quizState.isReview) quizState.reviewCorrect = (quizState.reviewCorrect || 0) + (isCorrect ? 1 : 0);
 
   // Disable buttons & highlight
@@ -3723,6 +3758,7 @@ function handleAnswer(chosenIndex) {
     getWordDetailHTML(word);
 
   document.getElementById('nextBtn').classList.add('show');
+  refreshQuestionProgress();
   renderAll();
 }
 
@@ -5196,6 +5232,7 @@ function handleSkip() {
   quizState.done++;
   if (quizState.isMemory) quizState.memWrong++;
   quizState.answers[quizState.pos] = 'skip';
+  recordMemoryProgress('skip');
   state.stats.totalSkip = (state.stats.totalSkip || 0) + 1;
   state.stats.dictation.skip = (state.stats.dictation.skip || 0) + 1;
   state.stats[mode + '_dict'].skip = (state.stats[mode + '_dict'].skip || 0) + 1;
@@ -5229,6 +5266,7 @@ function handleSkip() {
     document.getElementById('feedback').innerHTML = '<h4>\u{1F6AA} \u5DF2\u8DF3\u8FC7</h4><div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + correctText + speakBtnFor(word, mode) + '</div>' + getWordDetailHTML(word);
   }
   document.getElementById('nextBtn').classList.add('show');
+  refreshQuestionProgress();
   saveState();
   renderAll();
 }
