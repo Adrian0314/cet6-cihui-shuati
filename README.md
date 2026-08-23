@@ -2,7 +2,11 @@
 
 一个**单文件、完全离线可用**的 CET-6 词汇刷题系统，词库严格来自两本纸质教辅书，支持 PWA 安装到手机/电脑，像原生 App 一样全屏使用。
 
-> **在线体验**：https://adrian0314.github.io/cet6-cihui-shuati/cet6_quiz.html
+> **做题网站（手机/电脑点开即用）**：https://adrian0314.github.io/cet6-cihui-shuati/cet6_quiz.html
+>
+> **词群导图网站（手机/电脑点开即用）**：https://adrian0314.github.io/cet6-cihui-shuati/word-maps-viewer-offline.html
+>
+> 两个网址均无需安装，打开即可使用。做题网站支持词汇刷题、词群导图、艾宾浩斯复习、错题记录和学习统计；词群导图网站用于独立查看、搜索、缩放和浏览词群关系。
 
 ## 📚 词库
 

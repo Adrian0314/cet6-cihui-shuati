@@ -136,7 +136,8 @@ theme-button{position:relative;display:inline-block;outline:none}
 .gmap-back:hover{background:rgba(124,58,237,0.08)}
 .gmap-legend{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:4px 16px;font-size:0.75em;color:var(--text2);margin:2px 0 8px}
 .gmap-legend .gl-badge, .gl-badge{display:inline-flex;align-items:center;justify-content:center;min-width:15px;height:15px;border-radius:8px;background:var(--green);color:#fff;font-size:10px;font-weight:700;line-height:1;padding:0 3px;border:1.5px solid var(--surface);box-sizing:border-box;vertical-align:-2px;margin-right:2px}
-.gmap-legend .gl-leaf, .gl-leaf{display:inline-block;width:11px;height:11px;border-radius:50%;border:1.6px solid var(--accent);background:var(--surface2);vertical-align:-1px;margin-right:4px}
+.gmap-legend .gl-leaf, .gl-leaf{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;border:1.6px solid var(--accent);background:var(--surface2);vertical-align:-2px;margin-right:4px;box-sizing:border-box}
+.gmap-legend .gl-leaf .gl-badge{min-width:0;height:auto;margin:0;padding:0;background:transparent;border:0;color:var(--green);font-size:10px}
 /* 手机端词群导图：点击圆圈/单词弹出的中文释义气泡（替代悬停） */
 #gmapTip{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:400;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:10px 14px;max-width:86vw;font-size:0.9em;display:none;text-align:left;cursor:pointer}
 #gmapTip .gmt-ph{color:var(--text2);font-size:0.88em;margin-left:6px}
@@ -2937,23 +2938,12 @@ function buildMapSVG(id, map, r, activeWord) {
     // 超长词贴近视口边缘时向内收，保证徽标不裁出画布
     var badgeSvg = '';
     if (childCount) {
-      var cosA = Math.cos(ang2), sinA = Math.sin(ang2);
       var hwB = String(w.word).length * (COARSE ? 3.6 : 2.9); // 与节点文字半宽估算保持一致
       var hhB = nodeFs / 2 + 1;                               // 文字半高(近似)
-      var dRad = Math.min(
-        Math.abs(cosA) < 1e-6 ? Infinity : hwB / Math.abs(cosA),
-        Math.abs(sinA) < 1e-6 ? Infinity : hhB / Math.abs(sinA)
-      );
-      var bRad = COARSE ? 9 : 7;
-      var bOut = txR + dRad + bRad + (COARSE ? 6 : 4);
-      var bx = cx + bOut * cosA, by = cy + bOut * sinA;
-      var vbTop = COARSE ? -20 : 0, vbBot = COARSE ? 460 : 380;
-      bx = Math.max(bRad + 2, Math.min(bx, 480 - bRad - 2));
-      by = Math.max(vbTop + bRad + 2, Math.min(by, vbBot - bRad - 2));
       var bNum = childCount > 9 ? '9+' : String(childCount);
       var bFs = COARSE ? 11 : (childCount > 9 ? 8 : 9);
-      badgeSvg = '<circle cx="' + bx + '" cy="' + by + '" r="' + bRad + '" style="fill:var(--green);stroke:var(--surface)" stroke-width="1.5"/>' +
-        '<text x="' + bx + '" y="' + (by + 0.5) + '" text-anchor="middle" dominant-baseline="middle" font-size="' + Math.min(bFs, 8.5) + '" font-weight="700" style="fill:#fff;pointer-events:none">' + bNum + '</text>';
+      var bCol = isActive ? '#fff' : 'var(--green)';
+      badgeSvg = '<text x="' + x2 + '" y="' + (y2 + 0.5) + '" text-anchor="middle" dominant-baseline="middle" font-size="' + Math.min(bFs, 10) + '" font-weight="700" style="fill:' + bCol + ';pointer-events:none">' + bNum + '</text>';
     }
     svg += '<g onclick="' + drillClick + '" style="cursor:pointer">' +
       '<title>' + tip + '</title>' +
@@ -2977,7 +2967,7 @@ function renderGroupMap(id) {
   var backBtn = st.stack.length ? '<button class="gmap-back" onclick="groupMapBack(\'' + id + '\')">← 返回上级</button>' : '';
   var title = '<div class="gmap-title">🗺️ 词群导图：' + map.group_name + '（点击圆圈展开 · 点击单词发音 · 点按看中文释义）</div>';
   var legend = '<div class="gmap-legend">' +
-    '<span><span class="gl-badge">3</span>有分支：数字=分支数，点击圆圈展开</span>' +
+    '<span><span class="gl-leaf"><span class="gl-badge">3</span></span>有分支：数字=分支数，点击圆圈展开</span>' +
     '<span><span class="gl-leaf"></span>末端词：无分支</span>' +
     '</div>';
   return '<div class="gmap-wrap" id="' + id + '">' + title + backBtn + legend + buildMapSVG(id, map, r, st.active) + '</div>';
