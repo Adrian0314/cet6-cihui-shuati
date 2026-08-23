@@ -1,14 +1,8 @@
 // CET-6 Quiz Service Worker — offline support (PWA)
-// v4: 例句切分修复(英文撇号 U+2019 被误当中文引号边界)+7条截断例句数据修正;升级版本号强制旧缓存失效
-var CACHE_NAME = 'cet6-cihui-shuati-v4';
+// v5: 安装阶段只缓存轻量资源；大词库和页面改为访问时按需缓存，避免微信内置浏览器首次打开长时间转圈
+var CACHE_NAME = 'cet6-cihui-shuati-v5';
 var ASSETS = [
-  './cet6_quiz.html',
   './manifest.json',
-  './data/full-words.js',
-  './data/unit-maps.js',
-  './data/core-words.js',
-  './word-maps-viewer.html',
-  './word-maps-viewer-offline.html',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png'
@@ -17,7 +11,10 @@ var ASSETS = [
 self.addEventListener('install', function(e) {
   e.waitUntil(
     caches.open(CACHE_NAME).then(function(cache) {
-      return cache.addAll(ASSETS);
+      // 单个轻量资源失败不应阻塞 Service Worker 安装
+      return Promise.all(ASSETS.map(function(asset) {
+        return cache.add(asset).catch(function() {});
+      }));
     })
   );
   self.skipWaiting();
