@@ -1,18 +1,43 @@
 // Playwright tests for CET-6 Quiz System
 // Run with: npx playwright test
 import { test, expect } from '@playwright/test';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const REPO_DIR = process.cwd();
+const QUIZ_URL = pathToFileURL(resolve(REPO_DIR, 'cet6_quiz.html')).href;
+const FULL_WORDS_PATH = resolve(REPO_DIR, 'data', 'full-words.js');
+const FULL_WORDS_INTEGRITY_SHA256 = '424764dce6317971ebe815c6e8bcc22fde76f427d18c608c77c05c3090ce0cb5';
+
+function readExternalFullWords() {
+  const script = readFileSync(FULL_WORDS_PATH, 'utf8');
+  const match = script.match(/window\.__FULL_WORDS_DATA__\s*=\s*(\[[\s\S]*\])\s*;*\s*$/);
+  if (!match) throw new Error('Unable to parse window.__FULL_WORDS_DATA__ from data/full-words.js');
+  return JSON.parse(match[1]);
+}
 
 test.beforeEach(async ({ page }) => {
   // 预置 localStorage，跳过首次引导浮层，避免遮挡点击
   await page.addInitScript(() => localStorage.setItem('cet6_onboarded', '1'));
-  await page.goto('file:///C:/Users/zheng/Desktop/%E5%AD%A6%E4%B9%A0%E4%B8%8E%E8%80%83%E8%AF%95/Study/%E8%8B%B1%E8%AF%AD%E5%9B%9B%E5%85%AD%E7%BA%A7/cet6_quiz.html');
+  await page.goto(QUIZ_URL);
   await page.waitForLoadState('domcontentloaded');
   // 默认闯关1速记：依赖选项按钮的测试切到闯关2（选择题）
-  await page.evaluate(() => {
-    const g2 = document.querySelector('#gateRow .mode-btn[data-gate="2"]');
-    if (g2) g2.click();
-  });
+  await page.selectOption('#gateSelect', '2');
   await page.waitForTimeout(100);
+});
+
+test('external Ebbinghaus data matches the authoritative vocabulary projection', () => {
+  const words = readExternalFullWords();
+  const projection = words.map(({ id, unit, lesson, word, meaning, seq, isStar }) => ({
+    id, unit, lesson, word, meaning, seq, isStar
+  }));
+
+  expect(words).toHaveLength(3324);
+  expect(words.every(word => Object.keys(word).sort().join(',') === 'id,isStar,lesson,meaning,seq,unit,word')).toBe(true);
+  expect(projection).toEqual(words);
+  expect(createHash('sha256').update(JSON.stringify(projection)).digest('hex')).toBe(FULL_WORDS_INTEGRITY_SHA256);
 });
 
 test('page loads successfully', async ({ page }) => {
@@ -398,7 +423,7 @@ test('learn size buttons exist and quiz uses 20-word default', async ({ page }) 
 });
 
 test('switch to Ebbinghaus pool shows Unit 1-10 chips', async ({ page }) => {
-  await page.evaluate(() => document.querySelector('.pool-btn[data-pool="full"]').click());
+  await page.selectOption('#poolSelect', 'full');
   await page.waitForTimeout(300);
   const chips = await page.evaluate(() => [...document.querySelectorAll('#unitFilterRow .freq-chip')].map(c => c.textContent.trim()));
   expect(chips).toContain('U10');
@@ -406,8 +431,8 @@ test('switch to Ebbinghaus pool shows Unit 1-10 chips', async ({ page }) => {
 });
 
 test('core and Ebbinghaus word IDs resolve within their selected pool', async ({ page }) => {
-  await page.click('.pool-btn[data-pool="full"]');
-  await page.waitForFunction(() => window.__FULL_WORDS_DATA__ && window.__FULL_WORDS_DATA__.length === 2920);
+  await page.selectOption('#poolSelect', 'full');
+  await page.waitForFunction(() => window.__FULL_WORDS_DATA__ && window.__FULL_WORDS_DATA__.length === 3324);
 
   const words = await page.evaluate(() => {
     currentPool = 'core';
@@ -421,8 +446,8 @@ test('core and Ebbinghaus word IDs resolve within their selected pool', async ({
 });
 
 test('word attempts stay isolated between pools', async ({ page }) => {
-  await page.click('.pool-btn[data-pool="full"]');
-  await page.waitForFunction(() => window.__FULL_WORDS_DATA__ && window.__FULL_WORDS_DATA__.length === 2920);
+  await page.selectOption('#poolSelect', 'full');
+  await page.waitForFunction(() => window.__FULL_WORDS_DATA__ && window.__FULL_WORDS_DATA__.length === 3324);
 
   const result = await page.evaluate(() => {
     state.stats.wordAttempts = {};
@@ -552,7 +577,7 @@ test('Ebbinghaus plan bar shows study plan on core pool', async ({ page }) => {
 });
 
 test('8-grid review: grid progress shows after learning in Ebbinghaus pool', async ({ page }) => {
-  await page.evaluate(() => document.querySelector('.pool-btn[data-pool="full"]').click());
+  await page.selectOption('#poolSelect', 'full');
   await page.waitForTimeout(300);
   await page.click('button:has-text("开始做题")');
   await page.waitForSelector('.opt-btn');
@@ -796,7 +821,7 @@ test.describe('keep prefs on exit', () => {
     await page.click('button:has-text("开始做题")');
     await page.waitForSelector('.opt-btn');
     page.once('dialog', d => d.accept());
-    await page.click('.pool-btn[data-pool="full"]');
+    await page.selectOption('#poolSelect', 'full');
     await page.waitForTimeout(400);
     const isMem = await page.evaluate(() => {
       const st = JSON.parse(localStorage.getItem('cet6_quiz_app_v2'));
@@ -819,9 +844,9 @@ test.describe('keep prefs on exit', () => {
 
 test.describe('external data (full-words.js)', () => {
   test('switch to Ebbinghaus pool loads external data and can quiz', async ({ page }) => {
-    await page.click('.pool-btn[data-pool="full"]');
-    await page.waitForFunction(() => window.__FULL_WORDS_DATA__ && window.__FULL_WORDS_DATA__.length === 2920);
-    await expect(page.locator('#unitFilterRow .freq-chip[data-unit="1"]')).toBeVisible();
+    await page.selectOption('#poolSelect', 'full');
+    await page.waitForFunction(() => window.__FULL_WORDS_DATA__ && window.__FULL_WORDS_DATA__.length === 3324);
+    await expect(page.locator('#unitSelect option[value="1"]')).toBeAttached();
     await page.click('button:has-text("开始做题")');
     await page.waitForSelector('.opt-btn', { timeout: 10000 });
     expect(await page.locator('.opt-btn').count()).toBe(4);
@@ -836,8 +861,8 @@ test.describe('external data (full-words.js)', () => {
   });
 
   test('Ebbinghaus pool quiz shows merged detail from external data', async ({ page }) => {
-    await page.click('.pool-btn[data-pool="full"]');
-    await page.waitForFunction(() => window.__FULL_WORDS_DATA__ && window.__FULL_WORDS_DATA__.length === 2920);
+    await page.selectOption('#poolSelect', 'full');
+    await page.waitForFunction(() => window.__FULL_WORDS_DATA__ && window.__FULL_WORDS_DATA__.length === 3324);
     await page.click('button:has-text("开始做题")');
     await page.waitForSelector('.opt-btn', { timeout: 10000 });
     await page.locator('.opt-btn').first().click();
@@ -940,12 +965,12 @@ test('page load with saved full pool does not crash before async words ready', a
   // 页面加载瞬间(外部词库数据未到达)applyPrefs→updatePoolUI→updateFreqCount 不应崩溃
   expect(pageError).toBeNull();
   // 打卡词库异步加载完成
-  await page.waitForFunction(() => window.__FULL_WORDS_DATA__ && window.__FULL_WORDS_DATA__.length === 2920, null, { timeout: 10000 });
+  await page.waitForFunction(() => window.__FULL_WORDS_DATA__ && window.__FULL_WORDS_DATA__.length === 3324, null, { timeout: 10000 });
   await page.waitForTimeout(300);
   expect(pageError).toBeNull();
   // 词数刷新为真实值
   const txt = await page.locator('#freqCount').textContent();
-  expect(txt).toContain('2920');
+  expect(txt).toContain('3324');
 });
 
 test.describe('other options show english word on wrong answer', () => {
