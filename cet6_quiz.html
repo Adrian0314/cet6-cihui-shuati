@@ -2827,11 +2827,13 @@ function ensureUnitMaps(cb) {
   loadDataScript('data/unit-maps.js', function() { normalizeUnitMapCoverage(); if (cb) cb(); });
 }
 
-// 当前词是否可用新版导图（仅核心词库《你还在背单词吗》，且有该词群数据）
+// 当前词是否可用新版导图：核心词库，或与核心词库重叠的打卡词
 function canUseNewMap(word) {
-  if (currentPool !== 'core') return false;
   if (!word || !word.unit) return false;
   if (!window.__UNIT_MAPS_DATA__) return false;
+  if (currentPool === 'full' && !ALL_WORDS.some(function(coreWord) {
+    return String(coreWord.word).toLowerCase() === String(word.word).toLowerCase();
+  })) return false;
   // 只要该 unit 有导图数据即可；词实际所在词群以书页导图划分为准（词库 group_id 可能与书页不一致）
   return !!window.__UNIT_MAPS_DATA__[word.unit];
 }
@@ -3081,19 +3083,19 @@ function findMapGroup(unitMap, word) {
   return null;
 }
 
-// 入口：核心词库且有导图数据 → 新版；否则回退旧版（相邻词单层图）
+// 入口：有词群数据的核心词，及重叠的打卡词，使用新版导图
 function groupMapSVG(word) {
-  if (currentPool === 'full') return '';
   if (canUseNewMap(word)) {
     var unitMap = window.__UNIT_MAPS_DATA__[word.unit];
     // 做题词的实际词群按书页划分定位（不依赖词库 group_id），并自动下钻到其所在层
     var loc = findMapGroup(unitMap, word.word);
     // 词在书页导图数据里找不到 → 不显示新版词群导图（避免出现不含当前词的图），回退旧版（旧版含当前词）
-    if (!loc) return legacyGroupMapSVG(word);
+    if (!loc) return currentPool === 'full' ? '' : legacyGroupMapSVG(word);
     var id = 'gmap-' + (++_gmapSeq);
     _gmapState[id] = { unit: word.unit, gid: loc.gid, stack: loc.path, active: word.word };
     return renderGroupMap(id);
   }
+  if (currentPool === 'full') return '';
   return legacyGroupMapSVG(word);
 }
 

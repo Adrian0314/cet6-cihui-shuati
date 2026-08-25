@@ -40,6 +40,24 @@ test('external Ebbinghaus data matches the authoritative vocabulary projection',
   expect(createHash('sha256').update(JSON.stringify(projection)).digest('hex')).toBe(FULL_WORDS_INTEGRITY_SHA256);
 });
 
+test('Ebbinghaus word maps are limited to overlapping mapped core words', async ({ page }) => {
+  await page.waitForFunction(() => window.__FULL_WORDS_DATA__);
+  await page.evaluate(() => new Promise(resolve => ensureUnitMaps(resolve)));
+
+  const maps = await page.evaluate(() => {
+    currentPool = 'full';
+    const overlappingMappedWord = FULL_WORDS.find(word => word.word === 'ambition');
+    const EbbinghausOnlyWord = FULL_WORDS.find(word => word.word === 'stabilise/-ize');
+    return {
+      overlapping: groupMapSVG(overlappingMappedWord),
+      EbbinghausOnly: groupMapSVG(EbbinghausOnlyWord)
+    };
+  });
+
+  expect(maps.overlapping).toContain('gmap-wrap');
+  expect(maps.EbbinghausOnly).toBe('');
+});
+
 test('page loads successfully', async ({ page }) => {
   await expect(page.locator('h1')).toContainText('英语六级词汇');
 });
