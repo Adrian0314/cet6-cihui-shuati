@@ -2176,6 +2176,23 @@ function isAnsweredCorrectly(pos) {
   return q !== null && a === q.correctIndex;
 }
 
+function quizCompletionControlsHTML() {
+  var card = document.getElementById('quizCard');
+  var isFullscreen = card && card.classList.contains('fullscreen');
+  return '<div class="completion-actions" style="display:flex;justify-content:center;gap:10px;margin-top:18px;">' +
+    '<button class="ctrl-btn" id="returnToStartBtn" onclick="returnToQuizStart()">\u21a9 \u8fd4\u56de\u4e3b\u9875\u9762</button>' +
+    (isFullscreen ? '<button class="toggle-fs-btn" id="toggleFsBtn" onclick="toggleFullscreen()">\u26f6 \u9000\u51fa\u5168\u5c4f</button>' : '') +
+    '</div>';
+}
+
+function returnToQuizStart() {
+  var card = document.getElementById('quizCard');
+  if (card && card.classList.contains('fullscreen')) toggleFullscreen();
+  var quizTab = document.querySelector('.tab-btn[data-tab="quiz"]');
+  if (quizTab) switchTab('quiz', quizTab);
+  try { window.scrollTo(0, 0); } catch (e) {}
+}
+
 function finishQuiz() {
   quizActive = false;
   var total = quizState.ids.length;
@@ -2199,7 +2216,7 @@ function finishQuiz() {
     card.innerHTML = '<div class="empty"><div class="ei">🧠</div><p>复习完成！共 ' + total + ' 题，已答 ' + done + ' 题，答对 ' + rc + ' 题（' + rate + '%）</p>' +
       '<p style="font-size:0.85em;color:var(--text2);margin-top:6px;">' +
       (currentPool === 'full' ? '打卡格已按书中 8 格周期（5分/30分/12时/1天/2天/4天/7天）推进，到期的词会再次出现' : '按书中 4周25天打卡表，当天到期的 Unit 已标记复习完成') +
-      '</p></div>';
+      '</p></div>' + quizCompletionControlsHTML();
   } else if (quizState.isMemory) {
     var mw = quizState.memWrong || 0;
     var mc = done - mw;
