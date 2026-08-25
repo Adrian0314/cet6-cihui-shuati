@@ -65,3 +65,26 @@ test('the default start action opens an English-to-Chinese choice quiz', async (
 
   await context.close();
 });
+
+test('Ebbinghaus check-in quiz explanations omit the word-group map', async ({ browser }) => {
+  const context = await browser.newContext();
+  await context.addInitScript(() => localStorage.setItem('cet6_onboarded', '1'));
+  const page = await context.newPage();
+  await page.goto(quizUrl);
+  await page.waitForLoadState('domcontentloaded');
+
+  const mapHtml = await page.evaluate(() => {
+    currentPool = 'full';
+    FULL_WORDS = [
+      { id: 1, word: 'alpha', unit: 1, lesson: 1, seq: 1, group_id: 1, group_name: 'test' },
+      { id: 2, word: 'bravo', unit: 1, lesson: 1, seq: 2, group_id: 1, group_name: 'test' },
+      { id: 3, word: 'charlie', unit: 1, lesson: 1, seq: 3, group_id: 1, group_name: 'test' }
+    ];
+    selectedUnits = [0];
+    return groupMapSVG(FULL_WORDS[0]);
+  });
+
+  expect(mapHtml).toBe('');
+
+  await context.close();
+});

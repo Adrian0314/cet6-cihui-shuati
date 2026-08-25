@@ -3066,6 +3066,7 @@ function findMapGroup(unitMap, word) {
 
 // 入口：核心词库且有导图数据 → 新版；否则回退旧版（相邻词单层图）
 function groupMapSVG(word) {
+  if (currentPool === 'full') return '';
   if (canUseNewMap(word)) {
     var unitMap = window.__UNIT_MAPS_DATA__[word.unit];
     // 做题词的实际词群按书页划分定位（不依赖词库 group_id），并自动下钻到其所在层
