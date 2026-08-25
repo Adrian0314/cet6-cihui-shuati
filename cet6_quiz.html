@@ -1300,7 +1300,7 @@ function getDefaultState() {
       totalSkip: 0
     },
     suspendedQuiz: null,
-    prefs: { pool: 'core', units: [0], size: 20, gate: 1, mode: 'cn2en', type: 'choice', memory: false },
+    prefs: { pool: 'full', units: [0], size: 20, gate: 2, mode: 'en2cn', type: 'choice', memory: true },
     dailyGoal: 30,
     ebbingActive: false,     // 刘晓艳词库 4周25天打卡表是否已手动开启（纯刷题模式为 false）
     ebbingStart: null,       // 刘晓艳词库 4周25天打卡起始日（UTC 日期字符串）
@@ -1492,10 +1492,10 @@ function normalizeState(input) {
 
 
 // ============ POOL & UNIT FILTER ============
-var currentPool = 'core';       // 'core' | 'full'
+var currentPool = 'full';       // 'core' | 'full'
 var selectedUnits = [0];        // [0]=全部; 其他为选中的Unit编号
 var learnSize = 20;             // 每次学习量（1页≈20词）
-var gateLevel = 1;              // 闯关模式：1速记 / 2选择 / 3 Unit综合测
+var gateLevel = 2;              // 闯关模式：1速记 / 2选择 / 3 Unit综合测
 
 // 词库元信息：pool → {name, units:[...]}
 var POOL_META = {
@@ -2016,7 +2016,7 @@ var quizState = {
   current: null
 };
 
-var currentMode = 'cn2en';
+var currentMode = 'en2cn';
 var currentQuizType = 'choice';
 var quizActive = false;
 
@@ -3260,6 +3260,19 @@ function renderQuizCard() {
     var know = gateAnswered ? answerVal.gate1 : null;
     var gGroupName = (word.group_name || word.group_id ? '词群 ' + (word.group_id || '?') + '「' + (word.group_name || '') + '」' : '') +
       (word.unit ? ' · Unit ' + word.unit : '') + (word.lesson ? ' · Lesson ' + word.lesson : '');
+    // “认识”只展示中文释义并停留在当前词，避免直接跳过或展开其他解释。
+    var gateResultHTML = '';
+    if (gateAnswered) {
+      if (know) {
+        gateResultHTML = '<div class="feedback show ok" style="margin-top:14px;"><h4>✅ 已掌握</h4>' +
+          '<div style="margin:6px 0;"><b>中文释义：</b>' + getChineseFull(word.meaning) + '</div></div>';
+      } else {
+        gateResultHTML = '<div class="feedback show fail" style="margin-top:14px;"><h4>❌ 未掌握</h4>' +
+          '<div style="margin:6px 0;"><b>释义：</b>' + getChineseFull(word.meaning) + speakBtnFor(word, mode) + '</div>' +
+          wrongOptionsHTML(q, mode, -1) +
+          '</div>' + groupMapSVG(word) + getWordDetailHTML(word);
+      }
+    }
     var gHtml =
       '<div class="quiz-scroll">' +
       '<div class="quiz-top-row">' +
@@ -3272,15 +3285,12 @@ function renderQuizCard() {
       (gGroupName ? '<div style="font-size:0.82em;color:var(--accent2);margin-bottom:10px;text-align:center;">📁 ' + gGroupName + '</div>' : '') +
       '<div class="q-word" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + word.word + '</div>' +
       (word.pronunciation ? '<div class="q-pron" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + word.pronunciation + ' <span onclick="speakWord(\'' + word.word.replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:1.2em;" title="朗读发音">\u{1F50A}</span></div>' : '') +
-      (know === false || gateAnswered ? '<div style="text-align:center;margin:14px auto 4px;max-width:520px;padding:14px 18px;background:var(--surface2);border-radius:12px;border:1px solid var(--border);">' + getChineseFull(word.meaning) + '</div>' : '') +
+      (know === false ? '<div style="text-align:center;margin:14px auto 4px;max-width:520px;padding:14px 18px;background:var(--surface2);border-radius:12px;border:1px solid var(--border);">' + getChineseFull(word.meaning) + '</div>' : '') +
       (gateAnswered ? '' : '<div style="display:flex;gap:10px;justify-content:center;margin-top:22px;">' +
         '<button class="gate1-btn ok" id="gateKnowBtn" onclick="handleGate1(true)">✅ 认识</button>' +
         '<button class="gate1-btn no" id="gateUnknownBtn" onclick="handleGate1(false)">❌ 不认识</button>' +
         '</div>') +
-      (gateAnswered ? '<div class="feedback show ' + (know ? 'ok' : 'fail') + '" style="margin-top:14px;"><h4>' + (know ? '✅ 已掌握' : '❌ 未掌握') + '</h4>' +
-        '<div style="margin:6px 0;"><b>释义：</b>' + getChineseFull(word.meaning) + speakBtnFor(word, mode) + '</div>' +
-        (know === false ? wrongOptionsHTML(q, mode, -1) : '') +
-        '</div>' + groupMapSVG(word) + getWordDetailHTML(word) : '') +
+      gateResultHTML +
       '</div>' +
       '<div class="quiz-actions">' +
       '<button class="next-btn' + (gateAnswered ? ' show' : '') + '" id="nextBtn" onclick="advanceQuestion()">' + (gateAnswered ? (know ? '继续 →' : '下一词 →') : '') + '</button>' +
@@ -3623,7 +3633,7 @@ function handleDictationSubmit() {
   refreshQuestionProgress();
   renderAll();
 }
-// 闯关1速记：认识（直接下一词，快速检测）/ 不认识（显示讲解）
+// 闯关1速记：认识后显示中文释义并等待手动继续；不认识显示讲解。
 function handleGate1(know) {
   if (!quizActive || !quizState.current) return;
   if (isAnswered(quizState.pos)) return;
@@ -3635,10 +3645,10 @@ function handleGate1(know) {
   recordMemoryProgress(know ? 'correct' : 'wrong');
   recordStat(word, mode, !!know, false, false);
   if (know) {
-    // 认识：直接进入下一词（速记节奏）
+    // 认识：停留在当前词，直接显示中文释义，等待用户手动继续。
     saveState();
     checkDailyGoal();
-    advanceQuestion();
+    renderQuizCard();
     renderAll();
     return;
   }
