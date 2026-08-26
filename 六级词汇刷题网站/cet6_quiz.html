@@ -517,7 +517,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>🏰 闯关模式：</strong>严格对应书中使用指南——闯关1「词群速记」：结合词群导图快速检测，认识/不认识直接判断；闯关2「选择检测」：对应书中学完一个 Lesson 后的检测（选择题/默写题）；闯关3「Unit综合测」：学完一个 Unit 后的综合检测（覆盖整个 Unit）。词群导图怎么看，见下方「🗺️ 词群导图」。</div>
       <div class="rb"><strong>⭐ 重点词：</strong>所有做题模式的当前题目单词右侧都可直接标记或取消当前单词；状态会同步到「重点词」列表，并影响「智能练习」的优先级。</div>
       <div class="rb"><strong>🗺️ 词群导图：</strong>答完题后自动显示当前词的词群关系图（单词浏览器中点「🗺️ 导图」按钮也可查看）——中心=词群主题或当前词，四周圆圈=关联词。圆圈外侧的 <span class="gl-badge">2</span> 绿色数字徽标表示该词下面还有几个分支：点击带徽标的圆圈逐层展开，没有徽标的圆圈=末端词（无分支），点击会朗读发音。点击单词文字同样朗读，点「← 返回上级」退回上一层。连线颜色区分关系：绿=派生（扩/合成）、蓝=同根、橙=近义、红=反义、粉=形近、灰=相关，虚线=形近/反义。</div>
-      <div class="rb"><strong>📖 单元筛选与学习量：</strong>可手动切换要学习的 Unit（核心词库 Unit 1-14 / 打卡词库 Unit 1-10）；每次学习量按书中页数设定（1页≈20词，可选 1/2/3 页）。</div>
+      <div class="rb"><strong>📖 单元筛选与学习量：</strong>可手动切换要学习的 Unit（核心词库 Unit 1-14 / 打卡词库 Unit 1-10）；普通做题每次学习量按书中页数设定（1页≈20词，可选 1/2/3 页）；重做当前模式错题时会连续练完该模式下的全部错题，不再按页拆分。</div>
       <div class="rb"><strong>⌨️ 电脑端快捷键：</strong></div>
       <div class="rb">　<code>1</code> <code>2</code> <code>3</code> <code>4</code> — 选择题模式：直接选择对应选项</div>
       <div class="rb">　<code>←</code> <code>→</code> — 做题时随时切换上一题 / 下一题；顶部导航框可输入题号直接跳转</div>
@@ -2074,8 +2074,8 @@ function buildQuiz(mode, wordPool) {
   var ids = pool.map(function(w) { return w.id; });
   // 过滤无效 id（数据异常保护）
   ids = ids.filter(function(id) { return getWord(id, currentPool) !== null; });
-  // 学习量：闯关3=测整个选中范围；重做=全部错题乱序；新学=按书序取前 learnSize 词（1页≈20词）
-  var limit = (gateLevel === 3) ? ids.length : learnSize;
+  // 学习量：闯关3和重做模式使用完整队列；新学按书序取前 learnSize 词（1页≈20词）
+  var limit = (gateLevel === 3 || wordPool) ? ids.length : learnSize;
   var ordered;
   var pageStart = 0;
   // 页导航：单一 Unit 且非重做时，从续刷起始页取词（每页20词，起始页与学习量正交）
