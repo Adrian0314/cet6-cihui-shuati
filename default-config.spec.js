@@ -30,20 +30,20 @@ test('fresh visits use the requested memory quiz defaults', async ({ browser }) 
     gate: 2,
     mode: 'en2cn',
     type: 'choice',
-    memory: true,
+    memory: false,
     prefs: expect.objectContaining({
       pool: 'full',
       gate: 2,
       mode: 'en2cn',
       type: 'choice',
-      memory: true
+      memory: false
     }),
     controls: {
       pool: 'full',
       gate: '2',
       mode: 'en2cn',
       type: 'choice',
-      memoryActive: true
+      memoryActive: false
     }
   });
 
@@ -61,7 +61,7 @@ test('the default start action opens an English-to-Chinese choice quiz', async (
 
   await expect(page.locator('.opt-btn')).toHaveCount(4);
   await expect(page.locator('.q-label')).toContainText('看英文选中文');
-  await expect(page.locator('.q-label')).toContainText('记忆');
+  await expect(page.locator('.q-label')).not.toContainText('记忆');
 
   await context.close();
 });
