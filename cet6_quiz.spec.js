@@ -596,6 +596,49 @@ test('Ebbinghaus plan bar shows study plan on core pool', async ({ page }) => {
   expect(plan).not.toContain('Unit 2');
 });
 
+test('full-pool review completion can start the core 25-day plan', async ({ page }) => {
+  await page.evaluate(() => {
+    currentPool = 'full';
+    state.ebbingActive = false;
+    state.ebbingStart = null;
+    state.ebbingPlan = null;
+    quizActive = true;
+    quizState = {
+      mode: 'en2cn',
+      isReview: true,
+      isMemory: false,
+      isRetry: false,
+      isSmart: false,
+      ids: [1],
+      pos: 0,
+      questions: [],
+      answers: {},
+      done: 1,
+      reviewCorrect: 1,
+      current: null,
+      poolType: 'full'
+    };
+    finishQuiz();
+  });
+
+  await expect(page.locator('#startEbbingPlanBtn')).toBeVisible();
+  await page.locator('#startEbbingPlanBtn').click();
+
+  const result = await page.evaluate(() => ({
+    pool: currentPool,
+    active: state.ebbingActive,
+    plan: state.ebbingPlan,
+    selectorValue: document.getElementById('poolSelect').value,
+    planText: document.getElementById('ebbingPlan').textContent
+  }));
+
+  expect(result.pool).toBe('core');
+  expect(result.selectorValue).toBe('core');
+  expect(result.active).toBe(true);
+  expect(result.plan).toMatchObject({ day: 1, completedUnits: [] });
+  expect(result.planText).toContain('Unit 1');
+});
+
 test('8-grid review: grid progress shows after learning in Ebbinghaus pool', async ({ page }) => {
   await page.selectOption('#poolSelect', 'full');
   await page.waitForTimeout(300);
