@@ -1278,7 +1278,7 @@ function levenshtein(a, b) {
 
 // ============ APP STATE ============
 var STORAGE_KEY = 'cet6_quiz_app_v2';
-var STATE_SCHEMA_VERSION = 3;
+var STATE_SCHEMA_VERSION = 4;
 
 function getDefaultState() {
   return {
@@ -1304,7 +1304,8 @@ function getDefaultState() {
     dailyGoal: 30,
     ebbingActive: false,     // 刘晓艳词库 4周25天打卡表是否已手动开启（纯刷题模式为 false）
     ebbingStart: null,       // 刘晓艳词库 4周25天打卡起始日（UTC 日期字符串）
-    ebbingUnitLog: {}        // dateKey → [当天已复习完成的 Unit 数组]
+    ebbingUnitLog: {},       // dateKey → [当天已复习完成的 Unit 数组]
+    ebbingPlan: null
   };
 }
 
@@ -1458,6 +1459,7 @@ function normalizeState(input) {
     if (!isFinite(Number(wa.learnedAt)) || Number(wa.learnedAt) <= 0) delete wa.learnedAt;
     if (Array.isArray(wa.grid)) wa.grid = wa.grid.slice(0, 7).map(function(v) { return v ? Number(v) || 0 : 0; });
     else if (wa.grid !== undefined) delete wa.grid;
+    if (!isFinite(Number(wa.retryAt)) || Number(wa.retryAt) <= 0) delete wa.retryAt;
   });
 
   s.stats.totalAttempts = finiteInt(s.stats.totalAttempts, 0, 0);
@@ -1469,6 +1471,7 @@ function normalizeState(input) {
   s.ebbingStart = typeof s.ebbingStart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s.ebbingStart) ? s.ebbingStart : null;
   if (s.ebbingStart) s.ebbingActive = true;
   s.ebbingUnitLog = isPlainObject(s.ebbingUnitLog) ? s.ebbingUnitLog : {};
+  s.ebbingPlan = normalizeEbbingPlan(s, new Date());
   s.suspendedQuiz = isPlainObject(s.suspendedQuiz) ? s.suspendedQuiz : null;
   if (s.suspendedQuiz) {
     s.suspendedQuiz.poolType = s.suspendedQuiz.poolType === 'full' ? 'full' : 'core';
@@ -1505,13 +1508,53 @@ var POOL_META = {
 
 // 刘晓艳书末「艾宾浩斯抗遗忘复习打卡表」（4周25天）：每天学一个新Unit，复习间隔 +1/+3/+6/+12 天
 // 第N天学 Unit min(N,14)；Unit U 的复习日为 第 U+1、U+3、U+6、U+12 天
+var EBBING_25_DAY_PLAN = [
+  [1], [2, 1], [3, 2], [4, 1, 3], [5, 2, 4], [6, 3, 5], [7, 1, 4, 6],
+  [8, 2, 5, 7], [9, 3, 6, 8], [10, 4, 7, 9], [11, 5, 8, 10], [12, 1, 6, 9, 11],
+  [13, 2, 7, 10, 12], [14, 3, 8, 11, 13], [4, 9, 12, 14], [5, 10, 13], [6, 11, 14],
+  [7, 12], [8, 13], [9, 14], [10], [11], [12], [13], [14]
+];
 var EBING_UNITS = 14;
-function ebbingUnitsDueOn(dayN, learnedUnits) {
-  var due = [];
-  for (var u = 1; u <= learnedUnits; u++) {
-    if (dayN - u === 1 || dayN - u === 3 || dayN - u === 6 || dayN - u === 12) due.push(u);
-  }
-  return due;
+
+function ebbingPlanUnits(dayN) {
+  var units = EBBING_25_DAY_PLAN[Number(dayN) - 1];
+  return units ? units.slice() : [];
+}
+
+function dayKeyForDate(d) {
+  d = d || new Date();
+  var pad = function(n) { return n < 10 ? '0' + n : '' + n; };
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+function legacyEbbingDay(startKey, now) {
+  if (!startKey) return 1;
+  var parts = startKey.split('-').map(Number);
+  var start = new Date(parts[0], parts[1] - 1, parts[2]);
+  var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.max(1, Math.min(EBBING_25_DAY_PLAN.length, Math.floor((today - start) / 86400000) + 1));
+}
+
+function normalizeEbbingPlan(s, now) {
+  if (!s.ebbingActive) return null;
+  now = now || new Date();
+  var todayKey = dayKeyForDate(now);
+  var raw = isPlainObject(s.ebbingPlan) ? s.ebbingPlan : {};
+  // Old state has only a calendar start date, not proof that earlier daily plans finished.
+  // Begin it at Day 1 so an incomplete legacy plan is never skipped during migration.
+  var day = finiteInt(raw.day, 1, 1, EBBING_25_DAY_PLAN.length);
+  var planUnits = ebbingPlanUnits(day);
+  var previous = Array.isArray(raw.completedUnits) ? raw.completedUnits : (s.ebbingUnitLog[todayKey] || []);
+  var completed = [];
+  previous.forEach(function(unit) {
+    unit = Number(unit);
+    if (planUnits.indexOf(unit) !== -1 && completed.indexOf(unit) === -1) completed.push(unit);
+  });
+  return {
+    day: day,
+    dayKey: typeof raw.dayKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.dayKey) ? raw.dayKey : todayKey,
+    completedUnits: completed
+  };
 }
 
 var state = loadState();
@@ -2201,18 +2244,6 @@ function finishQuiz() {
   if (quizState.isReview) {
     var rc = quizState.reviewCorrect || 0;
     var rate = done > 0 ? Math.round(rc / done * 100) : 0;
-    // 核心词库：把本次复习涉及的 Unit 记为当天已复习（4周25天打卡表）
-    if (currentPool === 'core' && state.ebbingActive) {
-      var tKey = dayKeyStr(new Date());
-      if (!state.ebbingUnitLog[tKey]) state.ebbingUnitLog[tKey] = [];
-      var doneUnits = state.ebbingUnitLog[tKey];
-      quizState.ids.forEach(function(id) {
-        var w = getWord(id, quizState.poolType || currentPool);
-        if (w && w.unit && doneUnits.indexOf(w.unit) === -1) doneUnits.push(w.unit);
-      });
-      var _du = state.ebbingUnitLog[tKey];
-      if (_du.length >= 14) { state.ebbingUnitLog[tKey] = _du.slice(0, 14); }
-    }
     card.innerHTML = '<div class="empty"><div class="ei">🧠</div><p>复习完成！共 ' + total + ' 题，已答 ' + done + ' 题，答对 ' + rc + ' 题（' + rate + '%）</p>' +
       '<p style="font-size:0.85em;color:var(--text2);margin-top:6px;">' +
       (currentPool === 'full' ? '打卡格已按书中 8 格周期（5分/30分/12时/1天/2天/4天/7天）推进，到期的词会再次出现' : '按书中 4周25天打卡表，当天到期的 Unit 已标记复习完成') +
@@ -2266,12 +2297,47 @@ function dayKeyStr(d) { return localDateKey(d); }
 
 // 从 ebbingStart 起今天是第几天（1 起）
 function ebbingDayIndex() {
-  if (!state.ebbingStart) return 0;
-  var startParts = state.ebbingStart.split('-').map(Number);
-  var start = new Date(startParts[0], startParts[1] - 1, startParts[2]);
-  var now = new Date();
-  var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  return Math.floor((today - start) / REVIEW_DAY) + 1;
+  if (!state.ebbingActive) return 0;
+  syncEbbingPlan(new Date());
+  return state.ebbingPlan ? state.ebbingPlan.day : 0;
+}
+
+function syncEbbingPlan(now) {
+  if (!state.ebbingActive) return null;
+  now = now || new Date();
+  if (!state.ebbingPlan) state.ebbingPlan = normalizeEbbingPlan(state, now);
+  var plan = state.ebbingPlan;
+  var todayKey = dayKeyStr(now);
+  if (plan.dayKey !== todayKey) {
+    var scheduled = ebbingPlanUnits(plan.day);
+    var completed = scheduled.length > 0 && scheduled.every(function(unit) {
+      return plan.completedUnits.indexOf(unit) !== -1;
+    });
+    plan.dayKey = todayKey;
+    if (completed) {
+      // A completed plan becomes eligible to advance only on the next natural day.
+      if (plan.day < EBBING_25_DAY_PLAN.length) {
+        plan.day++;
+        plan.completedUnits = [];
+      }
+    } else {
+      // A missed plan is restarted in full; partial Unit credit never carries into a new day.
+      plan.completedUnits = [];
+    }
+  }
+  return plan;
+}
+
+function markEbbingPlanUnitComplete(unit, now) {
+  var plan = syncEbbingPlan(now);
+  if (!plan) return;
+  var scheduled = ebbingPlanUnits(plan.day);
+  unit = Number(unit);
+  if (scheduled.indexOf(unit) === -1 || plan.completedUnits.indexOf(unit) !== -1) return;
+  plan.completedUnits.push(unit);
+  var key = dayKeyStr(now || new Date());
+  if (!state.ebbingUnitLog[key]) state.ebbingUnitLog[key] = [];
+  if (state.ebbingUnitLog[key].indexOf(unit) === -1) state.ebbingUnitLog[key].push(unit);
 }
 
 // 已学过的 Unit 数（答过题的 unit 集合，最多14）
@@ -2290,18 +2356,11 @@ function learnedUnitCount() {
 
 // 核心词库：4周25天表 → 今天到期复习的 Unit
 function dueUnitsByEbbing() {
-  if (!state.ebbingActive) return [];  // 纯刷题模式：无打卡复习
-  var dayN = ebbingDayIndex();
-  if (dayN <= 0) return [];
-  var learned = learnedUnitCount();
-  var due = ebbingUnitsDueOn(dayN, learned);
-  if (due.length === 0) return [];
-  // 排除当天已复习完成的 Unit
-  var todayKey = dayKeyStr(new Date());
-  var doneUnits = state.ebbingUnitLog[todayKey] || [];
-  var doneSet = {};
-  doneUnits.forEach(function(u) { doneSet[u] = true; });
-  return due.filter(function(u) { return !doneSet[u]; });
+  var plan = syncEbbingPlan(new Date());
+  if (!plan) return [];
+  return ebbingPlanUnits(plan.day).filter(function(unit) {
+    return plan.completedUnits.indexOf(unit) === -1;
+  });
 }
 
 // 打卡词库：8格周期 → 到期未完成格的词
@@ -2313,12 +2372,39 @@ function dueWordsByGrid() {
     if (wordPoolFromStateKey(key) !== 'full') return;
     var wa = st.wordAttempts[key];
     if (!wa.learnedAt) return;
-    var grid = wa.grid || [];
-    for (var i = 0; i < 7; i++) {
-      if (!grid[i] && wa.learnedAt + GRID_OFFSETS[i] <= now) { due.push(wordIdFromStateKey(key)); break; }
-    }
+    var dueAt = fullGridDueAt(wa);
+    if (dueAt !== null && dueAt <= now) due.push(wordIdFromStateKey(key));
   });
   return due;
+}
+
+function fullGridNextIndex(wa) {
+  var grid = wa.grid || [];
+  for (var i = 0; i < GRID_OFFSETS.length; i++) if (!grid[i]) return i;
+  return -1;
+}
+
+function fullGridDueAt(wa) {
+  if (!wa || !wa.learnedAt) return null;
+  var idx = fullGridNextIndex(wa);
+  if (idx < 0) return null;
+  if (wa.retryAt) return Number(wa.retryAt);
+  if (idx === 0) return Number(wa.learnedAt) + GRID_OFFSETS[0];
+  var grid = wa.grid || [];
+  if (!grid[idx - 1]) return null;
+  return Number(grid[idx - 1]) + GRID_OFFSETS[idx];
+}
+
+function advanceFullGridReview(wa, isCorrect, now) {
+  var dueAt = fullGridDueAt(wa);
+  if (dueAt === null || dueAt > now) return;
+  if (!isCorrect) {
+    wa.retryAt = now + 5 * 60000;
+    return;
+  }
+  var idx = fullGridNextIndex(wa);
+  if (idx >= 0) wa.grid[idx] = now;
+  delete wa.retryAt;
 }
 
 // 核心词库：到期 Unit 展开为该 Unit 内「已做过」的词 id（复习只推送做过的题；
@@ -2326,14 +2412,11 @@ function dueWordsByGrid() {
 function dueUnitWordIds() {
   var units = dueUnitsByEbbing();
   if (units.length === 0) return [];
-  var unitSet = {};
-  units.forEach(function(u) { unitSet[u] = true; });
-  var st = state.stats;
   var ids = [];
-  Object.keys(st.wordAttempts).forEach(function(key) {
-    if (wordPoolFromStateKey(key) !== 'core') return;
-    var w = getWord(wordIdFromStateKey(key), 'core');
-    if (w && unitSet[w.unit]) ids.push(wordIdFromStateKey(key));
+  units.forEach(function(unit) {
+    ALL_WORDS.forEach(function(word) {
+      if (word.unit === unit) ids.push(word.id);
+    });
   });
   return ids;
 }
@@ -2349,13 +2432,10 @@ function gridProgressText(wordId) {
   if (!wa || !wa.learnedAt) return '';
   var grid = wa.grid || [];
   var done = grid.filter(function(g) { return !!g; }).length;
-  var nextIdx = -1;
-  var now = Date.now();
-  for (var i = 0; i < 7; i++) {
-    if (!grid[i] && wa.learnedAt + GRID_OFFSETS[i] <= now) { nextIdx = i; break; }
-  }
+  var nextIdx = fullGridNextIndex(wa);
+  var dueAt = fullGridDueAt(wa);
   var txt = '打卡 ' + done + '/7 格';
-  if (nextIdx >= 0) txt += ' · 待复习：' + GRID_NAMES[nextIdx];
+  if (nextIdx >= 0 && dueAt !== null && dueAt <= Date.now()) txt += ' · 待复习：' + GRID_NAMES[nextIdx];
   return txt;
 }
 
@@ -2387,11 +2467,12 @@ function startMemoryQuiz(mode) {
   var poolSet = {};
   pool.forEach(function(w) { poolSet[w.word.toLowerCase()] = true; });
   // 到期复习词优先（答错/跳过的词，间隔到期自动回来）
-  var dueWords = getDueWordIds().map(function(id) { return getWord(id, currentPool); })
+  var planIds = currentPool === 'core' && state.ebbingActive ? dueUnitWordIds() : null;
+  var dueWords = (planIds || getDueWordIds()).map(function(id) { return getWord(id, currentPool); })
     .filter(function(w) { return w && poolSet[w.word.toLowerCase()]; });
   // 未学新词（保持词库顺序：按 Unit→Lesson→序号 从前往后推进，不从随机位置开始）
   var newWords = pool.filter(function(w) { return !learnedWords[w.word.toLowerCase()]; });
-  var ids = shuffle(dueWords.map(function(w) { return w.id; }))
+  var ids = planIds ? planIds.slice() : shuffle(dueWords.map(function(w) { return w.id; }))
     .concat(newWords.map(function(w) { return w.id; }));
   if (ids.length === 0) {
     alert('当前词库已全部学完，换个词库或等待复习词到期吧！');
@@ -2411,8 +2492,10 @@ function startMemoryQuiz(mode) {
     current: null,
     poolType: currentPool,
     memWrong: 0,
-    memTotal: ids.length
+    memTotal: ids.length,
+    isEbbingPlan: !!planIds
   };
+  initializeEbbingPlanQuiz();
   quizActive = true;
   advanceQuestion();
   renderAll();
@@ -2436,21 +2519,44 @@ function startReview() {
     isRetry: false,
     isSmart: false,
     isReview: true,
-    ids: shuffle(due),
+    ids: currentPool === 'core' ? due.slice() : shuffle(due),
     pos: -1,
     questions: [],
     answers: {},
     done: 0,
     current: null,
     reviewCorrect: 0,
-    poolType: currentPool
+    poolType: currentPool,
+    isEbbingPlan: currentPool === 'core' && state.ebbingActive
   };
+  initializeEbbingPlanQuiz();
   quizActive = true;
   advanceQuestion();
   renderAll();
 }
 
 // ============ SAVE / RESUME QUIZ ============
+function initializeEbbingPlanQuiz() {
+  if (!quizState || !quizState.isEbbingPlan || quizState.poolType !== 'core') return;
+  quizState.ebbingPlanUnits = dueUnitsByEbbing();
+  quizState.ebbingPlanRemaining = {};
+  quizState.ebbingPlanAnswered = {};
+  quizState.ids.forEach(function(id) {
+    var word = getWord(id, 'core');
+    if (word && quizState.ebbingPlanUnits.indexOf(word.unit) !== -1) {
+      quizState.ebbingPlanRemaining[word.unit] = (quizState.ebbingPlanRemaining[word.unit] || 0) + 1;
+    }
+  });
+}
+
+function trackEbbingPlanQuestion(word) {
+  if (!quizState || !quizState.isEbbingPlan || !word || quizState.ebbingPlanAnswered[word.id]) return;
+  if (!quizState.ebbingPlanRemaining || !quizState.ebbingPlanRemaining[word.unit]) return;
+  quizState.ebbingPlanAnswered[word.id] = true;
+  quizState.ebbingPlanRemaining[word.unit]--;
+  if (quizState.ebbingPlanRemaining[word.unit] === 0) markEbbingPlanUnitComplete(word.unit, new Date());
+}
+
 function saveSuspendedQuiz() {
   if (!quizActive) return;
   state.suspendedQuiz = {
@@ -2467,6 +2573,10 @@ function saveSuspendedQuiz() {
     memWrong: quizState.memWrong || 0,
     memTotal: quizState.memTotal || quizState.ids.length,
     memoryResults: (quizState.memoryResults || []).slice(),
+    isEbbingPlan: !!quizState.isEbbingPlan,
+    ebbingPlanUnits: (quizState.ebbingPlanUnits || []).slice(),
+    ebbingPlanRemaining: Object.assign({}, quizState.ebbingPlanRemaining || {}),
+    ebbingPlanAnswered: Object.assign({}, quizState.ebbingPlanAnswered || {}),
     poolType: quizState.poolType || currentPool,
     currentId: quizState.current ? quizState.current.word.id : null,
     pageStart: quizState.pageStart || 0
@@ -2524,6 +2634,10 @@ function resumeQuiz() {
     memWrong: sq.memWrong || 0,
     memTotal: sq.memTotal || sq.ids.length,
     memoryResults: Array.isArray(sq.memoryResults) ? sq.memoryResults.slice() : [],
+    isEbbingPlan: !!sq.isEbbingPlan,
+    ebbingPlanUnits: Array.isArray(sq.ebbingPlanUnits) ? sq.ebbingPlanUnits.slice() : [],
+    ebbingPlanRemaining: Object.assign({}, sq.ebbingPlanRemaining || {}),
+    ebbingPlanAnswered: Object.assign({}, sq.ebbingPlanAnswered || {}),
     pageStart: sq.pageStart || 0
   };
   quizActive = true;
@@ -3525,12 +3639,8 @@ function recordStat(word, mode, isCorrect, isClose, isDictation) {
   if (!wa.learnedAt) wa.learnedAt = _now; // 首次作答时间（8格周期起点）
   if (statPool === 'full') {
     if (!wa.grid) wa.grid = [0, 0, 0, 0, 0, 0, 0];
-    // 复习（startReview）答对：打掉第一个到期未完成格
-    if (quizState && quizState.isReview && isCorrect) {
-      for (var gi = 0; gi < 7; gi++) {
-        if (!wa.grid[gi] && wa.learnedAt + GRID_OFFSETS[gi] <= _now) { wa.grid[gi] = _now; break; }
-      }
-    }
+    // Both review entry points share one chained stage transition.
+    if (quizState && (quizState.isReview || quizState.isMemory)) advanceFullGridReview(wa, isCorrect, _now);
   }
   wa.lastTime = _now; // 兼容旧逻辑
 }
@@ -3599,6 +3709,7 @@ function handleDictationSubmit() {
   quizState.answers[quizState.pos] = { text: userAnswer, correct: isCorrect, close: isClose };
   recordMemoryProgress(isCorrect ? 'correct' : 'wrong');
   recordStat(word, mode, isCorrect, isClose, true);
+  trackEbbingPlanQuestion(word);
 
   var correctAnswerText = (mode === 'cn2en') ? word.word : getChineseFull(word.meaning);
   var now = nowStr();
@@ -3664,6 +3775,7 @@ function handleGate1(know) {
   quizState.answers[quizState.pos] = { gate1: !!know };
   recordMemoryProgress(know ? 'correct' : 'wrong');
   recordStat(word, mode, !!know, false, false);
+  trackEbbingPlanQuestion(word);
   if (know) {
     // 认识：停留在当前词，直接显示中文释义，等待用户手动继续。
     saveState();
@@ -3721,6 +3833,7 @@ function handleAnswer(chosenIndex) {
   }
 
   recordStat(word, mode, isCorrect, false, false);
+  trackEbbingPlanQuestion(word);
 
   var userAnswerText = (mode === 'cn2en') ? q.options[chosenIndex].word : getChineseFull(q.options[chosenIndex].meaning);
   var correctAnswerText = (mode === 'cn2en') ? word.word : getChineseFull(word.meaning);
@@ -3854,6 +3967,7 @@ function activateEbbing() {
   if (state.ebbingActive) return;
   state.ebbingActive = true;
   state.ebbingStart = dayKeyStr(new Date());
+  state.ebbingPlan = { day: 1, dayKey: state.ebbingStart, completedUnits: [] };
   saveState();
   renderAll();
 }
@@ -3864,6 +3978,7 @@ function stopEbbing() {
   state.ebbingActive = false;
   state.ebbingStart = null;
   state.ebbingUnitLog = {};
+  state.ebbingPlan = null;
   saveState();
   renderAll();
 }

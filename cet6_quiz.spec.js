@@ -579,7 +579,7 @@ test('ebbinghaus 4-week-25-day table logic', async ({ page }) => {
 });
 
 test('Ebbinghaus plan bar shows study plan on core pool', async ({ page }) => {
-  // 注入 ebbingStart（昨天开始）→ 今天是第2天，该学 Unit 2
+  // 旧数据只有起始日时没有任何已完成证据，不能按日历直接跳过第 1 天。
   await page.evaluate(() => {
     const y = new Date(Date.now() - 86400000);
     const key = y.toISOString().split('T')[0];
@@ -588,10 +588,12 @@ test('Ebbinghaus plan bar shows study plan on core pool', async ({ page }) => {
     localStorage.setItem('cet6_quiz_app_v2', JSON.stringify(st));
   });
   await page.reload();
+  await page.selectOption('#poolSelect', 'core');
   await page.waitForTimeout(800);
   const plan = await page.locator('#ebbingPlan').textContent();
-  expect(plan).toContain('第 2 天');
-  expect(plan).toContain('Unit 2');
+  expect(plan).toContain('第 1 天');
+  expect(plan).toContain('Unit 1');
+  expect(plan).not.toContain('Unit 2');
 });
 
 test('8-grid review: grid progress shows after learning in Ebbinghaus pool', async ({ page }) => {
@@ -608,6 +610,205 @@ test('8-grid review: grid progress shows after learning in Ebbinghaus pool', asy
 });
 
 // ============ PAGE NAV (页导航：单 Unit 独立编页 20词/页) ============
+
+test('8-grid review is chained from the previous completed grid instead of first learning time', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const now = Date.now();
+    state.stats.wordAttempts = {
+      'full:1': {
+        attempts: 1, correct: 1, wrong: 0,
+        learnedAt: now - 31 * 60000,
+        grid: [now - 60 * 1000, 0, 0, 0, 0, 0, 0]
+      }
+    };
+    currentPool = 'full';
+    const immediatelyAfterFiveMinuteReview = dueWordsByGrid();
+    state.stats.wordAttempts['full:1'].grid[0] = now - 31 * 60000;
+    const thirtyMinutesAfterFiveMinuteReview = dueWordsByGrid();
+    return { immediatelyAfterFiveMinuteReview, thirtyMinutesAfterFiveMinuteReview };
+  });
+
+  expect(result.immediatelyAfterFiveMinuteReview).toEqual([]);
+  expect(result.thirtyMinutesAfterFiveMinuteReview).toEqual([1]);
+});
+
+test('8-grid review advances one stage from both review entry points and defers failed retries', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const now = Date.now();
+    const word = getWord(1, 'full');
+    state.stats.wordAttempts = {
+      'full:1': { attempts: 1, correct: 1, wrong: 0, learnedAt: now - 10 * 60000, grid: [0, 0, 0, 0, 0, 0, 0] },
+      'full:2': { attempts: 1, correct: 1, wrong: 0, learnedAt: now - 10 * 60000, grid: [0, 0, 0, 0, 0, 0, 0] },
+      'full:3': { attempts: 1, correct: 1, wrong: 0, learnedAt: now - 10 * 60000, grid: [0, 0, 0, 0, 0, 0, 0] }
+    };
+    currentPool = 'full';
+    quizState = { poolType: 'full', isReview: true, isMemory: false };
+    recordStat(word, 'en2cn', true, false, false);
+    quizState = { poolType: 'full', isReview: false, isMemory: true };
+    recordStat(getWord(2, 'full'), 'en2cn', true, false, false);
+    quizState = { poolType: 'full', isReview: true, isMemory: false };
+    recordStat(getWord(3, 'full'), 'en2cn', false, false, false);
+    return {
+      reviewStage: state.stats.wordAttempts['full:1'].grid[0],
+      memoryStage: state.stats.wordAttempts['full:2'].grid[0],
+      retryAt: state.stats.wordAttempts['full:3'].retryAt,
+      due: dueWordsByGrid()
+    };
+  });
+
+  expect(result.reviewStage).toEqual(expect.any(Number));
+  expect(result.memoryStage).toEqual(expect.any(Number));
+  expect(result.retryAt).toBeGreaterThan(Date.now() - 1000);
+  expect(result.due).not.toContain(3);
+});
+
+test('core 25-day plan exactly matches the book table in its stated Unit order', async ({ page }) => {
+  const plan = await page.evaluate(() => EBBING_25_DAY_PLAN.map(day => day.slice()));
+  expect(plan).toEqual([
+    [1], [2, 1], [3, 2], [4, 1, 3], [5, 2, 4], [6, 3, 5], [7, 1, 4, 6],
+    [8, 2, 5, 7], [9, 3, 6, 8], [10, 4, 7, 9], [11, 5, 8, 10], [12, 1, 6, 9, 11],
+    [13, 2, 7, 10, 12], [14, 3, 8, 11, 13], [4, 9, 12, 14], [5, 10, 13], [6, 11, 14],
+    [7, 12], [8, 13], [9, 14], [10], [11], [12], [13], [14]
+  ]);
+});
+
+test('active core Day 1 memory quiz contains only Unit 1 words in book order', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const today = dayKeyStr(new Date());
+    state = normalizeState({
+      ebbingActive: true,
+      ebbingStart: today,
+      ebbingPlan: { day: 1, dayKey: today, completedUnits: [] }
+    });
+    currentPool = 'core';
+    startMemoryQuiz('en2cn');
+    const expected = ALL_WORDS.filter(word => word.unit === 1).map(word => word.id);
+    const unit2Ids = ALL_WORDS.filter(word => word.unit === 2).map(word => word.id);
+    const memoryIds = quizState.ids.slice();
+    quizActive = false;
+    startReview();
+    return { memoryIds, reviewIds: quizState.ids.slice(), expected, unit2Ids };
+  });
+
+  expect(result.memoryIds).toEqual(result.expected);
+  expect(result.reviewIds).toEqual(result.expected);
+  expect(result.memoryIds.some(id => result.unit2Ids.includes(id))).toBe(false);
+  expect(result.reviewIds.some(id => result.unit2Ids.includes(id))).toBe(false);
+});
+
+test('skipping the final core plan word does not complete its Unit', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const today = dayKeyStr(new Date());
+    state = normalizeState({
+      ebbingActive: true,
+      ebbingStart: today,
+      ebbingPlan: { day: 1, dayKey: today, completedUnits: [] }
+    });
+    currentPool = 'core';
+    startReview();
+    const lastId = quizState.ids[quizState.ids.length - 1];
+    quizState.pos = quizState.ids.length - 1;
+    quizState.current = { word: getWord(lastId, 'core') };
+    quizState.ebbingPlanRemaining = { 1: 1 };
+    quizState.ebbingPlanAnswered = {};
+    handleSkip();
+    return state.ebbingPlan.completedUnits.slice();
+  });
+
+  expect(result).toEqual([]);
+});
+
+test('ending an unanswered core plan review does not record every Unit as complete', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const today = dayKeyStr(new Date());
+    state = normalizeState({
+      ebbingActive: true,
+      ebbingStart: today,
+      ebbingPlan: { day: 1, dayKey: today, completedUnits: [] }
+    });
+    currentPool = 'core';
+    startReview();
+    finishQuiz();
+    return {
+      completedUnits: state.ebbingPlan.completedUnits.slice(),
+      legacyLog: (state.ebbingUnitLog[today] || []).slice()
+    };
+  });
+
+  expect(result).toEqual({ completedUnits: [], legacyLog: [] });
+});
+
+test('core plan emits complete Unit word lists in the table order and preserves word order within every Unit', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const today = dayKeyStr(new Date());
+    state = normalizeState({
+      ebbingActive: true,
+      ebbingStart: today,
+      ebbingPlan: { day: 4, dayKey: today, completedUnits: [] }
+    });
+    currentPool = 'core';
+    const ids = dueUnitWordIds();
+    const expected = [4, 1, 3].flatMap(unit => ALL_WORDS.filter(word => word.unit === unit).map(word => word.id));
+    return { ids, expected };
+  });
+  expect(result.ids).toEqual(result.expected);
+});
+
+test('core plan keeps a missed Day 1 on Day 2 and unlocks Day 2 only on Day 3 after makeup', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const day1 = new Date(2026, 7, 24);
+    const day2 = new Date(2026, 7, 25);
+    const day3 = new Date(2026, 7, 26);
+    state = normalizeState({
+      ebbingActive: true,
+      ebbingStart: dayKeyStr(day1),
+      ebbingPlan: { day: 1, dayKey: dayKeyStr(day1), completedUnits: [] }
+    });
+    syncEbbingPlan(day2);
+    const day2MakeupOnly = { day: state.ebbingPlan.day, completedUnits: state.ebbingPlan.completedUnits.slice(), units: dueUnitsByEbbing() };
+    markEbbingPlanUnitComplete(1, day2);
+    const day2AfterMakeup = { day: state.ebbingPlan.day, completedUnits: state.ebbingPlan.completedUnits.slice(), units: dueUnitsByEbbing() };
+    syncEbbingPlan(day3);
+    const day3Plan = { day: state.ebbingPlan.day, completedUnits: state.ebbingPlan.completedUnits.slice(), units: dueUnitsByEbbing() };
+    return { day2MakeupOnly, day2AfterMakeup, day3Plan };
+  });
+
+  expect(result.day2MakeupOnly).toEqual({ day: 1, completedUnits: [], units: [1] });
+  expect(result.day2AfterMakeup).toEqual({ day: 1, completedUnits: [1], units: [] });
+  expect(result.day3Plan).toEqual({ day: 2, completedUnits: [], units: [2, 1] });
+});
+
+test('legacy core plan data migrates into the current 25-day progress state without discarding its completion log', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const today = dayKeyStr(new Date());
+    const migrated = normalizeState({
+      ebbingActive: true,
+      ebbingStart: today,
+      ebbingUnitLog: { [today]: [1] }
+    });
+    return { plan: migrated.ebbingPlan, log: migrated.ebbingUnitLog[today] };
+  });
+
+  expect(result.plan).toMatchObject({ day: 1, dayKey: expect.any(String), completedUnits: [1] });
+  expect(result.log).toEqual([1]);
+});
+
+test('restarting the core 25-day plan discards prior plan position while preserving unrelated study data', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const today = dayKeyStr(new Date());
+    state = normalizeState({
+      ebbingActive: false,
+      ebbingStart: null,
+      ebbingPlan: { day: 8, dayKey: today, completedUnits: [8] },
+      stats: { wordAttempts: { 'core:1': { attempts: 2, correct: 1, wrong: 1 } } }
+    });
+    activateEbbing();
+    return { plan: state.ebbingPlan, attempt: state.stats.wordAttempts['core:1'] };
+  });
+
+  expect(result.plan).toMatchObject({ day: 1, completedUnits: [] });
+  expect(result.attempt).toMatchObject({ attempts: 2, correct: 1, wrong: 1 });
+});
 
 test('page nav: single unit shows page number and controls', async ({ page }) => {
   // 选 Unit 1（核心库，154词 → 8页），再开始做题
@@ -1031,6 +1232,11 @@ test.describe('other options show english word on wrong answer', () => {
 
 // ============ 新版词群导图（书页真实导图数据：放射状 + 下钻） ============
 test.describe('group map (new: unit-maps.js data)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.selectOption('#poolSelect', 'core');
+    await page.evaluate(() => new Promise(resolve => ensureUnitMaps(resolve)));
+  });
+
   test('core pool quiz answer shows new group map with SVG nodes', async ({ page }) => {
     // 核心词库默认；答题后反馈里应出现新版词群导图（gmap-wrap 容器）
     await page.click('button:has-text("开始做题")');
