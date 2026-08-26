@@ -846,17 +846,60 @@ test('core plan keeps a missed Day 1 on Day 2 and unlocks Day 2 only on Day 3 af
       ebbingPlan: { day: 1, dayKey: dayKeyStr(day1), completedUnits: [] }
     });
     syncEbbingPlan(day2);
-    const day2MakeupOnly = { day: state.ebbingPlan.day, completedUnits: state.ebbingPlan.completedUnits.slice(), units: dueUnitsByEbbing() };
+    const day2MakeupOnly = { day: state.ebbingPlan.day, completedUnits: state.ebbingPlan.completedUnits.slice(), units: dueUnitsByEbbing(day2) };
     markEbbingPlanUnitComplete(1, day2);
-    const day2AfterMakeup = { day: state.ebbingPlan.day, completedUnits: state.ebbingPlan.completedUnits.slice(), units: dueUnitsByEbbing() };
+    const day2AfterMakeup = { day: state.ebbingPlan.day, completedUnits: state.ebbingPlan.completedUnits.slice(), units: dueUnitsByEbbing(day2) };
     syncEbbingPlan(day3);
-    const day3Plan = { day: state.ebbingPlan.day, completedUnits: state.ebbingPlan.completedUnits.slice(), units: dueUnitsByEbbing() };
+    const day3Plan = { day: state.ebbingPlan.day, completedUnits: state.ebbingPlan.completedUnits.slice(), units: dueUnitsByEbbing(day3) };
     return { day2MakeupOnly, day2AfterMakeup, day3Plan };
   });
 
   expect(result.day2MakeupOnly).toEqual({ day: 1, completedUnits: [], units: [1] });
   expect(result.day2AfterMakeup).toEqual({ day: 1, completedUnits: [1], units: [] });
   expect(result.day3Plan).toEqual({ day: 2, completedUnits: [], units: [2, 1] });
+});
+
+test('Ebbinghaus plan bar marks the day complete only after every scheduled Unit, including a reset makeup day', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const day2 = new Date();
+    day2.setHours(12, 0, 0, 0);
+    const day1 = new Date(day2);
+    day1.setDate(day1.getDate() - 1);
+    state = normalizeState({
+      ebbingActive: true,
+      ebbingStart: dayKeyStr(day1),
+      ebbingPlan: { day: 2, dayKey: dayKeyStr(day2), completedUnits: [] }
+    });
+    currentPool = 'core';
+
+    markEbbingPlanUnitComplete(2, day2);
+    renderEbbingPlan();
+    const afterNewUnit = document.getElementById('ebbingPlan').textContent;
+    markEbbingPlanUnitComplete(1, day2);
+    const afterAllUnits = document.getElementById('ebbingPlan').textContent;
+    const storedCompleted = JSON.parse(localStorage.getItem('cet6_quiz_app_v2')).ebbingPlan.completedUnits.slice();
+
+    state = normalizeState({
+      ebbingActive: true,
+      ebbingStart: dayKeyStr(day1),
+      ebbingPlan: { day: 1, dayKey: dayKeyStr(day1), completedUnits: [] }
+    });
+    syncEbbingPlan(day2);
+    markEbbingPlanUnitComplete(1, day2);
+    return {
+      afterNewUnit,
+      afterAllUnits,
+      storedCompleted,
+      resetPlan: state.ebbingPlan,
+      resetPlanText: document.getElementById('ebbingPlan').textContent
+    };
+  });
+
+  expect(result.afterNewUnit).not.toContain('当天目标已完成');
+  expect(result.afterAllUnits).toContain('当天目标已完成');
+  expect(result.storedCompleted).toEqual([2, 1]);
+  expect(result.resetPlan).toMatchObject({ day: 1, completedUnits: [1] });
+  expect(result.resetPlanText).toContain('当天目标已完成');
 });
 
 test('legacy core plan data migrates into the current 25-day progress state without discarding its completion log', async ({ page }) => {
