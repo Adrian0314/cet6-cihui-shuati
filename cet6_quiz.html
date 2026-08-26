@@ -2266,7 +2266,7 @@ function finishQuiz() {
     card.innerHTML = '<div class="empty"><div class="ei">🧠</div><p>记忆模式完成！本次共学习 ' + quizState.memTotal + ' 词，答对 ' + mc + ' 词</p>' +
       '<p style="font-size:0.85em;color:var(--text2);margin-top:6px;">答错 ' + mw + ' 词已加入记忆调度：错词按当前词库的书中记忆规律（4周25天打卡表 / 8格周期）自动排期回来</p></div>';
   } else {
-    card.innerHTML = '<div class="empty"><div class="ei">\u{1F389}</div><p>本轮题目全部完成！共 ' + total + ' 题，已答 ' + done + ' 题</p></div>';
+    card.innerHTML = '<div class="empty"><div class="ei">\u{1F389}</div><p>本轮题目全部完成！共 ' + total + ' 题，已答 ' + done + ' 题</p></div>' + quizCompletionControlsHTML();
     // 页导航：本轮完成后推进续刷起始页（学完该 Unit 最后一页自动回第 1 页）
     if (quizState.pageStart && isSingleUnitRange()) {
       var pgWords = getUnitWordList(selectedUnits[0]);

@@ -739,6 +739,44 @@ test('active core Day 1 memory quiz contains only Unit 1 words in book order', a
   expect(result.reviewIds.some(id => result.unit2Ids.includes(id))).toBe(false);
 });
 
+test('core Day 1 completion keeps fullscreen exit and return actions', async ({ page }) => {
+  await page.evaluate(() => {
+    const today = localDateKey(new Date());
+    currentPool = 'core';
+    state.ebbingActive = true;
+    state.ebbingStart = today;
+    state.ebbingPlan = { day: 1, dayKey: today, completedUnits: [] };
+    const dayOneIds = ALL_WORDS.filter(word => word.unit === 1).slice(0, 20).map(word => word.id);
+
+    quizActive = true;
+    quizState = {
+      mode: 'en2cn',
+      isReview: false,
+      isMemory: false,
+      isRetry: false,
+      isSmart: false,
+      ids: dayOneIds,
+      pos: dayOneIds.length - 1,
+      questions: [],
+      answers: {},
+      done: dayOneIds.length,
+      current: null,
+      poolType: 'core',
+      isEbbingPlan: true
+    };
+    document.getElementById('quizCard').classList.add('fullscreen');
+    finishQuiz();
+  });
+
+  await expect(page.locator('#quizCard > .empty')).toBeVisible();
+  await expect(page.locator('#returnToStartBtn')).toBeVisible();
+  await expect(page.locator('#toggleFsBtn')).toBeVisible();
+  await page.locator('#toggleFsBtn').click();
+  await expect(page.locator('#quizCard')).not.toHaveClass(/fullscreen/);
+  await page.locator('#returnToStartBtn').click();
+  await expect(page.locator('#tab-quiz')).toBeVisible();
+});
+
 test('skipping the final core plan word does not complete its Unit', async ({ page }) => {
   const result = await page.evaluate(() => {
     const today = dayKeyStr(new Date());
