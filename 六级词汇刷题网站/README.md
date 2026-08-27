@@ -4,6 +4,10 @@
 
 > **在线体验**：https://adrian0314.github.io/cet6-cihui-shuati/cet6_quiz.html
 
+## 🛠 最近更新
+
+- 修复选择题中文释义选项误显示 `fibre` 音标的问题；题干音标和单词朗读功能保持不变。
+
 ## 📚 词库
 
 | 词库 | 出处 | 内容 |
