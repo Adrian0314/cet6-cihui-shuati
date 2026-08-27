@@ -3356,7 +3356,23 @@ function refreshQuestionProgress() {
   var wrapper = document.createElement('div');
   wrapper.innerHTML = questionProgressHTML();
   var next = wrapper.firstElementChild;
-  if (next) current.replaceWith(next);
+  if (next) {
+    current.replaceWith(next);
+    scrollQuestionProgressToCurrent(next);
+  }
+}
+
+// 横向进度条重建后，将当前题尽量保持在可视区域中央；首尾题按边界显示。
+function scrollQuestionProgressToCurrent(progressEl) {
+  if (!progressEl) return;
+  var currentDot = progressEl.querySelector('.progress-dot.current');
+  if (!currentDot) return;
+  var progressRect = progressEl.getBoundingClientRect();
+  var dotRect = currentDot.getBoundingClientRect();
+  var dotCenter = dotRect.left - progressRect.left + progressEl.scrollLeft + dotRect.width / 2;
+  var target = dotCenter - progressEl.clientWidth / 2;
+  var maxScroll = Math.max(0, progressEl.scrollWidth - progressEl.clientWidth);
+  progressEl.scrollLeft = Math.max(0, Math.min(maxScroll, Math.round(target)));
 }
 
 function renderQuizCard() {
@@ -3459,6 +3475,7 @@ function renderQuizCard() {
       if (card.classList.contains('fullscreen') && scrollEl) scrollEl.scrollTop = 0;
       else window.scrollTo(0, Math.max(0, card.offsetTop - 12));
     } catch (e) {}
+    scrollQuestionProgressToCurrent(card.querySelector('.question-progress'));
     return;
   }
 
@@ -3607,6 +3624,7 @@ function renderQuizCard() {
       window.scrollTo(0, Math.max(0, card.offsetTop - 12));
     }
   } catch (e) {}
+  scrollQuestionProgressToCurrent(card.querySelector('.question-progress'));
 }
 
 function recordStat(word, mode, isCorrect, isClose, isDictation) {
