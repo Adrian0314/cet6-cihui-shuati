@@ -530,7 +530,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>📡 离线说明：</strong>所有功能（含统计图表）均已内置，无需网络即可使用。用手机浏览器打开本页后，选择「添加到主屏幕」，即可像 App 一样全屏使用（需通过 https 地址访问，本地双击打开不支持安装）。</div>
       <div class="rb"><strong>🎯 每日目标：</strong>统计页可自选每日目标（做题+复习总数），达标后做题页会弹出庆祝提示；学习热力图的深绿色格子即代表"当日达标"。核心词库的艾宾浩斯打卡表则以当天计划的全部 Unit 完成为准，完成后计划栏显示“当天目标已完成”。</div>
       <div class="rb"><strong>🧠 记忆模式：</strong>做完一题即从队列移除，答错的词按当前词库的书中记忆规律自动排期回来复习。打开网页时若有到期单词，做题页顶部会显示复习横幅，点击"开始复习"一键清债；复习采用四选一快刷，复习中跳过视同答错。复习只从首次作答开始计，历史数据不迁移。</div>
-      <div class="rb"><strong>💾 中途退出：</strong>做题过程中刷新页面或关闭网页时，系统会自动保存当前题位、已答数量、已选答案以及 4 周 25 天计划的当日进度；当天重新打开后，点击顶部“继续做题”或“开始复习”都会接着完成同一队列。进入新的一天后，旧日未完成队列会按新的每日计划重置。</div>
+      <div class="rb"><strong>💾 中途退出：</strong>做题过程中刷新页面或关闭网页时，系统会自动保存当前题位、已答数量、已选答案以及 4 周 25 天计划的当日进度；当天重新打开后，点击顶部“继续做题”或“开始复习”都会接着完成同一队列，复习提醒也会显示实际的已完成题数和待完成题数。进入新的一天后，旧日未完成队列会按新的每日计划重置。</div>
       <div class="rb"><strong>🧠 智能练习：</strong>这不是生成式 AI，而是按规则自动安排优先级：先练重点词和已经到期的复习词，再练从未做过、错误率较高或答错次数较多的词。系统从当前词库和 Unit 筛选范围中取词，数量按“每次学习”设置的 20/40/60 词决定，并沿用当前的做题方向、题目类型和闯关模式。智能练习不是只练错题；只练错题请使用“重做当前模式错题”，智能练习答错的单词仍会进入错题本。</div>
       <div class="rb" style="text-align:center;margin-top:8px;"><span style="color:var(--accent2);cursor:pointer;text-decoration:underline;" onclick="document.getElementById('rulesCard').classList.toggle('collapsed')">点击收起 ▲</span></div>
     </div>
@@ -2611,6 +2611,27 @@ function restoreSuspendedQuestions(sq) {
 function isCurrentEbbingPlanSnapshot(sq, now) {
   if (!sq || !sq.isEbbingPlan || sq.poolType !== 'core' || !state.ebbingActive || !sq.ids || !sq.ids.length) return false;
   return !sq.ebbingPlanDayKey || sq.ebbingPlanDayKey === dayKeyStr(now || new Date());
+}
+
+function suspendedEbbingPlanProgress(sq) {
+  if (!isCurrentEbbingPlanSnapshot(sq)) return null;
+  var answers = sq.answers || {};
+  var completed = 0;
+  var units = [];
+  sq.ids.forEach(function(id, index) {
+    if (Object.prototype.hasOwnProperty.call(answers, index)) {
+      completed++;
+      return;
+    }
+    var word = getWord(id, 'core');
+    if (word && units.indexOf(word.unit) === -1) units.push(word.unit);
+  });
+  return {
+    total: sq.ids.length,
+    completed: completed,
+    remaining: sq.ids.length - completed,
+    units: units
+  };
 }
 
 function isExpiredEbbingPlanSnapshot(sq, now) {
@@ -5898,11 +5919,19 @@ function checkSpacedRepetition() {
   } else {
     // 核心词库：4周25天 Unit 级
     title = '🧠 复习提醒（4周25天打卡表）';
-    var du = dueUnitsByEbbing();
-    desc = '按《你还在背单词吗》书末打卡表，今天到期的 Unit：';
-    lines = du.length ? 'Unit ' + du.join('、') : '';
+    var progress = suspendedEbbingPlanProgress(state.suspendedQuiz);
+    if (progress) {
+      desc = '按《你还在背单词吗》书末打卡表，今天尚未完成的复习：';
+      lines = (progress.units.length ? '待复习 Unit ' + progress.units.join('、') + '\n' : '') +
+        '已完成 ' + progress.completed + ' 题\n' +
+        '待完成 ' + progress.remaining + ' 题（共 ' + progress.total + ' 题）';
+    } else {
+      var du = dueUnitsByEbbing();
+      desc = '按《你还在背单词吗》书末打卡表，今天到期的 Unit：';
+      lines = du.length ? 'Unit ' + du.join('、') : '';
+    }
   }
-  if (due.length > 5) lines += '\n...还有 ' + (due.length - 5) + ' 个单词';
+  if (currentPool === 'full' && due.length > 5) lines += '\n...还有 ' + (due.length - 5) + ' 个单词';
   var modal = document.createElement('div');
   modal.id = 'reviewReminderModal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:400;display:flex;align-items:center;justify-content:center;';

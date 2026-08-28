@@ -188,3 +188,42 @@ test('a previous-day 4-week plan snapshot is not resumed', async ({ browser }) =
 
   await context.close();
 });
+
+test('4-week review reminder shows the saved queue progress', async ({ browser }) => {
+  const context = await browser.newContext();
+  await context.addInitScript(() => localStorage.setItem('cet6_onboarded', '1'));
+  const page = await context.newPage();
+
+  await page.goto(QUIZ_URL);
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForFunction(() => Array.isArray(window.ALL_WORDS) && ALL_WORDS.length > 0);
+
+  await page.evaluate(() => {
+    currentPool = 'core';
+    updatePoolUI();
+    savePrefs();
+    activateEbbing();
+    startReview();
+  });
+  await page.waitForFunction(() => quizActive && quizState.isReview && quizState.current);
+  const total = await page.evaluate(() => quizState.ids.length);
+
+  for (let index = 0; index < 4; index++) {
+    await page.evaluate(() => handleAnswer(quizState.current.correctIndex));
+    if (index < 3) await page.evaluate(() => advanceQuestion());
+  }
+  await page.reload();
+  await page.waitForLoadState('domcontentloaded');
+
+  const reminderText = await page.evaluate(() => {
+    const existing = document.getElementById('reviewReminderModal');
+    if (existing) existing.remove();
+    checkSpacedRepetition();
+    return document.querySelector('#reviewReminderModal pre').textContent;
+  });
+  expect(reminderText).toContain('已完成 4 题');
+  expect(reminderText).toContain('待完成 ' + (total - 4) + ' 题（共 ' + total + ' 题）');
+  expect(reminderText).not.toContain('...还有');
+
+  await context.close();
+});
