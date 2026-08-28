@@ -530,7 +530,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>📡 离线说明：</strong>所有功能（含统计图表）均已内置，无需网络即可使用。用手机浏览器打开本页后，选择「添加到主屏幕」，即可像 App 一样全屏使用（需通过 https 地址访问，本地双击打开不支持安装）。</div>
       <div class="rb"><strong>🎯 每日目标：</strong>统计页可自选每日目标（做题+复习总数），达标后做题页会弹出庆祝提示；学习热力图的深绿色格子即代表"当日达标"。核心词库的艾宾浩斯打卡表则以当天计划的全部 Unit 完成为准，完成后计划栏显示“当天目标已完成”。</div>
       <div class="rb"><strong>🧠 记忆模式：</strong>做完一题即从队列移除，答错的词按当前词库的书中记忆规律自动排期回来复习。打开网页时若有到期单词，做题页顶部会显示复习横幅，点击"开始复习"一键清债；复习采用四选一快刷，复习中跳过视同答错。复习只从首次作答开始计，历史数据不迁移。</div>
-      <div class="rb"><strong>💾 中途退出：</strong>做题过程中刷新页面、关闭网页或下次重新打开时，系统会自动保存当前题位、已答数量以及 4 周 25 天计划的当日进度；打开后点击顶部“继续做题”即可接着完成。</div>
+      <div class="rb"><strong>💾 中途退出：</strong>做题过程中刷新页面或关闭网页时，系统会自动保存当前题位、已答数量、已选答案以及 4 周 25 天计划的当日进度；当天重新打开后，点击顶部“继续做题”或“开始复习”都会接着完成同一队列。进入新的一天后，旧日未完成队列会按新的每日计划重置。</div>
       <div class="rb"><strong>🧠 智能练习：</strong>这不是生成式 AI，而是按规则自动安排优先级：先练重点词和已经到期的复习词，再练从未做过、错误率较高或答错次数较多的词。系统从当前词库和 Unit 筛选范围中取词，数量按“每次学习”设置的 20/40/60 词决定，并沿用当前的做题方向、题目类型和闯关模式。智能练习不是只练错题；只练错题请使用“重做当前模式错题”，智能练习答错的单词仍会进入错题本。</div>
       <div class="rb" style="text-align:center;margin-top:8px;"><span style="color:var(--accent2);cursor:pointer;text-decoration:underline;" onclick="document.getElementById('rulesCard').classList.toggle('collapsed')">点击收起 ▲</span></div>
     </div>
@@ -1490,6 +1490,13 @@ function normalizeState(input) {
     s.suspendedQuiz.poolType = s.suspendedQuiz.poolType === 'full' ? 'full' : 'core';
     s.suspendedQuiz.ids = Array.isArray(s.suspendedQuiz.ids) ? s.suspendedQuiz.ids.map(function(id) { return finiteInt(id, 0, 1); }).filter(Boolean) : [];
     s.suspendedQuiz.answers = isPlainObject(s.suspendedQuiz.answers) ? s.suspendedQuiz.answers : {};
+    s.suspendedQuiz.questionSnapshots = Array.isArray(s.suspendedQuiz.questionSnapshots) ? s.suspendedQuiz.questionSnapshots : [];
+    var savedPlanDayKey = typeof s.suspendedQuiz.ebbingPlanDayKey === 'string' ? s.suspendedQuiz.ebbingPlanDayKey : null;
+    // Before plan snapshots carried their own date, use the saved plan date for the same-day resume check.
+    if (!savedPlanDayKey && s.suspendedQuiz.isEbbingPlan && s.ebbingPlan && typeof s.ebbingPlan.dayKey === 'string') {
+      savedPlanDayKey = s.ebbingPlan.dayKey;
+    }
+    s.suspendedQuiz.ebbingPlanDayKey = savedPlanDayKey;
   }
 
   var p = isPlainObject(s.prefs) ? s.prefs : {};
@@ -2229,6 +2236,7 @@ function isAnsweredCorrectly(pos) {
   if (a === 'skip') return false;
   if (typeof a === 'object' && a !== null) return !!a.correct; // 默写
   var q = quizState.questions[pos];
+  if (!q) return false; // 兼容旧版未保存题目快照的暂存记录
   return q !== null && a === q.correctIndex;
 }
 
@@ -2533,6 +2541,11 @@ function startMemoryQuiz(mode) {
 }
 
 function startReview() {
+  if (isCurrentEbbingPlanSnapshot(state.suspendedQuiz)) {
+    resumeQuiz();
+    return;
+  }
+  if (isExpiredEbbingPlanSnapshot(state.suspendedQuiz)) discardSaved();
   ensureFullWords();
   if (currentPool === 'core' && !state.ebbingActive) {
     alert('纯刷题模式：尚未开启 4周25天打卡表，无打卡复习。可点击「开始 4周25天打卡表」开启复习计划。');
@@ -2567,6 +2580,44 @@ function startReview() {
 }
 
 // ============ SAVE / RESUME QUIZ ============
+function suspendedQuestionSnapshots(q) {
+  return (q.questions || []).map(function(question) {
+    if (!question || !question.word || !Array.isArray(question.options)) return null;
+    var optionIds = question.options.map(function(option) { return option && option.id; });
+    if (optionIds.length !== question.options.length || optionIds.some(function(id) { return !isFinite(Number(id)) || Number(id) <= 0; })) return null;
+    return {
+      wordId: question.word.id,
+      optionIds: optionIds,
+      correctIndex: question.correctIndex
+    };
+  });
+}
+
+function restoreSuspendedQuestions(sq) {
+  if (!Array.isArray(sq.questionSnapshots)) return [];
+  var poolName = sq.poolType === 'full' ? 'full' : 'core';
+  return sq.questionSnapshots.map(function(snapshot) {
+    if (!snapshot || !Array.isArray(snapshot.optionIds)) return null;
+    var word = getWord(snapshot.wordId, poolName);
+    var options = snapshot.optionIds.map(function(id) { return getWord(id, poolName); });
+    var correctIndex = Number(snapshot.correctIndex);
+    if (!word || options.length !== 4 || options.some(function(option) { return !option; }) ||
+        !isFinite(correctIndex) || correctIndex < 0 || correctIndex >= options.length ||
+        options[correctIndex].id !== word.id) return null;
+    return { word: word, options: options, correctIndex: Math.floor(correctIndex) };
+  });
+}
+
+function isCurrentEbbingPlanSnapshot(sq, now) {
+  if (!sq || !sq.isEbbingPlan || sq.poolType !== 'core' || !state.ebbingActive || !sq.ids || !sq.ids.length) return false;
+  return !sq.ebbingPlanDayKey || sq.ebbingPlanDayKey === dayKeyStr(now || new Date());
+}
+
+function isExpiredEbbingPlanSnapshot(sq, now) {
+  return !!(sq && sq.isEbbingPlan && sq.poolType === 'core' && sq.ebbingPlanDayKey &&
+    sq.ebbingPlanDayKey !== dayKeyStr(now || new Date()));
+}
+
 function suspendedQuizSnapshot(q) {
   return {
     mode: q.mode,
@@ -2579,8 +2630,10 @@ function suspendedQuizSnapshot(q) {
     answers: Object.assign({}, q.answers),
     done: q.done,
     reviewCorrect: q.reviewCorrect || 0,
+    questionSnapshots: suspendedQuestionSnapshots(q),
     memoryResults: (q.memoryResults || []).slice(),
     isEbbingPlan: !!q.isEbbingPlan,
+    ebbingPlanDayKey: q.isEbbingPlan && state.ebbingPlan ? state.ebbingPlan.dayKey : null,
     ebbingPlanUnits: (q.ebbingPlanUnits || []).slice(),
     ebbingPlanRemaining: Object.assign({}, q.ebbingPlanRemaining || {}),
     ebbingPlanAnswered: Object.assign({}, q.ebbingPlanAnswered || {}),
@@ -2624,13 +2677,20 @@ function saveSuspendedQuiz() {
 
 function checkSuspendedQuiz() {
   var sq = state.suspendedQuiz;
+  if (isExpiredEbbingPlanSnapshot(sq)) {
+    state.suspendedQuiz = null;
+    saveState();
+    document.getElementById('savedBar').classList.remove('show');
+    return;
+  }
   var remaining = sq ? (sq.ids || (sq.remaining || [])).length : 0;
   if (sq && remaining > 0) {
+    var done = Math.max(0, Math.min(remaining, Number(sq.done) || 0));
     document.getElementById('savedInfo').textContent =
       '暂存的做题进度 — ' + (sq.poolType === 'full' ? '艾宾浩斯打卡词库' : '你还在背单词吗(刘晓艳)') +
       ' · ' + (sq.mode === 'cn2en' ? '看中文选英文' : '看英文选中文') +
       (sq.isRetry ? '（重做模式）' : '') +
-      ' — 已完成' + (sq.done || 0) + '题，剩余' + remaining + '题';
+      ' — 已完成' + done + '题，待完成' + Math.max(0, remaining - done) + '题（共' + remaining + '题）';
     document.getElementById('savedBar').classList.add('show');
     // 不覆盖 currentMode/模式按钮高亮——避免切换模式/题型/词库后被静默拨回挂起的旧模式(恢复做题时由 resumeQuiz 按挂起进度设置)
   }
@@ -2639,6 +2699,11 @@ function checkSuspendedQuiz() {
 function resumeQuiz() {
   var sq = state.suspendedQuiz;
   if (!sq) return;
+  if (isExpiredEbbingPlanSnapshot(sq)) {
+    discardSaved();
+    alert('当天计划已更新，未完成的旧日题目已清除，请开始今天的复习。');
+    return;
+  }
   if (!sq.ids || sq.ids.length === 0) {
     // 旧版挂起数据无法恢复（无题目列表），丢弃
     state.suspendedQuiz = null;
@@ -2660,7 +2725,7 @@ function resumeQuiz() {
     isMemory: !!sq.isMemory,
     ids: sq.ids.slice(),
     pos: -1,
-    questions: [],
+    questions: restoreSuspendedQuestions(sq),
     answers: Object.assign({}, sq.answers || {}),
     done: sq.done || 0,
     current: null,
