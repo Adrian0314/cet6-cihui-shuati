@@ -186,6 +186,12 @@ theme-button{position:relative;display:inline-block;outline:none}
 .favorite-toggle{min-width:34px;padding:6px 10px;color:var(--orange);border-color:rgba(217,119,6,0.35)}
 .favorite-toggle.active{background:rgba(217,119,6,0.12);border-color:var(--orange)}
 .favorite-toggle[aria-pressed="true"]{font-weight:700}
+.word-info-row{display:flex;align-items:flex-start;justify-content:flex-start;gap:18px;margin-top:18px;margin-bottom:16px}
+.word-info-main{flex:0 1 auto;max-width:calc(100% - 130px);min-width:0}
+.word-info-main .q-word{margin-bottom:6px}
+.word-info-main .q-pron{margin-bottom:0}
+.word-info-actions{display:flex;align-items:flex-start;flex:0 0 auto;padding-top:2px}
+.word-info-actions .favorite-toggle{white-space:nowrap}
 
 .stats-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:12px;margin-bottom:16px}
 .sc{background:var(--surface);padding:14px 10px;border-radius:var(--radius-sm);text-align:center;border:1px solid var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
@@ -511,7 +517,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>📅 记忆规律：</strong>核心词库按《你还在背单词吗》书末「艾宾浩斯抗遗忘复习打卡表」（4周25天）调度——每天学习一个新 Unit，按 +1天/+3天/+6天/+12天 的间隔复习之前学过的 Unit；当天的新 Unit 与到期复习 Unit 全部完成后，计划栏会显示“当天目标已完成”。跨日仍未完成时，计划会重置为当天的完整目标，不沿用前一天的部分完成进度。打卡词库按书内每词 8 格记忆周期（5分/30分/12时/1天/2天/4天/7天）调度复习。短周期（5分/30分）在学习会话内提醒，12小时及以后到期的词在打开网页时提醒。</div>
       <div class="rb"><strong>🏰 闯关模式：</strong>严格对应书中使用指南——闯关1「词群速记」：结合词群导图快速检测，认识/不认识直接判断；闯关2「选择检测」：对应书中学完一个 Lesson 后的检测（选择题/默写题）；闯关3「Unit综合测」：学完一个 Unit 后的综合检测（覆盖整个 Unit）。词群导图怎么看，见下方「🗺️ 词群导图」。</div>
       <div class="rb"><strong>🧹 选择题释义显示：</strong>系统会自动清理词库中误混入释义末尾的孤立词性标记，避免选项出现多余的 <code>v.</code>、<code>adj.</code> 等文本。</div>
-      <div class="rb"><strong>⭐ 重点词：</strong>所有做题模式的题目顶部都可直接标记或取消当前单词；状态会同步到「重点词」列表，并影响「智能练习」的优先级。</div>
+      <div class="rb"><strong>⭐ 重点词：</strong>在单词标题与音标右侧/旁边点击「☆ 标记重点」或「★ 已标记」即可标记或取消当前单词；状态会同步到「重点词」列表，并影响「智能练习」的优先级。</div>
       <div class="rb"><strong>🗺️ 词群导图：</strong>答完题后自动显示当前词的词群关系图（单词浏览器中点「🗺️ 导图」按钮也可查看）——中心=词群主题或当前词，四周圆圈=关联词。圆圈外侧的 <span class="gl-badge">2</span> 绿色数字徽标表示该词下面还有几个分支：点击带徽标的圆圈逐层展开，没有徽标的圆圈=末端词（无分支），点击会朗读发音。点击单词文字同样朗读，点「← 返回上级」退回上一层。连线颜色区分关系：绿=派生（扩/合成）、蓝=同根、橙=近义、红=反义、粉=形近、灰=相关，虚线=形近/反义。</div>
       <div class="rb"><strong>📖 单元筛选与学习量：</strong>可手动切换要学习的 Unit（核心词库 Unit 1-14 / 打卡词库 Unit 1-10）；每次学习量按书中页数设定（1页≈20词，可选 1/2/3 页）。</div>
       <div class="rb"><strong>⌨️ 电脑端快捷键：</strong></div>
@@ -3452,15 +3458,17 @@ function renderQuizCard() {
       '<div class="quiz-scroll">' +
       '<div class="quiz-top-row">' +
       '<div class="q-label">' + prefix + '🏰 闯关1 速记 · 第 ' + (pos + 1) + ' / ' + total + ' 词 · ' + modeLabel + '</div>' +
-      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">' + quizFavoriteHTML +
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">' +
       '<button class="toggle-fs-btn" id="toggleFsBtn" onclick="(function(e){e.stopPropagation();toggleFullscreen();})(event)">' + fsText + '</button></div>' +
       '</div>' +
       navBar +
       questionProgressHTML() +
       pageNav +
       (gGroupName ? '<div style="font-size:0.82em;color:var(--accent2);margin-bottom:10px;text-align:center;">📁 ' + gGroupName + '</div>' : '') +
+      '<div class="word-info-row"><div class="word-info-main">' +
       '<div class="q-word" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + word.word + '</div>' +
       (word.pronunciation ? '<div class="q-pron" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + word.pronunciation + ' <span onclick="speakWord(\'' + word.word.replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:1.2em;" title="朗读发音">\u{1F50A}</span></div>' : '') +
+      '</div><div class="word-info-actions">' + quizFavoriteHTML + '</div></div>' +
       (know === false ? '<div style="text-align:center;margin:14px auto 4px;max-width:520px;padding:14px 18px;background:var(--surface2);border-radius:12px;border:1px solid var(--border);">' + getChineseFull(word.meaning) + '</div>' : '') +
       (gateAnswered ? '' : '<div style="display:flex;gap:10px;justify-content:center;margin-top:22px;">' +
         '<button class="gate1-btn ok" id="gateKnowBtn" onclick="handleGate1(true)">✅ 认识</button>' +
@@ -3516,14 +3524,16 @@ function renderQuizCard() {
       '<div class="quiz-scroll">' +
       '<div class="quiz-top-row">' +
       '<div class="q-label">' + prefix + (quizState.isMemory ? '剩余 ' + quizState.ids.length + ' 词' : '第 ' + (pos + 1) + ' / ' + total + ' 题') + ' · ' + modeLabel + typeLabel + '</div>' +
-      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">' + quizFavoriteHTML +
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">' +
       '<button class="toggle-fs-btn" id="toggleFsBtn" onclick="(function(e){e.stopPropagation();toggleFullscreen();})(event)">' + fsText + '</button></div>' +
       '</div>' +
       navBar +
       questionProgressHTML() +
       pageNav +
+      '<div class="word-info-row"><div class="word-info-main">' +
       '<div class="q-word" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qText + '</div>' +
       (qPron ? '<div class="q-pron" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qPron + ' <span onclick="speakWord(\'' + word.word.replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:1.2em;" title="朗读发音">\u{1F50A}</span></div>' : '') +
+      '</div><div class="word-info-actions">' + quizFavoriteHTML + '</div></div>' +
       (mode === 'en2cn' && !qPron ? '<div style="margin-bottom:16px"><span onclick="speakWord(\'' + word.word.replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:1.1em;padding:4px 10px;background:var(--surface2);border-radius:20px;border:1px solid var(--border);display:inline-block;" title="朗读发音">\u{1F50A} 朗读</span></div>' : '') +
       dictInputHTML +
       '</div>' +
@@ -3584,14 +3594,16 @@ function renderQuizCard() {
       '<div class="quiz-scroll">' +
       '<div class="quiz-top-row">' +
       '<div class="q-label">' + prefix + (quizState.isMemory ? '剩余 ' + quizState.ids.length + ' 词' : '第 ' + (pos + 1) + ' / ' + total + ' 题') + ' · ' + modeLabel + '</div>' +
-      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">' + quizFavoriteHTML +
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">' +
       '<button class="toggle-fs-btn" id="toggleFsBtn" onclick="(function(e){e.stopPropagation();toggleFullscreen();})(event)">' + fsText + '</button></div>' +
       '</div>' +
       navBar +
       questionProgressHTML() +
       pageNav +
+      '<div class="word-info-row"><div class="word-info-main">' +
       '<div class="q-word" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qText + '</div>' +
       (qPron ? '<div class="q-pron" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qPron + '</div>' : '') +
+      '</div><div class="word-info-actions">' + quizFavoriteHTML + '</div></div>' +
       (mode === 'en2cn' ? '<div style="margin-bottom:16px"><span onclick="speakWord(\'' + word.word.replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:1.05em;padding:4px 12px;background:var(--surface2);border-radius:20px;border:1px solid var(--border);display:inline-block;" title="朗读发音">\u{1F50A} 朗读</span></div>' : '') +
       '<div class="options">' + optHTML + '</div>' +
       fbHTML +
