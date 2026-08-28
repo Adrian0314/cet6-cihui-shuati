@@ -530,6 +530,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>📡 离线说明：</strong>所有功能（含统计图表）均已内置，无需网络即可使用。用手机浏览器打开本页后，选择「添加到主屏幕」，即可像 App 一样全屏使用（需通过 https 地址访问，本地双击打开不支持安装）。</div>
       <div class="rb"><strong>🎯 每日目标：</strong>统计页可自选每日目标（做题+复习总数），达标后做题页会弹出庆祝提示；学习热力图的深绿色格子即代表"当日达标"。核心词库的艾宾浩斯打卡表则以当天计划的全部 Unit 完成为准，完成后计划栏显示“当天目标已完成”。</div>
       <div class="rb"><strong>🧠 记忆模式：</strong>做完一题即从队列移除，答错的词按当前词库的书中记忆规律自动排期回来复习。打开网页时若有到期单词，做题页顶部会显示复习横幅，点击"开始复习"一键清债；复习采用四选一快刷，复习中跳过视同答错。复习只从首次作答开始计，历史数据不迁移。</div>
+      <div class="rb"><strong>💾 中途退出：</strong>做题过程中刷新页面、关闭网页或下次重新打开时，系统会自动保存当前题位、已答数量以及 4 周 25 天计划的当日进度；打开后点击顶部“继续做题”即可接着完成。</div>
       <div class="rb"><strong>🧠 智能练习：</strong>这不是生成式 AI，而是按规则自动安排优先级：先练重点词和已经到期的复习词，再练从未做过、错误率较高或答错次数较多的词。系统从当前词库和 Unit 筛选范围中取词，数量按“每次学习”设置的 20/40/60 词决定，并沿用当前的做题方向、题目类型和闯关模式。智能练习不是只练错题；只练错题请使用“重做当前模式错题”，智能练习答错的单词仍会进入错题本。</div>
       <div class="rb" style="text-align:center;margin-top:8px;"><span style="color:var(--accent2);cursor:pointer;text-decoration:underline;" onclick="document.getElementById('rulesCard').classList.toggle('collapsed')">点击收起 ▲</span></div>
     </div>
@@ -2566,6 +2567,31 @@ function startReview() {
 }
 
 // ============ SAVE / RESUME QUIZ ============
+function suspendedQuizSnapshot(q) {
+  return {
+    mode: q.mode,
+    isRetry: q.isRetry,
+    isSmart: !!q.isSmart,
+    isReview: !!q.isReview,
+    isMemory: !!q.isMemory,
+    ids: q.ids.slice(),
+    pos: q.pos,
+    answers: Object.assign({}, q.answers),
+    done: q.done,
+    reviewCorrect: q.reviewCorrect || 0,
+    memoryResults: (q.memoryResults || []).slice(),
+    isEbbingPlan: !!q.isEbbingPlan,
+    ebbingPlanUnits: (q.ebbingPlanUnits || []).slice(),
+    ebbingPlanRemaining: Object.assign({}, q.ebbingPlanRemaining || {}),
+    ebbingPlanAnswered: Object.assign({}, q.ebbingPlanAnswered || {}),
+    poolType: q.poolType || currentPool,
+    currentId: q.current ? q.current.word.id : null,
+    memWrong: q.memWrong || 0,
+    memTotal: q.memTotal || q.ids.length,
+    pageStart: q.pageStart || 0
+  };
+}
+
 function initializeEbbingPlanQuiz() {
   if (!quizState || !quizState.isEbbingPlan || quizState.poolType !== 'core') return;
   quizState.ebbingPlanUnits = dueUnitsByEbbing();
@@ -2589,28 +2615,7 @@ function trackEbbingPlanQuestion(word) {
 
 function saveSuspendedQuiz() {
   if (!quizActive) return;
-  state.suspendedQuiz = {
-    mode: quizState.mode,
-    isRetry: quizState.isRetry,
-    isSmart: !!quizState.isSmart,
-    isReview: !!quizState.isReview,
-    ids: quizState.ids.slice(),
-    pos: quizState.pos,
-    answers: Object.assign({}, quizState.answers),
-    done: quizState.done,
-    reviewCorrect: quizState.reviewCorrect || 0,
-    isMemory: !!quizState.isMemory,
-    memWrong: quizState.memWrong || 0,
-    memTotal: quizState.memTotal || quizState.ids.length,
-    memoryResults: (quizState.memoryResults || []).slice(),
-    isEbbingPlan: !!quizState.isEbbingPlan,
-    ebbingPlanUnits: (quizState.ebbingPlanUnits || []).slice(),
-    ebbingPlanRemaining: Object.assign({}, quizState.ebbingPlanRemaining || {}),
-    ebbingPlanAnswered: Object.assign({}, quizState.ebbingPlanAnswered || {}),
-    poolType: quizState.poolType || currentPool,
-    currentId: quizState.current ? quizState.current.word.id : null,
-    pageStart: quizState.pageStart || 0
-  };
+  state.suspendedQuiz = suspendedQuizSnapshot(quizState);
   saveState();
   quizActive = false;
   quizState.isRetry = false;
@@ -2779,24 +2784,7 @@ function askKeepPrefs() {
 // ============ AUTO-SAVE ON EXIT (退出页面自动保留做题进度，不打断当前做题) ============
 function autoSaveProgress() {
   if (!quizActive) return;
-  var q = quizState;
-  state.suspendedQuiz = {
-    mode: q.mode,
-    isRetry: q.isRetry,
-    isSmart: !!q.isSmart,
-    isReview: !!q.isReview,
-    isMemory: !!q.isMemory,
-    ids: q.ids.slice(),
-    pos: q.pos,
-    answers: Object.assign({}, q.answers),
-    done: q.done,
-    reviewCorrect: q.reviewCorrect || 0,
-    poolType: q.poolType || currentPool,
-    currentId: q.current ? q.current.word.id : null,
-    memWrong: q.memWrong || 0,
-    memTotal: q.memTotal || q.ids.length,
-    pageStart: q.pageStart || 0
-  };
+  state.suspendedQuiz = suspendedQuizSnapshot(quizState);
   saveState();
 }
 window.addEventListener('pagehide', autoSaveProgress);
