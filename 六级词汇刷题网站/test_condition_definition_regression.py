@@ -106,6 +106,45 @@ class ChoiceDefinitionRegressionTest(unittest.TestCase):
         self.assertIn("速度", option_text, "tempo must render a Chinese definition in choices")
         context.close()
 
+    def test_animal_choice_text_includes_its_chinese_definition(self) -> None:
+        context = self.browser.new_context()
+        page = context.new_page()
+        page.goto(QUIZ_HTML.as_uri(), wait_until="load")
+
+        option_text = page.evaluate(
+            """() => {
+                const animal = ALL_WORDS.find((word) => word.word === 'animal');
+                const distractors = ALL_WORDS.filter((word) => word.word !== 'animal').slice(0, 3);
+                currentPool = 'core';
+                currentMode = 'en2cn';
+                currentQuizType = 'choice';
+                quizActive = true;
+                const question = {
+                    word: animal,
+                    options: [animal, ...distractors],
+                    correctIndex: 0
+                };
+                quizState = {
+                    mode: 'en2cn',
+                    isRetry: false,
+                    isSmart: false,
+                    isMemory: false,
+                    isReview: false,
+                    ids: [animal.id],
+                    pos: 0,
+                    questions: [question],
+                    answers: {},
+                    done: 0,
+                    current: question
+                };
+                renderQuizCard();
+                return document.querySelector('#opt-0').textContent;
+            }"""
+        )
+
+        self.assertIn("动物", option_text, "animal must render a Chinese definition in choices")
+        context.close()
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
