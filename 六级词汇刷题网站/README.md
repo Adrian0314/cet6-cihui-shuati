@@ -2,7 +2,7 @@
 
 一个**单文件、完全离线可用**的 CET-6 词汇刷题系统，词库严格来自两本纸质教辅书，支持 PWA 安装到手机/电脑，像原生 App 一样全屏使用。
 
-> **在线体验**：https://adrian0314.github.io/cet6-cihui-shuati/cet6_quiz.html
+> **在线体验**：https://adrian0314.github.io/cet6-cihui-shuati/%E5%85%AD%E7%BA%A7%E8%AF%8D%E6%B1%87%E5%88%B7%E9%A2%98%E7%BD%91%E7%AB%99/cet6_quiz.html
 
 ## 🛠 最近更新
 
@@ -15,7 +15,7 @@
 - 修复 4 周 25 天计划的复习提醒仍显示原始总词数的问题；当天有暂存队列时，提醒会实时显示尚未完成的 Unit、已完成题数和待完成题数。
 - 修复蓝牙设备连接后点击朗读按钮偶发无声的问题；现在优先使用跟随视频/音乐输出路由的媒体音频，网络音频失败时自动回退系统 TTS。
 - 修复 `tempo` 选择题选项只显示词性 `n`、缺少中文释义的问题。
-- 修复 `animal` 等基础词条的选择题选项只显示词性、缺少中文释义的问题，并增加回归测试覆盖。
+- 修复 `animal`、`their`、`hear`、`manoeuvre` 词条的原始释义/音标错误，选择题选项与词库浏览统一显示正确内容；同步更新 GitHub Pages 二维码及嵌套目录入口。
 
 ## 📚 词库
 
@@ -133,13 +133,13 @@
 
 ### 方式四：手机快速使用
 
-手机上点击这个链接 **https://adrian0314.github.io/cet6-cihui-shuati/cet6_quiz.html**，用浏览器打开，点击右上角三个点，点击 **「添加到主屏幕」** 即可在桌面快速点击使用（全屏运行、可离线）。
+手机上点击这个链接 **https://adrian0314.github.io/cet6-cihui-shuati/%E5%85%AD%E7%BA%A7%E8%AF%8D%E6%B1%87%E5%88%B7%E9%A2%98%E7%BD%91%E7%AB%99/cet6_quiz.html**，用浏览器打开，点击右上角三个点，点击 **「添加到主屏幕」** 即可在桌面快速点击使用（全屏运行、可离线）。
 
 ### 方式五：词群导图查看器（只看导图）
 
 不想做题、只想浏览词群导图时使用——Unit 1-10 全部词群整树展示，不用一个一个点节点：
 
-- **在线版**：https://adrian0314.github.io/cet6-cihui-shuati/word-maps-viewer.html
+- **在线版**：https://adrian0314.github.io/cet6-cihui-shuati/%E5%85%AD%E7%BA%A7%E8%AF%8D%E6%B1%87%E5%88%B7%E9%A2%98%E7%BD%91%E7%AB%99/word-maps-viewer.html
 - **离线单文件版**：双击 `word-maps-viewer-offline.html`（数据已内联，单文件可拷到 U 盘/手机/别的电脑，无需网络、无需 data 目录）
 - **离线外置版**：双击 `word-maps-viewer.html`（需与 `data/` 目录同放）
 - 功能：Unit/词群下拉切换、🔍 搜索单词自动定位并高亮、点卡片朗读发音、点 ○ 折叠/展开分支、滚轮/双指缩放、拖拽平移、⬇ 导出 SVG/PNG

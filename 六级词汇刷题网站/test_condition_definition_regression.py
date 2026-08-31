@@ -145,6 +145,55 @@ class ChoiceDefinitionRegressionTest(unittest.TestCase):
         self.assertIn("动物", option_text, "animal must render a Chinese definition in choices")
         context.close()
 
+    def test_reported_vocab_entries_are_repaired_in_embedded_data(self) -> None:
+        """The four screenshot-reported entries must be correct at source/runtime."""
+        context = self.browser.new_context()
+        page = context.new_page()
+        page.goto(QUIZ_HTML.as_uri(), wait_until="load")
+        entries = page.evaluate(
+            """() => ['animal', 'their', 'hear', 'manoeuvre'].map((word) => {
+                const entry = ALL_WORDS.find((item) => item.word === word);
+                return { word, meaning: entry && entry.meaning, pronunciation: entry && entry.pronunciation };
+            })"""
+        )
+        expected = {
+            'animal': ('动物', None),
+            'their': ('det.他/她/它们', None),
+            'hear': ('v.听见', None),
+            'manoeuvre': ('n.机动动作;策略,手段 v.操纵,控制', '/məˈnuːvə(r)/'),
+        }
+        for entry in entries:
+            meaning, pronunciation = expected[entry['word']]
+            self.assertIn(meaning, entry['meaning'])
+            if pronunciation:
+                self.assertEqual(entry['pronunciation'], pronunciation)
+        context.close()
+
+    def test_chinese_slash_alternatives_are_preserved(self) -> None:
+        context = self.browser.new_context()
+        page = context.new_page()
+        page.goto(QUIZ_HTML.as_uri(), wait_until="load")
+        option_text = page.evaluate(
+            """() => {
+                const their = ALL_WORDS.find((word) => word.word === 'their');
+                const distractors = ALL_WORDS.filter((word) => word.word !== 'their').slice(0, 3);
+                currentPool = 'core';
+                currentMode = 'en2cn';
+                currentQuizType = 'choice';
+                quizActive = true;
+                const question = { word: their, options: [their, ...distractors], correctIndex: 0 };
+                quizState = {
+                    mode: 'en2cn', isRetry: false, isSmart: false, isMemory: false,
+                    isReview: false, ids: [their.id], pos: 0, questions: [question],
+                    answers: {}, done: 0, current: question
+                };
+                renderQuizCard();
+                return document.querySelector('#opt-0').textContent;
+            }"""
+        )
+        self.assertIn('他/她/它们', option_text)
+        context.close()
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
