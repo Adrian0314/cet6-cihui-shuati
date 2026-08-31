@@ -109,7 +109,7 @@
 
 ### 方式一：本地使用
 
-直接双击 `cet6_quiz.html` 用浏览器打开即可。
+进入 `六级词汇刷题网站/` 目录，直接双击 `六级词汇刷题网站/cet6_quiz.html` 用浏览器打开即可。
 
 ### 方式二：安装为 App
 
@@ -125,9 +125,9 @@
 
 仓库附带词群导图编辑工具链，需本机安装 [Node.js](https://nodejs.org/)（建议 18+）：
 
-1. 双击 **`打开词群编辑器.bat`**：自动检测词典服务端口（17989），未运行则拉起 `node dict-server.js`，随后在浏览器打开 `word-map-editor.html`
-2. 编辑器支持：从有道词典抓取单词讲解（本地服务离线时尝试直连）、可视化编辑词群导图节点、保存回 `data/unit-maps.js`
-3. 也可单独双击 **`启动词典服务.bat`** 只启动服务；改完导图重新发布即可更新网站的词群导图
+1. 在 `六级词汇刷题网站/` 目录双击 **`打开词群编辑器.bat`**：自动检测词典服务端口（17989），未运行则拉起 `node dict-server.js`，随后在浏览器打开 `word-map-editor.html`
+2. 编辑器支持：从有道词典抓取单词讲解（本地服务离线时尝试直连）、可视化编辑词群导图节点、保存回 `六级词汇刷题网站/data/unit-maps.js`
+3. 也可单独双击 `六级词汇刷题网站/启动词典服务.bat` 只启动服务；改完导图重新发布即可更新网站的词群导图
 
 > 说明：`dict-server.js` 仅用 Node 内置模块（http/https/fs），无 npm 依赖；词典数据来自有道公开接口。
 
@@ -140,28 +140,30 @@
 不想做题、只想浏览词群导图时使用——Unit 1-10 全部词群整树展示，不用一个一个点节点：
 
 - **在线版**：https://adrian0314.github.io/cet6-cihui-shuati/%E5%85%AD%E7%BA%A7%E8%AF%8D%E6%B1%87%E5%88%B7%E9%A2%98%E7%BD%91%E7%AB%99/word-maps-viewer.html
-- **离线单文件版**：双击 `word-maps-viewer-offline.html`（数据已内联，单文件可拷到 U 盘/手机/别的电脑，无需网络、无需 data 目录）
-- **离线外置版**：双击 `word-maps-viewer.html`（需与 `data/` 目录同放）
+- **离线单文件版**：双击 `六级词汇刷题网站/word-maps-viewer-offline.html`（数据已内联，单文件可拷到 U 盘/手机/别的电脑，无需网络、无需 data 目录）
+- **离线外置版**：双击 `六级词汇刷题网站/word-maps-viewer.html`（需与 `六级词汇刷题网站/data/` 目录同放）
 - 功能：Unit/词群下拉切换、🔍 搜索单词自动定位并高亮、点卡片朗读发音、点 ○ 折叠/展开分支、滚轮/双指缩放、拖拽平移、⬇ 导出 SVG/PNG
 
-> 词库/导图数据更新后，运行 `node tools/build-core-words.js` 再运行 `node tools/build-offline-viewer.js`，可同步词库索引并重新生成离线单文件版。
+> 词库/导图数据更新后，在仓库根目录运行 `node tools/build-core-words.js`，再运行 `node tools/build-offline-viewer.js`，可同步词库索引并重新生成离线单文件版。
 
 ## 🗂 项目结构
 
 ```
-cet6_quiz.html      主程序（单文件，含全部数据 + 图表库）
-cet6_quiz.spec.js   Playwright 自动化测试
-word-maps-viewer.html 词群导图查看器（在线版，外置数据）
-word-maps-viewer-offline.html 词群导图查看器（离线单文件版，数据内联）
-word-map-editor.html 词群导图编辑器（维护工具）
-dict-server.js      本地词典抓取服务（node dict-server.js，端口 17989）
-打开词群编辑器.bat     一键启动编辑器（自动拉起词典服务）
-启动词典服务.bat       单独启动词典服务
-manifest.json       PWA 应用清单
-sw.js               Service Worker（离线缓存）
-icons/              应用图标（192 / 512 / 苹果）
-data/               外置词库数据（full-words.js / unit-maps.js / core-words.js）
-tools/              构建脚本（build-core-words.js 生成词库索引 / build-offline-viewer.js 生成离线单文件版）
+README.md             项目说明（仓库根目录）
+六级词汇刷题网站/     网站程序目录（以下文件均位于此目录）
+  cet6_quiz.html      主程序（单文件，含全部数据 + 图表库）
+  cet6_quiz.spec.js   Playwright 自动化测试
+  word-maps-viewer.html 词群导图查看器（在线版，外置数据）
+  word-maps-viewer-offline.html 词群导图查看器（离线单文件版，数据内联）
+  word-map-editor.html 词群导图编辑器（维护工具）
+  dict-server.js      本地词典抓取服务（node dict-server.js，端口 17989）
+  打开词群编辑器.bat     一键启动编辑器（自动拉起词典服务）
+  启动词典服务.bat       单独启动词典服务
+  manifest.json       PWA 应用清单
+  sw.js               Service Worker（离线缓存）
+  icons/              应用图标（192 / 512 / 苹果）
+  data/               外置词库数据（full-words.js / unit-maps.js / core-words.js）
+tools/                仓库根目录构建脚本（build-core-words.js 生成词库索引 / build-offline-viewer.js 生成离线单文件版）
 ```
 
 ## 🛠 技术栈
