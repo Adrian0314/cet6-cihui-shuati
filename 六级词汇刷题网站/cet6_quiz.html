@@ -1879,7 +1879,7 @@ function stripPronunciation(text) {
   var source = String(text || '');
   // 词库中偶有“in'kwaɪə(r)/ v.询问”这类缺失开头斜杠的音标前缀；
   // 仅在后面紧跟词性标记时移除，中文释义中的“他/她/它们”等斜杠保持不变。
-  source = source.replace(/^\s*[^\s\u3400-\u9fff\/]{2,40}\s*\/\s*(?=[a-z]+(?:\s*&\s*[a-z]+)?\.)/i, '');
+  source = source.replace(/^\s*[^\s\u3400-\u9fff\/.]{2,40}\s*\/\s*(?=[a-z]+(?:\s*&\s*[a-z]+)?\.)/i, '');
   return source.replace(/\/([^\/]+)\//g, function(match, inner) {
     var hasLatinOrIpa = /[A-Za-zəɪɔʊɑɛɒʌɜːʃʒθðŋɡɹɻɾɞɐɒˈˌ'()]/.test(inner);
     var hasCjk = /[\u3400-\u9fff]/.test(inner);
@@ -2242,7 +2242,7 @@ function generateOneQuestion(word) {
     var shuffled = pool.slice().sort(function() { return Math.random() - 0.5; });
     for (var k = 0; k < shuffled.length && clean.length < 3; k++) {
       var st = shuffled[k].word.toLowerCase();
-      if (!seenText[st]) {
+      if (!seenText[st] && isUsableDistractor(shuffled[k], word, quizState.mode)) {
         clean.push(shuffled[k]);
         seenText[st] = true;
       }
