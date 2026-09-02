@@ -1905,7 +1905,8 @@ function getChineseOptionText(meaning) {
        .replace(/\s+([,.;!?，。；！？])/g, '$1')
        .replace(/\s{2,}/g, ' ').trim();
   // 覆盖拉丁扩展与全角字母，防止非 ASCII 英文残留绕过上面的清洗。
-  s = s.replace(/[\u00c0-\u024f\u1e00-\u1eff\uff21-\uff3a\uff41-\uff5a]/g, '');
+  s = s.replace(/[\u00c0-\u024f\u1e00-\u1eff\uff21-\uff3a\uff41-\uff5a]/g, '')
+       .replace(/\s{2,}/g, ' ').trim();
   return /[\u3400-\u9fff]/.test(s) ? s : '';
 }
 

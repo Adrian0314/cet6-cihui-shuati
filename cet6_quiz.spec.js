@@ -1363,18 +1363,18 @@ test.describe('mode-specific other-option feedback', () => {
       return {
         rows: found,
         optionRows: options ? options.querySelectorAll(':scope > div').length : 0,
-        optionText: options ? options.textContent : '',
+        optionBodies: options ? Array.from(options.querySelectorAll(':scope > div')).map(row => row.textContent.replace(/^[A-D]\.\s*/, '')) : [],
         html: fb ? fb.innerHTML : ''
       };
     });
   }
 
   test('en2cn: other options show cleaned Chinese only', async ({ page }) => {
-    await page.click('.mode-btn[data-mode="en2cn"]');
+    await page.selectOption('#modeSelect', 'en2cn');
     const result = await answerWrong(page);
     expect(result.optionRows).toBe(3); // 其余选项仍保留 3 行
     expect(result.rows.length).toBe(0); // 但不再输出英文单词/音标
-    expect(result.optionText).not.toMatch(/[A-Za-z]/);
+    result.optionBodies.forEach(text => expect(text).not.toMatch(/[A-Za-z]/));
   });
 
   test('cn2en: other options still include english word (regression)', async ({ page }) => {
