@@ -303,6 +303,28 @@ test('getChineseFull keeps all POS tags (display) while getChinese strips first 
   expect(r3).toBe('v./n. 辩论，讨论');
 });
 
+test('en2cn option text removes Latin residue and rejects empty candidates', async ({ page }) => {
+  const result = await page.evaluate(() => ({
+    cleaned: getChineseOptionText('n. 设备（bike；Sure）; be supposed to 使用'),
+    slash: getChineseOptionText('n. 他/她/它们'),
+    ipaSymbol: getChineseOptionText('n. 灰（古英语中的一个字母，也为音标）æ'),
+    empty: getChineseOptionText('adj. (obsolete)')
+  }));
+  expect(result.cleaned).toBe('设备; 使用');
+  expect(result.cleaned).not.toMatch(/[A-Za-z]/);
+  expect(result.slash).toBe('他/她/它们');
+  expect(result.ipaSymbol).not.toContain('æ');
+  expect(result.empty).toBe('');
+});
+
+test('all vocabulary en2cn option texts contain no Latin letters', async ({ page }) => {
+  const bad = await page.evaluate(() => ALL_WORDS
+    .map(word => ({ word: word.word, text: getChineseOptionText(word.meaning) }))
+    .filter(item => /[A-Za-z]/.test(item.text))
+    .slice(0, 10));
+  expect(bad).toEqual([]);
+});
+
 test('feedback question line shows all POS tags for multi-POS word', async ({ page }) => {
   await page.click('button:has-text("开始做题")');
   await page.waitForSelector('.opt-btn');
@@ -1316,7 +1338,7 @@ test('page load with saved full pool does not crash before async words ready', a
   expect(txt).toContain('3324');
 });
 
-test.describe('other options show english word on wrong answer', () => {
+test.describe('mode-specific other-option feedback', () => {
   async function answerWrong(page) {
     await page.evaluate(() => {
       const g2 = document.querySelector('#gateRow .mode-btn[data-gate="2"]');
@@ -1337,20 +1359,29 @@ test.describe('other options show english word on wrong answer', () => {
       const found = [];
       let mm;
       while ((mm = re.exec(fb.innerHTML)) !== null) found.push({ label: mm[1], word: mm[2] });
-      return found;
+      const options = fb ? fb.querySelector('.feedback-options') : null;
+      return {
+        rows: found,
+        optionRows: options ? options.querySelectorAll(':scope > div').length : 0,
+        optionText: options ? options.textContent : '',
+        html: fb ? fb.innerHTML : ''
+      };
     });
   }
 
-  test('en2cn: other options include english word', async ({ page }) => {
+  test('en2cn: other options show cleaned Chinese only', async ({ page }) => {
     await page.click('.mode-btn[data-mode="en2cn"]');
-    const rows = await answerWrong(page);
-    expect(rows.length).toBe(3); // 其余选项 3 行
-    rows.forEach(r => expect(r.word).toMatch(/^[a-z]+$/i));
+    const result = await answerWrong(page);
+    expect(result.optionRows).toBe(3); // 其余选项仍保留 3 行
+    expect(result.rows.length).toBe(0); // 但不再输出英文单词/音标
+    expect(result.optionText).not.toMatch(/[A-Za-z]/);
   });
 
   test('cn2en: other options still include english word (regression)', async ({ page }) => {
-    const rows = await answerWrong(page); // 默认 cn2en
-    expect(rows.length).toBe(3);
+    const result = await answerWrong(page); // 默认 cn2en
+    expect(result.optionRows).toBe(3);
+    expect(result.rows.length).toBe(3);
+    result.rows.forEach(r => expect(r.word).toMatch(/^[a-z]+$/i));
   });
 });
 

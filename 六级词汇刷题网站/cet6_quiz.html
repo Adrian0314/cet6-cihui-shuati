@@ -518,7 +518,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>🏰 闯关模式：</strong>严格对应书中使用指南——闯关1「词群速记」：结合词群导图快速检测，认识/不认识直接判断；闯关2「选择检测」：对应书中学完一个 Lesson 后的检测（选择题/默写题）；闯关3「Unit综合测」：学完一个 Unit 后的综合检测（覆盖整个 Unit）。词群导图怎么看，见下方「🗺️ 词群导图」。</div>
       <div class="rb"><strong>📖 答题后信息顺序：</strong>提交答案或跳过后，题目与正确答案下方紧接默认展开的“单词详解”（巧记、例句、派生词）；随后显示“⚠️ 易混淆词”辨析和词群归属信息，最后显示“🗺️ 词群导图”。点击“📖 单词详解”标题可收起或重新展开，导图可继续点击圆圈下钻查看关联词。</div>
       <div class="rb"><strong>🧹 选择题释义显示：</strong>系统会自动清理词库中误混入释义末尾的孤立词性标记，并修复已知词条错误（<code>animal</code> 补全释义、<code>their</code> 去除多余“们”、<code>hear</code> 清理尾部残缺标点、<code>manoeuvre</code> 校正音标与释义字段），避免选项出现多余的 <code>v.</code>、<code>adj.</code> 或只有词性没有中文释义的文本。在线入口二维码指向 GitHub Pages 最新做题页。</div>
-      <div class="rb"><strong>🧹 中文选项清理：</strong>英文→中文选择题会自动移除释义中混入的音标（包括缺少开头斜杠但以斜杠接词性结尾的异常格式），保留中文释义中的正常斜杠用法；中文→英文选项仍保留独立音标辅助。超过 90 个汉字的极长释义不会作为中文干扰项，系统优先从同词性、同前缀、易混淆或释义相近的短释义候选补位，保证四个选项可用且不修改原词库。</div>
+      <div class="rb"><strong>🧹 中文选项清理：</strong>英文→中文选择题只显示中文释义和标点，会自动移除混入的音标、拉丁字母、词性缩写及英文括号说明（包括缺少开头斜杠但以斜杠接词性结尾的异常格式），保留中文释义中的正常斜杠用法；中文→英文选项仍保留独立音标辅助。超过 90 个汉字的极长释义或清洗后无中文的候选不会作为中文干扰项，系统优先从同词性、同前缀、易混淆或释义相近的短释义候选补位，保证四个选项可用且不修改原词库。</div>
       <div class="rb"><strong>🧩 选项释义去重：</strong>英文选中文模式会自动比较四个选项的中文核心释义，跳过完全相同或高度重叠的释义，避免 <code>inquire/enquire</code>、<code>optimal/optimum</code> 这类词同时造成歧义；词库中的合法同义词仍会保留，只有在候选不足的极小自定义词池中才使用重复释义兜底。</div>
       <div class="rb"><strong>⭐ 重点词：</strong>在单词标题与音标右侧/旁边点击「☆ 标记重点」或「★ 已标记」即可标记或取消当前单词；状态会同步到「重点词」列表，并影响「智能练习」的优先级。</div>
       <div class="rb"><strong>🗺️ 词群导图：</strong>答完题后自动显示当前词的词群关系图（单词浏览器中点「🗺️ 导图」按钮也可查看）——中心=词群主题或当前词，四周圆圈=关联词。圆圈外侧的 <span class="gl-badge">2</span> 绿色数字徽标表示该词下面还有几个分支：点击带徽标的圆圈逐层展开，没有徽标的圆圈=末端词（无分支），点击会朗读发音。点击单词文字同样朗读，点「← 返回上级」退回上一层。连线颜色区分关系：绿=派生（扩/合成）、蓝=同根、橙=近义、红=反义、粉=形近、灰=相关，虚线=形近/反义。</div>
@@ -1891,6 +1891,24 @@ function getChineseFull(meaning) {
   return stripPronunciation(meaning).replace(/\s{2,}/g, ' ').trim();
 }
 
+// 英文→中文选择题专用显示文本：只保留中文释义和标点。
+// 词库释义中的英文括注（如 "(play at)"、"（Sure）"）、POS 缩写、残留音标均不展示。
+function getChineseOptionText(meaning) {
+  var s = getChineseFull(meaning);
+  // 含拉丁字母的中英文括号说明整体移除；中文括号内容保留。
+  s = s.replace(/\([^()]*[A-Za-z][^()]*\)/g, ' ')
+       .replace(/（[^（）]*[A-Za-z][^（）]*）/g, ' ');
+  // 再移除所有拉丁字母/音标字符，避免 bike、Sure、be supposed to 等残留。
+  s = s.replace(/[A-Za-zəɪɔʊɑɛɒʌɜːʃʒθðŋɡɹɻɾɞɐˈˌ]/g, '');
+  // 清掉字母移除后遗留的 POS 点号、空括号及多余空格。
+  s = s.replace(/[()（）]/g, ' ').replace(/\.{1,}/g, ' ')
+       .replace(/\s+([,.;!?，。；！？])/g, '$1')
+       .replace(/\s{2,}/g, ' ').trim();
+  // 覆盖拉丁扩展与全角字母，防止非 ASCII 英文残留绕过上面的清洗。
+  s = s.replace(/[\u00c0-\u024f\u1e00-\u1eff\uff21-\uff3a\uff41-\uff5a]/g, '');
+  return /[\u3400-\u9fff]/.test(s) ? s : '';
+}
+
 // 用于选择题去重的中文释义键：只保留汉字，避免词性、音标和标点差异
 // 让“询问，打听”与“ɪn'kwaɪə(r)/ v.询问，打听”被误判为不同选项。
 function meaningChineseKey(meaning) {
@@ -2974,13 +2992,13 @@ function wrongOptionsHTML(q, mode, chosenIndex) {
       '<span onclick="speakWord(&quot;' + o.word + '&quot;)" style="cursor:pointer;margin-left:8px;font-size:0.95em;display:inline-block;vertical-align:middle;" title="朗读发音">\u{1F50A}</span>';
     var picked = (typeof chosenIndex === 'number' && i === chosenIndex)
       ? ' <span style="color:var(--red);font-size:0.85em;margin-left:6px;">← 你选的</span>' : '';
-    // en2cn 模式：其余选项同样显示对应英文单词+音标，便于答错后对照学习
+    // en2cn 模式：其余选项仅显示清洗后的中文释义；cn2en 才显示英文单词和音标
     var text = (mode === 'cn2en')
       ? '<strong>' + o.word + '</strong>' + (o.pronunciation ? ' <span style="color:var(--text2);font-size:0.85em;">' + o.pronunciation + '</span>' : '') + speak + ' <span style="color:var(--text2);">' + getChineseFull(o.meaning) + '</span>'
-      : '<strong>' + o.word + '</strong>' + (o.pronunciation ? ' <span style="color:var(--text2);font-size:0.85em;">' + o.pronunciation + '</span>' : '') + ' <span style="color:var(--text2);">' + getChineseFull(o.meaning) + '</span>';
-    rows += '<div style="margin:4px 0;"><span style="display:inline-block;min-width:20px;font-weight:700;color:var(--text2);">' + labels[i] + '.</span> ' + text + (mode === 'en2cn' ? speak : '') + picked + '</div>';
+      : '<span style="color:var(--text2);">' + getChineseOptionText(o.meaning) + '</span>';
+    rows += '<div style="margin:4px 0;"><span style="display:inline-block;min-width:20px;font-weight:700;color:var(--text2);">' + labels[i] + '.</span> ' + text + (mode === 'en2cn' ? '' : speak) + picked + '</div>';
   }
-  return rows ? '<div style="margin:8px 0 2px;"><b>其余选项：</b></div>' + rows : '';
+  return rows ? '<div class="feedback-options" style="margin:8px 0 2px;"><b>其余选项：</b>' + rows + '</div>' : '';
 }
 
 // 选择题显示质量控制：P95 释义约 41 个汉字，90 个汉字可覆盖极端长词条，
@@ -2996,7 +3014,7 @@ function isUsableDistractor(word, correctWord, mode) {
   if (!word || !word.word || !word.meaning) return false;
   if (correctWord && word.id === correctWord.id) return false;
   // 中文选项禁止超长释义，避免 do/play/turn 等词条撑满整行。
-  if (mode === 'en2cn' && isLongOptionMeaning(word)) return false;
+  if (mode === 'en2cn' && (isLongOptionMeaning(word) || !getChineseOptionText(word.meaning))) return false;
   return true;
 }
 // 反馈补充区统一顺序：单词详解在前，易混淆词在后。调用方再接词群导图。
@@ -3704,13 +3722,13 @@ function renderQuizCard() {
         '<div class="feedback show ' + (answerVal.correct ? 'ok' : (answerVal.close ? 'close' : 'fail')) + '">' +
         '<h4>' + (answerVal.correct ? '\u2705 \u6B63\u786E\uFF01' : (answerVal.close ? '\uD83D\uDFE1 \u63A5\u8FD1\u6B63\u786E' : '\u274C \u9519\u8BEF')) + '</h4>' +
         '<div style="margin:6px 0;"><b>\u4F60\u7684\u7B54\u6848\uFF1A</b>' + answerVal.text + '</div>' +
-        '<div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + ((mode === 'cn2en') ? word.word : getChineseFull(word.meaning)) + speakBtnFor(word, mode) + '</div>' +
+        '<div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + ((mode === 'cn2en') ? word.word : getChineseOptionText(word.meaning)) + speakBtnFor(word, mode) + '</div>' +
         '</div>' +
         feedbackDetailsHTML(word, mode);
     } else if (isSkip) {
       dictInputHTML =
-        '<input type="text" class="dict-input result-orange" value="' + ((mode === 'cn2en') ? word.word : getChineseFull(word.meaning)) + '" disabled style="opacity:0.9">' +
-        '<div class="feedback show close"><h4>\u{1F6AA} \u5DF2\u8DF3\u8FC7</h4><div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + ((mode === 'cn2en') ? word.word : getChineseFull(word.meaning)) + speakBtnFor(word, mode) + '</div></div>' +
+        '<input type="text" class="dict-input result-orange" value="' + ((mode === 'cn2en') ? word.word : getChineseOptionText(word.meaning)) + '" disabled style="opacity:0.9">' +
+        '<div class="feedback show close"><h4>\u{1F6AA} \u5DF2\u8DF3\u8FC7</h4><div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + ((mode === 'cn2en') ? word.word : getChineseOptionText(word.meaning)) + speakBtnFor(word, mode) + '</div></div>' +
         feedbackDetailsHTML(word, mode);
     } else {
       dictInputHTML =
@@ -3760,7 +3778,7 @@ function renderQuizCard() {
     var delays = [0, 60, 120, 180];
     for (var i = 0; i < q.options.length; i++) {
       var o = q.options[i];
-      var txt = (mode === 'cn2en') ? o.word : (getChineseFull(o.meaning) || '(释义待补充)');
+      var txt = (mode === 'cn2en') ? o.word : (getChineseOptionText(o.meaning) || '(释义待补充)');
       var extra = (mode === 'cn2en' && o.pronunciation) ? ' <span style="color:var(--text2);font-size:0.85em;">' + o.pronunciation + '</span>' : '';
       var cls = 'opt-btn';
       if (answered || isSkip) {
@@ -3779,7 +3797,7 @@ function renderQuizCard() {
     if (answered || isSkip) {
       fbHTML = '<div class="feedback show ' + (isSkip ? 'close' : (correctHere ? 'ok' : 'fail')) + '">' +
         '<h4>' + (isSkip ? '\u{1F6AA} \u5DF2\u8DF3\u8FC7' : (correctHere ? '\u2705 \u56DE\u7B54\u6B63\u786E\uFF01' : '\u274C \u56DE\u7B54\u9519\u8BEF')) + '</h4>' +
-        '<div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + ((mode === 'cn2en') ? word.word : getChineseFull(word.meaning)) + speakBtnFor(word, mode) + '</div>' +
+        '<div style="margin:6px 0;"><b>\u6B63\u786E\u7B54\u6848\uFF1A</b>' + ((mode === 'cn2en') ? word.word : getChineseOptionText(word.meaning)) + speakBtnFor(word, mode) + '</div>' +
         (correctHere ? '' : wrongOptionsHTML(q, mode, answerVal)) +
         '</div>';
     }
@@ -3963,7 +3981,7 @@ function handleDictationSubmit() {
   recordStat(word, mode, isCorrect, isClose, true);
   trackEbbingPlanQuestion(word);
 
-  var correctAnswerText = (mode === 'cn2en') ? word.word : getChineseFull(word.meaning);
+  var correctAnswerText = (mode === 'cn2en') ? word.word : getChineseOptionText(word.meaning);
   var now = nowStr();
 
   if (!isCorrect) {
@@ -4087,8 +4105,8 @@ function handleAnswer(chosenIndex) {
   recordStat(word, mode, isCorrect, false, false);
   trackEbbingPlanQuestion(word);
 
-  var userAnswerText = (mode === 'cn2en') ? q.options[chosenIndex].word : getChineseFull(q.options[chosenIndex].meaning);
-  var correctAnswerText = (mode === 'cn2en') ? word.word : getChineseFull(word.meaning);
+  var userAnswerText = (mode === 'cn2en') ? q.options[chosenIndex].word : getChineseOptionText(q.options[chosenIndex].meaning);
+  var correctAnswerText = (mode === 'cn2en') ? word.word : getChineseOptionText(word.meaning);
 
   // Record wrong
   if (!isCorrect) {
@@ -4096,7 +4114,7 @@ function handleAnswer(chosenIndex) {
       wordId: word.id, pool: (quizState.poolType || currentPool), mode: mode, timestamp: now,
       questionText: (mode === 'cn2en') ? getChineseFull(word.meaning) : word.word,
       userAnswer: userAnswerText, correctAnswer: correctAnswerText,
-      options: q.options.map(function(o, i) { return { label: labels[i], text: (mode === 'cn2en') ? o.word : getChineseFull(o.meaning), isCorrect: i === q.correctIndex }; })
+      options: q.options.map(function(o, i) { return { label: labels[i], text: (mode === 'cn2en') ? o.word : getChineseOptionText(o.meaning), isCorrect: i === q.correctIndex }; })
     });
     if (!state.wrongWordIds[wwKey(mode)]) state.wrongWordIds[wwKey(mode)] = {};
     state.wrongWordIds[wwKey(mode)][word.id] = true;
@@ -4110,7 +4128,7 @@ function handleAnswer(chosenIndex) {
       questionText: (mode === 'cn2en') ? getChineseFull(word.meaning) : word.word,
       userAnswer: userAnswerText, correctAnswer: correctAnswerText,
       isCorrect: isCorrect,
-      options: q.options.map(function(o, i) { return { label: labels[i], text: (mode === 'cn2en') ? o.word : getChineseFull(o.meaning), isCorrect: i === q.correctIndex }; }),
+      options: q.options.map(function(o, i) { return { label: labels[i], text: (mode === 'cn2en') ? o.word : getChineseOptionText(o.meaning), isCorrect: i === q.correctIndex }; }),
       attemptNum: existingRetries + 1
     });
     if (isCorrect) { delete state.wrongWordIds[wwKey(mode)][word.id]; }
@@ -4125,7 +4143,7 @@ function handleAnswer(chosenIndex) {
   fb.innerHTML =
     '<h4>' + (isCorrect ? '✅ 回答正确！' : '❌ 回答错误') + '</h4>' +
     '<div style="margin:6px 0;"><b>题目：</b>' + (mode === 'cn2en' ? getChineseFull(word.meaning) : word.word) + '</div>' +
-    '<div style="margin:6px 0;"><b>正确答案：</b>' + (mode === 'cn2en' ? word.word : getChineseFull(word.meaning)) + speakBtnFor(word, mode) + '</div>' +
+    '<div style="margin:6px 0;"><b>正确答案：</b>' + (mode === 'cn2en' ? word.word : getChineseOptionText(word.meaning)) + speakBtnFor(word, mode) + '</div>' +
     (isCorrect ? '' : wrongOptionsHTML(q, mode, chosenIndex));
   appendFeedbackDetails(fb, word, mode);
 
@@ -5674,14 +5692,14 @@ function handleSkip() {
     wordId: word.id, pool: (quizState.poolType || currentPool), mode: mode, timestamp: nowStr(),
       questionText: (mode === 'cn2en') ? getChineseFull(word.meaning) : word.word,
       userAnswer: '（跳过）',
-      correctAnswer: (mode === 'cn2en') ? word.word : getChineseFull(word.meaning),
+      correctAnswer: (mode === 'cn2en') ? word.word : getChineseOptionText(word.meaning),
       skipped: true
     });
     if (!state.wrongWordIds[wwKey(mode)]) state.wrongWordIds[wwKey(mode)] = {};
     state.wrongWordIds[wwKey(mode)][word.id] = true;
   }
 
-  var correctText = (mode === 'cn2en') ? word.word : getChineseFull(word.meaning);
+  var correctText = (mode === 'cn2en') ? word.word : getChineseOptionText(word.meaning);
   if (currentQuizType === 'choice') {
     document.querySelectorAll('.opt-btn').forEach(function(b) { b.disabled = true; });
     var correctBtn = document.getElementById('opt-' + q.correctIndex);
