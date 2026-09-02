@@ -16,6 +16,18 @@
 - 修复蓝牙设备连接后点击朗读按钮偶发无声的问题；现在优先使用跟随视频/音乐输出路由的媒体音频，网络音频失败时自动回退系统 TTS。
 - 修复 `tempo` 选择题选项只显示词性 `n`、缺少中文释义的问题。
 - 修复 `animal`、`their`、`hear`、`manoeuvre` 词条的原始释义/音标错误，选择题选项与词库浏览统一显示正确内容；同步更新 GitHub Pages 二维码及嵌套目录入口。
+- 优化英文选中文题目的释义去重：自动跳过完全相同或高度重叠的中文核心释义，避免 `inquire/enquire`、`optimal/optimum` 等词同时造成歧义；词库中的合法同义词仍予以保留。
+- 修复 `optimal` 与 `optimum` 的显示释义混淆：`optimal` 显示“最佳的；最适宜的”，`optimum` 显示“最优值；最佳状态”。
+
+### 释义质量检查
+
+仓库提供数据质量扫描脚本，用于检查词性/音标格式异常，并列出全库标准化中文释义重复组与高重叠释义对。重复组仅用于质量审查，不代表需要删除词条：
+
+```text
+node 六级词汇刷题网站/tools/scan_meaning_bugs.js
+```
+
+脚本不会修改词库。英文选中文模式会在生成选项时过滤碰撞释义；中文选英文模式保持原有取题行为。
 
 ## 📚 词库
 
@@ -165,6 +177,8 @@ README.md             项目说明（仓库根目录）
   data/               外置词库数据（full-words.js / unit-maps.js / core-words.js）
 tools/                仓库根目录构建脚本（build-core-words.js 生成词库索引 / build-offline-viewer.js 生成离线单文件版）
 ```
+
+释义扫描脚本位于网站目录下的 `六级词汇刷题网站/tools/scan_meaning_bugs.js`，从该目录运行时使用 `node tools/scan_meaning_bugs.js`。
 
 ## 🛠 技术栈
 

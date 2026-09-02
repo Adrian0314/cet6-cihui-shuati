@@ -517,6 +517,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>📅 记忆规律：</strong>大纲词汇按《你还在背单词吗》书末「艾宾浩斯抗遗忘复习打卡表」（4周25天）调度——每天学习一个新 Unit，按 +1天/+3天/+6天/+12天 的间隔复习之前学过的 Unit；当天的新 Unit 与到期复习 Unit 全部完成后，计划栏会显示“当天目标已完成”。跨日仍未完成时，计划会重置为当天的完整目标，不沿用前一天的部分完成进度。核心词汇按书内每词 8 格记忆周期（5分/30分/12时/1天/2天/4天/7天）调度复习。短周期（5分/30分）在学习会话内提醒，12小时及以后到期的词在打开网页时提醒。</div>
       <div class="rb"><strong>🏰 闯关模式：</strong>严格对应书中使用指南——闯关1「词群速记」：结合词群导图快速检测，认识/不认识直接判断；闯关2「选择检测」：对应书中学完一个 Lesson 后的检测（选择题/默写题）；闯关3「Unit综合测」：学完一个 Unit 后的综合检测（覆盖整个 Unit）。词群导图怎么看，见下方「🗺️ 词群导图」。</div>
       <div class="rb"><strong>🧹 选择题释义显示：</strong>系统会自动清理词库中误混入释义末尾的孤立词性标记，并修复已知词条错误（<code>animal</code> 补全释义、<code>their</code> 去除多余“们”、<code>hear</code> 清理尾部残缺标点、<code>manoeuvre</code> 校正音标与释义字段），避免选项出现多余的 <code>v.</code>、<code>adj.</code> 或只有词性没有中文释义的文本。在线入口二维码指向 GitHub Pages 最新做题页。</div>
+      <div class="rb"><strong>🧩 选项释义去重：</strong>英文选中文模式会自动比较四个选项的中文核心释义，跳过完全相同或高度重叠的释义，避免 <code>inquire/enquire</code>、<code>optimal/optimum</code> 这类词同时造成歧义；词库中的合法同义词仍会保留，只有在候选不足的极小自定义词池中才使用重复释义兜底。</div>
       <div class="rb"><strong>⭐ 重点词：</strong>在单词标题与音标右侧/旁边点击「☆ 标记重点」或「★ 已标记」即可标记或取消当前单词；状态会同步到「重点词」列表，并影响「智能练习」的优先级。</div>
       <div class="rb"><strong>🗺️ 词群导图：</strong>答完题后自动显示当前词的词群关系图（单词浏览器中点「🗺️ 导图」按钮也可查看）——中心=词群主题或当前词，四周圆圈=关联词。圆圈外侧的 <span class="gl-badge">2</span> 绿色数字徽标表示该词下面还有几个分支：点击带徽标的圆圈逐层展开，没有徽标的圆圈=末端词（无分支），点击会朗读发音。点击单词文字同样朗读，点「← 返回上级」退回上一层。连线颜色区分关系：绿=派生（扩/合成）、蓝=同根、橙=近义、红=反义、粉=形近、灰=相关，虚线=形近/反义。</div>
       <div class="rb"><strong>📖 单元筛选与学习量：</strong>可手动切换要学习的 Unit（大纲词汇 Unit 1-14 / 核心词汇 Unit 1-10）；每次学习量按书中页数设定（1页≈20词，可选 1/2/3 页）。</div>
@@ -763,6 +764,8 @@ function repairWordData(list) {
     mineral: { meaning: 'n. 矿物；矿物质' },
     wall: { meaning: 'n. 墙；墙壁；围墙；屏障；v. 用墙围住；堵塞' },
     disarm: { meaning: 'v. 解除武装；使缴械；消除（敌意、怒气等）' },
+    // optimum 与 optimal 原始释义完全相同；补充 optimum 的名词义，避免选择题出现两个相同答案。
+    optimum: { meaning: 'n. 最优值；最佳状态' },
     sweet: { meaning: 'adj. 含糖的，甜的；未加盐的，淡的；芳香的，芬芳的；清新的，纯净的，新鲜的；（声音）甜美的，悦耳的，动听的；（音乐，尤指爵士乐）甜派风格的；惹人喜爱的，可爱的；亲爱的；温和的，和蔼的，善良的；愉快的，惬意的，令人满意的；（用于表示同意，赞成）好的；容易操纵的，运转平稳的；丝毫的，一丁点儿的;n. 糖果；甜食；餐后甜点；（亲昵的称呼）宝贝儿，亲爱的；快乐，乐趣（sweets）；芳香' },
     way: { meaning: 'n. 方法，手段；习俗，习惯，行为方式；（行事）作风，（某事发生的）方式；道路，路线；行进路线，通路；方向；……路（用于道路的名称）；出入通道，门口；距离，时段；方面；（两种之一的）选择；情况，状态；（某人居住的）地区，地方；（分成的）部分；职业，行当；（船）航行，动力；船台，滑道（ways）;adv. 大大地，远远地；非常，很;adj. 途中的;【名】 （Way）韦（人名）' }
   };
@@ -1882,6 +1885,32 @@ function getChineseFull(meaning) {
   return stripPronunciation(meaning).replace(/\s{2,}/g, ' ').trim();
 }
 
+// 用于选择题去重的中文释义键：只保留汉字，避免词性、音标和标点差异
+// 让“询问，打听”与“ɪn'kwaɪə(r)/ v.询问，打听”被误判为不同选项。
+function meaningChineseKey(meaning) {
+  return getChinese(meaning).replace(/[^\u3400-\u9fff]/g, '');
+}
+
+// 判断两个释义是否过于接近。完全相同或核心汉字高度重叠时，
+// 同一道英文选中文题只保留一个，避免用户无法凭释义作答。
+function meaningsTooClose(a, b) {
+  var ka = meaningChineseKey(a && a.meaning != null ? a.meaning : a);
+  var kb = meaningChineseKey(b && b.meaning != null ? b.meaning : b);
+  if (!ka || !kb) return false;
+  if (ka === kb) return true;
+  var minLen = Math.min(ka.length, kb.length);
+  if (minLen < 4) return false;
+  var shorter = ka.length <= kb.length ? ka : kb;
+  var longer = ka.length <= kb.length ? kb : ka;
+  if (longer.indexOf(shorter) !== -1 && shorter.length / longer.length >= 0.85) return true;
+  var sa = Object.create(null), sb = Object.create(null), union = 0, inter = 0;
+  for (var i = 0; i < ka.length - 1; i++) sa[ka.substring(i, i + 2)] = true;
+  for (var j = 0; j < kb.length - 1; j++) sb[kb.substring(j, j + 2)] = true;
+  Object.keys(sa).forEach(function (gram) { union++; if (sb[gram]) inter++; });
+  Object.keys(sb).forEach(function (gram) { if (!sa[gram]) union++; });
+  return union > 0 && inter / union >= 0.8;
+}
+
 function splitMeaning(meaning) {
   // 剥离音标（/.../ 对），折叠空格
   var s = stripPronunciation(meaning).replace(/\s{2,}/g, ' ').trim();
@@ -1993,19 +2022,31 @@ function getDistractors(correctWord, mode, count) {
   // Fill result, ensuring diversity
   var result = [];
   var usedFirstChar = Object.create(null);
+  var avoidMeaningCollision = mode !== 'cn2en';
+  var selectedForMeaning = [correctWord];
+  function canUseCandidate(word) {
+    if (!avoidMeaningCollision) return true;
+    for (var mi = 0; mi < selectedForMeaning.length; mi++) {
+      if (meaningsTooClose(word, selectedForMeaning[mi])) return false;
+    }
+    return true;
+  }
 
   for (var i = 0; i < candidates.length && result.length < count; i++) {
+    if (!canUseCandidate(candidates[i].word)) continue;
     var fc = candidates[i].word.word.toLowerCase()[0];
     if ((usedFirstChar[fc] || 0) < 2) {
       result.push(candidates[i].word);
+      selectedForMeaning.push(candidates[i].word);
       usedFirstChar[fc] = (usedFirstChar[fc] || 0) + 1;
     }
   }
 
   if (result.length < count) {
     for (var j = 0; j < candidates.length && result.length < count; j++) {
-      if (result.indexOf(candidates[j].word) === -1) {
+      if (result.indexOf(candidates[j].word) === -1 && canUseCandidate(candidates[j].word)) {
         result.push(candidates[j].word);
+        selectedForMeaning.push(candidates[j].word);
       }
     }
   }
@@ -2014,9 +2055,18 @@ function getDistractors(correctWord, mode, count) {
   if (result.length < count) {
     var shuffled = activePool.slice().sort(function() { return Math.random() - 0.5; });
     for (var k = 0; k < shuffled.length && result.length < count; k++) {
-      if (shuffled[k].id !== cid && result.indexOf(shuffled[k]) === -1) {
+      if (shuffled[k].id !== cid && result.indexOf(shuffled[k]) === -1 && canUseCandidate(shuffled[k])) {
         result.push(shuffled[k]);
+        selectedForMeaning.push(shuffled[k]);
       }
+    }
+  }
+
+  // 极小自定义词池可能没有足够的独立释义，最后才允许重复释义兜底，
+  // 以保证选择题仍有 count 个选项；正常六级词库不会走到这里。
+  if (result.length < count) {
+    for (var f = 0; f < activePool.length && result.length < count; f++) {
+      if (activePool[f].id !== cid && result.indexOf(activePool[f]) === -1) result.push(activePool[f]);
     }
   }
 
