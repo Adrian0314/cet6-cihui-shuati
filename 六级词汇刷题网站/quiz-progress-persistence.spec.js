@@ -228,10 +228,11 @@ test('en2cn distractors avoid near-duplicate senses and fullscreen supports swip
     return {
       fullscreen: card.classList.contains('fullscreen'),
       columns: getComputedStyle(options).gridTemplateColumns.split(' ').length,
-      labelWhiteSpace: getComputedStyle(label).whiteSpace
+      labelWhiteSpace: getComputedStyle(label).whiteSpace,
+      labelText: label.textContent.trim()
     };
   });
-  expect(layout).toEqual({ fullscreen: true, columns: 2, labelWhiteSpace: 'nowrap' });
+  expect(layout).toEqual({ fullscreen: true, columns: 2, labelWhiteSpace: 'nowrap', labelText: '第 1 / 20 题' });
 
   const swiped = await page.evaluate(() => {
     const card = document.getElementById('quizCard');
