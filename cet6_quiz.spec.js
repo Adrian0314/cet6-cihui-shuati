@@ -1389,11 +1389,17 @@ test.describe('mode-specific other-option feedback', () => {
       const options = fb && fb.querySelector('.feedback-options');
       return {
         optionRows: options ? options.querySelectorAll(':scope > div').length : 0,
-        text: options ? options.textContent : ''
+        text: options ? options.textContent : '',
+        duplicatePos: options ? Array.from(options.querySelectorAll(':scope > div')).some(row => {
+          const body = row.cloneNode(true);
+          body.querySelectorAll('.option-pos').forEach(label => label.remove());
+          return /\b(?:n|v|adj|adv|prep|conj|pron|num|art|det|aux|modal|vt|vi|phr|phrase|interj)\./i.test(body.textContent);
+        }) : false
       };
     });
     expect(result.optionRows).toBe(3); // 其余选项仍保留 3 行
     expect(result.text).toMatch(/[A-Za-z]+/); // 反馈区显示对应英文单词
+    expect(result.duplicatePos).toBe(false);
   });
 
   test('cn2en: other options still include english word (regression)', async ({ page }) => {
