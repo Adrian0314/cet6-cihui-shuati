@@ -86,6 +86,83 @@ test('visibilitychange saves the active quiz when a mobile tab is backgrounded',
   await context.close();
 });
 
+test('a delayed skip click after returning from another app is ignored', async ({ browser }) => {
+  const context = await browser.newContext({ isMobile: true, hasTouch: true });
+  await context.addInitScript(() => localStorage.setItem('cet6_onboarded', '1'));
+  const page = await context.newPage();
+
+  await page.goto(QUIZ_URL);
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForFunction(() => Array.isArray(window.ALL_WORDS) && ALL_WORDS.length > 0);
+  await page.selectOption('#gateSelect', '2');
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('#skipBtn');
+
+  const result = await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    document.dispatchEvent(new Event('visibilitychange'));
+    const skip = document.getElementById('skipBtn');
+    // Simulate the delayed click some mobile browsers deliver on resume. It
+    // has no pointerdown/touchstart from the current visible session.
+    skip.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    const ignored = quizState.done === 0 && !quizState.answers[quizState.pos];
+    // A touch that began just before the app switch must also not become a
+    // skip after the browser delivers its click on the visible page.
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    skip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    document.dispatchEvent(new Event('visibilitychange'));
+    skip.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    const ignoredTouchResume = quizState.done === 0 && !quizState.answers[quizState.pos];
+    // A genuine tap starts with pointerdown and must remain functional.
+    skip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
+    skip.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    return { ignored, ignoredTouchResume, handled: quizState.done === 1, answer: quizState.answers[quizState.pos] };
+  });
+
+  expect(result).toEqual({ ignored: true, ignoredTouchResume: true, handled: true, answer: 'skip' });
+  await page.click('#nextBtn');
+  await page.waitForSelector('#skipBtn');
+  await page.waitForTimeout(950);
+  await page.click('#skipBtn');
+  expect(await page.evaluate(() => quizState.done)).toBe(2);
+  await context.close();
+});
+
+test('spaces in dictation inputs and replayed foreground keys never skip', async ({ browser }) => {
+  const context = await browser.newContext({ isMobile: true, hasTouch: true });
+  await context.addInitScript(() => localStorage.setItem('cet6_onboarded', '1'));
+  const page = await context.newPage();
+
+  await page.goto(QUIZ_URL);
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForFunction(() => Array.isArray(window.ALL_WORDS) && ALL_WORDS.length > 0);
+  await page.selectOption('#typeSelect', 'dictation');
+  await page.selectOption('#gateSelect', '2');
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('#dictInput');
+
+  const result = await page.evaluate(() => {
+    const input = document.getElementById('dictInput');
+    input.focus();
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+    const inputSpaceIgnored = quizState.done === 0;
+
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    document.dispatchEvent(new Event('visibilitychange'));
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+    return { inputSpaceIgnored, foregroundSpaceIgnored: quizState.done === 0 };
+  });
+
+  expect(result).toEqual({ inputSpaceIgnored: true, foregroundSpaceIgnored: true });
+  await context.close();
+});
+
 test('resume waits for an asynchronously loading full vocabulary pool', async ({ browser }) => {
   const context = await browser.newContext();
   await context.addInitScript(() => localStorage.setItem('cet6_onboarded', '1'));

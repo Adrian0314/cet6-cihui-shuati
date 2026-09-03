@@ -534,7 +534,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>🎯 每日目标：</strong>统计页可自选每日目标（做题+复习总数），达标后做题页会弹出庆祝提示；学习热力图的深绿色格子即代表"当日达标"。大纲词汇的艾宾浩斯打卡表则以当天计划的全部 Unit 完成为准，完成后计划栏显示“当天目标已完成”。</div>
       <div class="rb"><strong>🧠 记忆模式：</strong>做完一题即从队列移除，答错的词按当前词库的书中记忆规律自动排期回来复习。打开网页时若有到期单词，做题页顶部会显示复习横幅，点击"开始复习"一键清债；复习采用四选一快刷，复习中跳过视同答错。复习只从首次作答开始计，历史数据不迁移。</div>
       <div class="rb"><strong>🔊 朗读发音：</strong>点击喇叭按钮时优先使用普通媒体音频，以便跟随视频/音乐的蓝牙输出；网络音频无法播放时自动回退到系统 TTS。离线使用时仍可使用系统 TTS。</div>
-      <div class="rb"><strong>💾 中途退出：</strong>做题过程中会即时保存当前题位、已答数量和已选答案；手机切到后台、刷新页面或关闭网页时还会通过页面生命周期事件再保存一次，因此重新打开后点击顶部“继续做题”即可接着完成同一队列。4 周 25 天计划会同时保存当日进度，复习提醒也会显示实际的已完成题数和待完成题数；进入新的一天后，旧日未完成队列会按新的每日计划重置。</div>
+      <div class="rb"><strong>💾 中途退出：</strong>做题过程中会即时保存当前题位、已答数量和已选答案；手机切到后台、刷新页面或关闭网页时还会通过页面生命周期事件再保存一次，因此重新打开后点击顶部“继续做题”即可接着完成同一队列。手机从其他应用返回后的短暂恢复保护会忽略浏览器补发的旧“不会，跳过”点击，确认新的触摸后仍可正常操作。4 周 25 天计划会同时保存当日进度，复习提醒也会显示实际的已完成题数和待完成题数；进入新的一天后，旧日未完成队列会按新的每日计划重置。</div>
       <div class="rb"><strong>🧠 智能练习：</strong>这不是生成式 AI，而是按规则自动安排优先级：先练重点词和已经到期的复习词，再练从未做过、错误率较高或答错次数较多的词。系统从当前词库和 Unit 筛选范围中取词，数量按“每次学习”设置的 20/40/60 词决定，并沿用当前的做题方向、题目类型和闯关模式。智能练习不是只练错题；只练错题请使用“重做当前模式错题”，智能练习答错的单词仍会进入错题本。</div>
       <div class="rb" style="text-align:center;margin-top:8px;"><span style="color:var(--accent2);cursor:pointer;text-decoration:underline;" onclick="document.getElementById('rulesCard').classList.toggle('collapsed')">点击收起 ▲</span></div>
     </div>
@@ -3040,10 +3040,77 @@ function askKeepPrefs() {
 function autoSaveProgress() {
   saveActiveQuizProgress();
 }
+// Mobile browsers can deliver a delayed click/touch event when returning from
+// another app (for example, a touch that started just before the app switch).
+// Keep the skip action armed only for an explicit pointer/touch that begins
+// after the page is visible again; a click with no preceding input is ignored.
+var _resumeInputGuardUntil = 0;
+var _resumeInputGuardArmed = false;
+var _resumeInputGuardMs = 900;
+var _resumeLifecycleSeenHidden = false;
+function armResumeInputGuard() {
+  _resumeInputGuardUntil = Date.now() + _resumeInputGuardMs;
+  _resumeInputGuardArmed = true;
+}
+function resumeInputGuardActive() {
+  if (!_resumeInputGuardArmed) return false;
+  if (Date.now() >= _resumeInputGuardUntil) {
+    _resumeInputGuardArmed = false;
+    return false;
+  }
+  return true;
+}
+function markResumeUserInput() {
+  if (resumeInputGuardActive()) _resumeInputGuardArmed = false;
+}
 // visibilitychange is the lifecycle signal mobile browsers reliably emit when
 // switching apps/tabs. pagehide/beforeunload remain as complementary fallbacks.
 document.addEventListener('visibilitychange', function() {
-  if (document.hidden) autoSaveProgress();
+  if (document.hidden) {
+    _resumeLifecycleSeenHidden = true;
+    armResumeInputGuard();
+    autoSaveProgress();
+  } else if (_resumeLifecycleSeenHidden) {
+    // A second guard on the visible transition covers browsers that queue a
+    // click until the document is painted again after app switching.
+    armResumeInputGuard();
+  }
+});
+document.addEventListener('pointerdown', markResumeUserInput, true);
+document.addEventListener('touchstart', markResumeUserInput, true);
+document.addEventListener('click', function(e) {
+  if (!resumeInputGuardActive()) return;
+  var target = e.target;
+  var skip = target && target.closest ? target.closest('#skipBtn,.skip-btn') : null;
+  if (!skip) return;
+  // Do not let a delayed lifecycle click skip a question. A real tap first
+  // emits pointerdown/touchstart and disarms this guard before click arrives.
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  _resumeInputGuardArmed = false;
+}, true);
+document.addEventListener('keydown', function(e) {
+  if (!resumeInputGuardActive()) return;
+  if (e.key === ' ' || e.key === 'Spacebar') {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    _resumeInputGuardArmed = false;
+  }
+}, true);
+window.addEventListener('pageshow', function(e) {
+  // A persisted bfcache page may be restored without visibilitychange.
+  if (e.persisted || _resumeLifecycleSeenHidden) armResumeInputGuard();
+});
+window.addEventListener('blur', function() {
+  // Fallback for embedded/mobile browsers that expose focus/blur but omit
+  // visibilitychange when the app is backgrounded.
+  if (!quizActive) return;
+  _resumeLifecycleSeenHidden = true;
+  armResumeInputGuard();
+  autoSaveProgress();
+});
+window.addEventListener('focus', function() {
+  if (_resumeLifecycleSeenHidden && !document.hidden) armResumeInputGuard();
 });
 window.addEventListener('pagehide', autoSaveProgress);
 window.addEventListener('beforeunload', autoSaveProgress);
@@ -3840,10 +3907,14 @@ function renderQuizCard() {
       setTimeout(function() {
         var inp = document.getElementById('dictInput');
         if (inp) {
-          inp.focus();
           inp.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') handleDictationSubmit();
           });
+          // Do not restore focus while the page is backgrounded: mobile
+          // browsers may defer this timer until app return and reopen the
+          // keyboard, replaying a stale key event against the new question.
+          if (document.hidden || (document.visibilityState && document.visibilityState !== 'visible')) return;
+          try { inp.focus({ preventScroll: true }); } catch (e) { inp.focus(); }
         }
       }, 50);
     }
@@ -5797,10 +5868,14 @@ function handleSkip() {
 
 document.addEventListener('keydown', function(e) {
   if (!quizActive) return;
+  // Ignore keyboard shortcuts while the page is backgrounded; some mobile
+  // browsers replay a key event when focus returns to the tab.
+  if (document.hidden) return;
   var tag = e.target.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA') {
     if (e.key === 'Escape') { e.target.blur(); e.preventDefault(); }
-    else if (e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); handleSkip(); }
+    // Spaces belong to text inputs (especially dictation); never treat them
+    // as the global "skip" shortcut while an input has focus.
     return;
   }
   // 闯关1速记快捷键：1/空格=认识，2=不认识
