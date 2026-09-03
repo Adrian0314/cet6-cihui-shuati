@@ -528,7 +528,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
     <div class="rules-body">
       <div class="rb"><strong>📗 《你还在背单词吗》刘晓艳：</strong>词库内容严格取自刘晓艳主编的《英语六级你还在背单词吗》（东北师范大学出版社）。第一部分「词以群记·抓核心」（Unit 1-10）：核心词按词群分类排序，每个词含记忆方法（联想/构词/对照/谐音）、经典例句及扩展词；第二部分「词以序记·刷基础」（Unit 11-14）：按字母序排列的大纲基础词。按书中 Unit 顺序学习，可手动切换 Unit 与学习页数。</div>
       <div class="rb"><strong>📚 《六级英语核心词·艾宾浩斯抗遗忘打卡》：</strong>词库严格取自刘晓艳主编的《六级英语核心词 艾宾浩斯抗遗忘打卡》（开明出版社）。全书 10 个 Unit、40 个 Lesson，每个单词带 8 格打卡（首次学习 + 5分/30分/12时 + 1天/2天/4天/7天），带 * 号为书中派生词。</div>
-      <div class="rb"><strong>📅 记忆规律：</strong>大纲词汇按《你还在背单词吗》书末「艾宾浩斯抗遗忘复习打卡表」（4周25天）调度——每天学习一个新 Unit，按 +1天/+3天/+6天/+12天 的间隔复习之前学过的 Unit；当天的新 Unit 与到期复习 Unit 全部完成后，计划栏会显示“当天目标已完成”。跨日仍未完成时，计划会重置为当天的完整目标，不沿用前一天的部分完成进度。核心词汇按书内每词 8 格记忆周期（5分/30分/12时/1天/2天/4天/7天）调度复习。短周期（5分/30分）在学习会话内提醒，12小时及以后到期的词在打开网页时提醒。</div>
+      <div class="rb"><strong>📅 记忆规律：</strong>大纲词汇按《你还在背单词吗》书末「艾宾浩斯抗遗忘复习打卡表」（4周25天）调度——每天学习一个新 Unit，按 +1天/+3天/+6天/+12天 的间隔复习之前学过的 Unit；当天的新 Unit 全部学完并完成到期复习 Unit 后，计划栏会显示“当天目标已完成”，当天新 Unit 不会再次生成整组复习。跨日仍未完成时，计划会重置为当天的完整目标，不沿用前一天的部分完成进度。核心词汇按书内每词 8 格记忆周期（5分/30分/12时/1天/2天/4天/7天）调度复习。短周期（5分/30分）在学习会话内提醒，12小时及以后到期的词在打开网页时提醒。</div>
       <div class="rb"><strong>🏰 闯关模式：</strong>严格对应书中使用指南——闯关1「词群速记」：结合词群导图快速检测，认识/不认识直接判断；闯关2「选择检测」：对应书中学完一个 Lesson 后的检测（选择题/默写题）；闯关3「Unit综合测」：学完一个 Unit 后的综合检测（覆盖整个 Unit）。词群导图怎么看，见下方「🗺️ 词群导图」。</div>
       <div class="rb"><strong>📖 答题后信息顺序：</strong>提交答案或跳过后，题目与正确答案下方紧接默认展开的“单词详解”（巧记、例句、派生词）；随后显示“⚠️ 易混淆词”辨析和词群归属信息，最后显示“🗺️ 词群导图”。点击“📖 单词详解”标题可收起或重新展开，导图可继续点击圆圈下钻查看关联词。</div>
       <div class="rb"><strong>🧹 选择题释义显示：</strong>系统会自动清理词库中误混入释义末尾的孤立词性标记，并修复已知词条错误（<code>animal</code> 补全释义、<code>their</code> 去除多余“们”、<code>hear</code> 清理尾部残缺标点、<code>manoeuvre</code> 校正音标与释义字段），避免选项出现多余的 <code>v.</code>、<code>adj.</code> 或只有词性没有中文释义的文本。在线入口二维码指向 GitHub Pages 最新做题页。</div>
@@ -552,7 +552,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>🎯 每日目标：</strong>统计页可自选每日目标（做题+复习总数），达标后做题页会弹出庆祝提示；学习热力图的深绿色格子即代表"当日达标"。大纲词汇的艾宾浩斯打卡表则以当天计划的全部 Unit 完成为准，完成后计划栏显示“当天目标已完成”。</div>
       <div class="rb"><strong>🧠 记忆模式：</strong>做完一题即从队列移除，答错的词按当前词库的书中记忆规律自动排期回来复习。打开网页时若有到期单词，做题页顶部会显示复习横幅，点击"开始复习"一键清债；复习采用四选一快刷，复习中跳过视同答错。复习只从首次作答开始计，历史数据不迁移。</div>
       <div class="rb"><strong>🔊 朗读发音：</strong>点击喇叭按钮时优先使用普通媒体音频，以便跟随视频/音乐的蓝牙输出；网络音频无法播放时自动回退到系统 TTS。离线使用时仍可使用系统 TTS。</div>
-      <div class="rb"><strong>💾 中途退出：</strong>做题过程中会即时保存当前题位、已答数量和已选答案；手机切到后台、刷新页面或关闭网页时还会通过页面生命周期事件再保存一次，因此重新打开后点击顶部“继续做题”即可接着完成同一队列。手机从其他应用返回后的短暂恢复保护会忽略浏览器补发的旧“不会，跳过”点击，确认新的触摸后仍可正常操作。4 周 25 天计划会同时保存当日进度，复习提醒也会显示实际的已完成题数和待完成题数；进入新的一天后，旧日未完成队列会按新的每日计划重置。</div>
+      <div class="rb"><strong>💾 中途退出：</strong>做题过程中会即时保存当前题位、已答数量和已选答案；手机切到后台、刷新页面或关闭网页时还会通过页面生命周期事件再保存一次，因此重新打开后点击顶部“继续做题”即可接着完成同一队列。手机从其他应用返回后的短暂恢复保护会忽略浏览器补发的旧“不会，跳过”点击，确认新的触摸后仍可正常操作。4 周 25 天计划会同时保存当日进度，复习提醒也会显示实际的已完成题数和待完成题数；当天新 Unit 的全部单词学完后会记录为已完成，不会再次生成同一 Unit 的整组复习；进入新的一天后，旧日未完成队列会按新的每日计划重置，已完成的旧快照会在重进时自动清除。</div>
       <div class="rb"><strong>🧠 智能练习：</strong>这不是生成式 AI，而是按规则自动安排优先级：先练重点词和已经到期的复习词，再练从未做过、错误率较高或答错次数较多的词。系统从当前词库和 Unit 筛选范围中取词，数量按“每次学习”设置的 20/40/60 词决定，并沿用当前的做题方向、题目类型和闯关模式。智能练习不是只练错题；只练错题请使用“重做当前模式错题”，智能练习答错的单词仍会进入错题本。</div>
       <div class="rb" style="text-align:center;margin-top:8px;"><span style="color:var(--accent2);cursor:pointer;text-decoration:underline;" onclick="document.getElementById('rulesCard').classList.toggle('collapsed')">点击收起 ▲</span></div>
     </div>
@@ -2538,6 +2538,13 @@ function syncEbbingPlan(now) {
       plan.completedUnits = [];
     }
   }
+  // A previously learned Unit may already have all its attempts when a new
+  // day starts (for example after a refresh). Reconcile that fact into the
+  // current plan so it cannot reappear as a duplicate full-unit review.
+  var todayUnit = plan.day <= EBING_UNITS ? Math.min(plan.day, EBING_UNITS) : 0;
+  if (todayUnit && isEbbingUnitLearned(todayUnit) && addEbbingPlanUnitCompletion(plan, todayUnit, now)) {
+    saveState();
+  }
   return plan;
 }
 
@@ -2548,16 +2555,37 @@ function isEbbingPlanComplete(plan) {
   });
 }
 
-function markEbbingPlanUnitComplete(unit, now) {
-  var plan = syncEbbingPlan(now);
-  if (!plan) return;
+// A new Unit is considered learned once every word in that Unit has at least
+// one recorded attempt in the outline pool. This keeps the day's new Unit
+// from being offered again as a full review queue after the learning session.
+function isEbbingUnitLearned(unit) {
+  unit = Number(unit);
+  if (!isFinite(unit) || unit <= 0) return false;
+  var words = ALL_WORDS.filter(function(word) { return Number(word.unit) === unit; });
+  if (words.length === 0) return false;
+  var attempts = (state.stats && state.stats.wordAttempts) || {};
+  return words.every(function(word) {
+    var wa = attempts[wordStateKey(word.id, 'core')];
+    return !!(wa && Number(wa.attempts) > 0);
+  });
+}
+
+function addEbbingPlanUnitCompletion(plan, unit, now) {
+  if (!plan) return false;
   var scheduled = ebbingPlanUnits(plan.day);
   unit = Number(unit);
-  if (scheduled.indexOf(unit) === -1 || plan.completedUnits.indexOf(unit) !== -1) return;
+  if (scheduled.indexOf(unit) === -1 || plan.completedUnits.indexOf(unit) !== -1) return false;
   plan.completedUnits.push(unit);
   var key = dayKeyStr(now || new Date());
   if (!state.ebbingUnitLog[key]) state.ebbingUnitLog[key] = [];
   if (state.ebbingUnitLog[key].indexOf(unit) === -1) state.ebbingUnitLog[key].push(unit);
+  return true;
+}
+
+function markEbbingPlanUnitComplete(unit, now) {
+  var plan = syncEbbingPlan(now);
+  if (!plan) return;
+  if (!addEbbingPlanUnitCompletion(plan, unit, now)) return;
   saveState();
   renderEbbingPlan(now);
 }
@@ -2581,6 +2609,10 @@ function dueUnitsByEbbing(now) {
   var plan = syncEbbingPlan(now || new Date());
   if (!plan) return [];
   return ebbingPlanUnits(plan.day).filter(function(unit) {
+    // Once today's new Unit has been fully learned, it is no longer a review
+    // target. Older scheduled Units remain due until their review is finished.
+    var todayUnit = plan.day <= EBING_UNITS ? Math.min(plan.day, EBING_UNITS) : 0;
+    if (unit === todayUnit && isEbbingUnitLearned(unit)) return false;
     return plan.completedUnits.indexOf(unit) === -1;
   });
 }
@@ -2725,8 +2757,17 @@ function startMemoryQuiz(mode) {
 
 function startReview() {
   if (isCurrentEbbingPlanSnapshot(state.suspendedQuiz)) {
-    resumeQuiz();
-    return;
+    // A snapshot created before the current plan was reconciled may contain
+    // the day's newly learned Unit (for example all 214 Unit 8 words). Once
+    // that Unit is complete and no review Unit remains due, discard it rather
+    // than reopening the stale queue.
+    syncEbbingPlan();
+    if (state.ebbingPlan && isEbbingPlanComplete(state.ebbingPlan) && dueUnitsByEbbing().length === 0) {
+      discardSaved();
+    } else {
+      resumeQuiz();
+      return;
+    }
   }
   if (isExpiredEbbingPlanSnapshot(state.suspendedQuiz)) discardSaved();
   // The full pool is loaded asynchronously. Defer review queue construction
@@ -2919,6 +2960,27 @@ function saveSuspendedQuiz() {
 function checkSuspendedQuiz() {
   var sq = state.suspendedQuiz;
   if (isExpiredEbbingPlanSnapshot(sq)) {
+    state.suspendedQuiz = null;
+    saveState();
+    document.getElementById('savedBar').classList.remove('show');
+    return;
+  }
+  if (isCurrentEbbingPlanSnapshot(sq)) {
+    // Reconcile learned Units before checking completion. Legacy snapshots
+    // may not yet contain today's newly learned Unit in completedUnits.
+    var currentPlan = syncEbbingPlan();
+    if (currentPlan && isEbbingPlanComplete(currentPlan) && dueUnitsByEbbing().length === 0) {
+      state.suspendedQuiz = null;
+      saveState();
+      document.getElementById('savedBar').classList.remove('show');
+      return;
+    }
+  }
+  // A mobile browser can be terminated immediately after the last answer,
+  // before finishQuiz() clears the snapshot. Do not resurrect that completed
+  // plan queue on the next launch.
+  if (sq && sq.isEbbingPlan && sq.poolType === 'core' && Array.isArray(sq.ids) && sq.ids.length &&
+      Object.keys(sq.answers || {}).length >= sq.ids.length) {
     state.suspendedQuiz = null;
     saveState();
     document.getElementById('savedBar').classList.remove('show');

@@ -929,6 +929,105 @@ test('Ebbinghaus plan bar marks the day complete only after every scheduled Unit
   expect(result.resetPlanText).toContain('当天目标已完成');
 });
 
+test('learning the day\'s new Unit does not recreate a full-unit review queue', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const today = dayKeyStr(new Date());
+    const attempts = {};
+    ALL_WORDS.filter(word => word.unit === 8).forEach(word => {
+      attempts[wordStateKey(word.id, 'core')] = { attempts: 1, correct: 1, wrong: 0, learnedAt: Date.now() };
+    });
+    state = normalizeState({
+      ebbingActive: true,
+      ebbingStart: today,
+      ebbingPlan: { day: 8, dayKey: today, completedUnits: [2, 5, 7] },
+      stats: { wordAttempts: attempts }
+    });
+    currentPool = 'core';
+    const dueBeforeSync = dueUnitsByEbbing();
+    const idsAfterReload = dueUnitWordIds();
+    return {
+      completed: state.ebbingPlan.completedUnits.slice(),
+      due: dueBeforeSync,
+      ids: idsAfterReload,
+      complete: isEbbingPlanComplete(state.ebbingPlan)
+    };
+  });
+
+  expect(result.completed).toEqual([2, 5, 7, 8]);
+  expect(result.due).toEqual([]);
+  expect(result.ids).toEqual([]);
+  expect(result.complete).toBe(true);
+});
+
+test('a fully answered plan snapshot is discarded instead of resurrected after refresh', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const today = dayKeyStr(new Date());
+    const attempts = {};
+    ALL_WORDS.filter(word => word.unit === 8).forEach(word => {
+      attempts[wordStateKey(word.id, 'core')] = { attempts: 1, correct: 1, wrong: 0, learnedAt: Date.now() };
+    });
+    state = normalizeState({
+      ebbingActive: true,
+      ebbingStart: today,
+      ebbingPlan: { day: 8, dayKey: today, completedUnits: [2, 5, 7] },
+      stats: { wordAttempts: attempts },
+      suspendedQuiz: (() => {
+        const ids = ALL_WORDS.filter(word => word.unit === 8).map(word => word.id);
+        const answers = {};
+        ids.forEach((id, index) => { answers[index] = 0; });
+        return {
+          isEbbingPlan: true, poolType: 'core', ebbingPlanDayKey: today,
+          ids, answers, done: ids.length
+        };
+      })()
+    });
+    currentPool = 'core';
+    checkSuspendedQuiz();
+    return { snapshot: state.suspendedQuiz, savedBar: document.getElementById('savedBar').classList.contains('show') };
+  });
+
+  expect(result.snapshot).toBeNull();
+  expect(result.savedBar).toBe(false);
+});
+
+test('startReview ignores a stale same-day full-Unit snapshot after the new Unit is learned', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const today = dayKeyStr(new Date());
+    const attempts = {};
+    ALL_WORDS.filter(word => word.unit === 8).forEach(word => {
+      attempts[wordStateKey(word.id, 'core')] = { attempts: 1, correct: 1, wrong: 0, learnedAt: Date.now() };
+    });
+    state = normalizeState({
+      ebbingActive: true,
+      ebbingStart: today,
+      ebbingPlan: { day: 8, dayKey: today, completedUnits: [2, 5, 7] },
+      stats: { wordAttempts: attempts },
+      suspendedQuiz: {
+        isEbbingPlan: true, poolType: 'core', ebbingPlanDayKey: today,
+        ids: ALL_WORDS.filter(word => word.unit === 8).map(word => word.id), answers: {}, done: 0
+      }
+    });
+    currentPool = 'core';
+    quizActive = false;
+    const alerts = [];
+    const originalAlert = window.alert;
+    window.alert = message => alerts.push(message);
+    startReview();
+    window.alert = originalAlert;
+    return {
+      active: quizActive,
+      snapshot: state.suspendedQuiz,
+      due: dueUnitWordIds(),
+      alerts
+    };
+  });
+
+  expect(result.active).toBe(false);
+  expect(result.snapshot).toBeNull();
+  expect(result.due).toEqual([]);
+  expect(result.alerts[0]).toContain('今天没有到期');
+});
+
 test('legacy core plan data migrates into the current 25-day progress state without discarding its completion log', async ({ page }) => {
   const result = await page.evaluate(() => {
     const today = dayKeyStr(new Date());
