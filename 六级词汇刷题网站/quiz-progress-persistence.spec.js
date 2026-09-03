@@ -229,10 +229,17 @@ test('en2cn distractors avoid near-duplicate senses and fullscreen supports swip
       fullscreen: card.classList.contains('fullscreen'),
       columns: getComputedStyle(options).gridTemplateColumns.split(' ').length,
       labelWhiteSpace: getComputedStyle(label).whiteSpace,
-      labelText: label.textContent.trim()
+      labelDisplay: getComputedStyle(label).display,
+      navQuestion: card.querySelector('#jumpInput') && card.querySelector('#jumpInput').value
     };
   });
-  expect(layout).toEqual({ fullscreen: true, columns: 2, labelWhiteSpace: 'nowrap', labelText: '第 1 / 20 题' });
+  expect(layout).toEqual({ fullscreen: true, columns: 2, labelWhiteSpace: 'nowrap', labelDisplay: 'none', navQuestion: '1' });
+  await page.setViewportSize({ width: 1200, height: 900 });
+  const desktopFullscreen = await page.evaluate(() => ({
+    labelDisplay: getComputedStyle(document.querySelector('#quizCard .q-label')).display,
+    navQuestion: document.querySelector('#quizCard #jumpInput') && document.querySelector('#quizCard #jumpInput').value
+  }));
+  expect(desktopFullscreen).toEqual({ labelDisplay: 'none', navQuestion: '1' });
 
   const swiped = await page.evaluate(() => {
     const card = document.getElementById('quizCard');

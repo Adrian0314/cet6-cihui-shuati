@@ -320,6 +320,7 @@ theme-button{position:relative;display:inline-block;outline:none}
 /* 全屏时按钮 fixed 悬浮右上角，标签容器右侧让位避免遮挡 */
 .quiz-card.fullscreen .quiz-top-row{padding-right:76px}
 .quiz-card.fullscreen .quiz-top-row .q-label{max-width:calc(100% - 76px)}
+.quiz-card.fullscreen .quiz-top-row .q-label{display:none}
 .quiz-card.fullscreen{position:fixed;top:0;left:0;width:100vw;height:100vh;height:100dvh;z-index:200;display:flex;flex-direction:column;overflow:hidden;border-radius:0;margin:0;padding:0}
 .quiz-card.fullscreen .quiz-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:32px;padding-bottom:16px}
 .quiz-card.fullscreen .quiz-actions{flex-shrink:0;padding:12px 32px calc(env(safe-area-inset-bottom, 0px) + 12px);border-top:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;align-items:center;gap:10px}
@@ -534,7 +535,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>🧹 选择题释义显示：</strong>系统会自动清理词库中误混入释义末尾的孤立词性标记，并修复已知词条错误（<code>animal</code> 补全释义、<code>their</code> 去除多余“们”、<code>hear</code> 清理尾部残缺标点、<code>manoeuvre</code> 校正音标与释义字段），避免选项出现多余的 <code>v.</code>、<code>adj.</code> 或只有词性没有中文释义的文本。在线入口二维码指向 GitHub Pages 最新做题页。</div>
       <div class="rb"><strong>🧹 中文选项清理：</strong>英文→中文选择题仅保留英文词性缩写（如 <code>n.</code>、<code>v.</code>、<code>adj.</code>、<code>prep.</code>）和清洗后的中文释义，不显示英文单词、音标或英文括注；中文→英文选项显示英文单词、标准词性缩写和音标。系统会移除释义中混入的拉丁字母、音标及英文括号说明（包括缺少开头斜杠但以斜杠接词性结尾的异常格式），保留中文释义中的正常斜杠用法。超过 90 个汉字的极长释义或清洗后无中文的候选不会作为中文干扰项，系统优先从同词性、同前缀、易混淆或释义相近的短释义候选补位，保证四个选项可用且不修改原词库。</div>
       <div class="rb"><strong>🧩 选项释义去重：</strong>英文选中文模式会自动比较四个选项的中文核心释义，跳过完全相同或高度重叠的释义，避免 <code>inquire/enquire</code>、<code>optimal/optimum</code> 这类词同时造成歧义；词库中的合法同义词仍会保留，只有在候选不足的极小自定义词池中才使用重复释义兜底。</div>
-      <div class="rb"><strong>📱 手机全屏：</strong>全屏做题时窄屏四个选项采用紧凑两列布局，顶部只显示“第 X / Y 题”（记忆模式显示“剩余 N 词”）；在题面空白区域左右滑动可切换上一题/下一题，点击选项、输入框、导图或画布不会触发滑动。</div>
+      <div class="rb"><strong>📱 手机全屏：</strong>全屏做题时窄屏四个选项采用紧凑两列布局，隐藏左上角与导航重复的标签，仅保留中间导航条题号；在题面空白区域左右滑动可切换上一题/下一题，点击选项、输入框、导图或画布不会触发滑动。</div>
       <div class="rb"><strong>⭐ 重点词：</strong>在单词标题与音标右侧/旁边点击「☆ 标记重点」或「★ 已标记」即可标记或取消当前单词；状态会同步到「重点词」列表，并影响「智能练习」的优先级。</div>
       <div class="rb"><strong>🗺️ 词群导图：</strong>答完题后自动显示当前词的词群关系图（单词浏览器中点「🗺️ 导图」按钮也可查看）——中心=词群主题或当前词，四周圆圈=关联词。圆圈外侧的 <span class="gl-badge">2</span> 绿色数字徽标表示该词下面还有几个分支：点击带徽标的圆圈逐层展开，没有徽标的圆圈=末端词（无分支），点击会朗读发音。点击单词文字同样朗读，点「← 返回上级」退回上一层。连线颜色区分关系：绿=派生（扩/合成）、蓝=同根、橙=近义、红=反义、粉=形近、灰=相关，虚线=形近/反义。</div>
       <div class="rb"><strong>📖 单元筛选与学习量：</strong>可手动切换要学习的 Unit（大纲词汇 Unit 1-14 / 核心词汇 Unit 1-10）；每次学习量按书中页数设定（1页≈20词，可选 1/2/3 页）。</div>
