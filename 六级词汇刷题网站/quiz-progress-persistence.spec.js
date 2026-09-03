@@ -4,6 +4,188 @@ import { pathToFileURL } from 'node:url';
 
 const QUIZ_URL = pathToFileURL(resolve(process.cwd(), 'cet6_quiz.html')).href;
 
+test('regular quiz persists queue and answer before a mobile lifecycle exit', async ({ browser }) => {
+  const context = await browser.newContext();
+  await context.addInitScript(() => localStorage.setItem('cet6_onboarded', '1'));
+  const page = await context.newPage();
+
+  await page.goto(QUIZ_URL);
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForFunction(() => Array.isArray(window.ALL_WORDS) && ALL_WORDS.length > 0);
+  await page.evaluate(() => {
+    currentPool = 'core';
+    updatePoolUI();
+    savePrefs();
+  });
+  await page.selectOption('#gateSelect', '2');
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+
+  const initial = await page.evaluate(() => {
+    const saved = JSON.parse(localStorage.getItem('cet6_quiz_app_v2') || 'null');
+    return saved && saved.suspendedQuiz;
+  });
+  expect(initial).toEqual(expect.objectContaining({ pos: 0, done: 0, currentId: expect.any(Number) }));
+  expect(initial.ids.length).toBeGreaterThan(0);
+
+  await page.evaluate(() => handleAnswer(quizState.current.correctIndex));
+  const answered = await page.evaluate(() => {
+    const saved = JSON.parse(localStorage.getItem('cet6_quiz_app_v2') || 'null');
+    return saved && saved.suspendedQuiz;
+  });
+  expect(answered).toEqual(expect.objectContaining({ pos: 0, done: 1, currentId: initial.currentId }));
+  expect(answered.answers).toHaveProperty('0');
+
+  // pagehide is the fallback used when the mobile browser leaves the page.
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+  await page.reload();
+  await page.waitForLoadState('domcontentloaded');
+  await expect(page.locator('#savedBar')).toHaveClass(/show/);
+  await page.click('#savedBar button[onclick="resumeQuiz()"]');
+  await page.waitForFunction(() => quizActive && quizState.current);
+  const resumed = await page.evaluate(() => ({
+    pos: quizState.pos,
+    done: quizState.done,
+    currentId: quizState.current.word.id,
+    answer: quizState.answers[0]
+  }));
+  expect(resumed).toEqual({ pos: 0, done: 1, currentId: initial.currentId, answer: answered.answers['0'] });
+
+  await context.close();
+});
+
+test('visibilitychange saves the active quiz when a mobile tab is backgrounded', async ({ browser }) => {
+  const context = await browser.newContext();
+  await context.addInitScript(() => localStorage.setItem('cet6_onboarded', '1'));
+  const page = await context.newPage();
+
+  await page.goto(QUIZ_URL);
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForFunction(() => Array.isArray(window.ALL_WORDS) && ALL_WORDS.length > 0);
+  await page.evaluate(() => {
+    currentPool = 'core';
+    updatePoolUI();
+    savePrefs();
+  });
+  await page.selectOption('#gateSelect', '2');
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+
+  const currentId = await page.evaluate(() => quizState.current.word.id);
+  await page.evaluate(() => {
+    state.suspendedQuiz = null;
+    saveState();
+    // `document.hidden` is normally read-only; overriding it in the test
+    // lets us exercise the same branch used when a phone backgrounds a tab.
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('cet6_quiz_app_v2') || 'null').suspendedQuiz);
+  expect(saved).toEqual(expect.objectContaining({ pos: 0, done: 0, currentId }));
+
+  await context.close();
+});
+
+test('resume waits for an asynchronously loading full vocabulary pool', async ({ browser }) => {
+  const context = await browser.newContext();
+  await context.addInitScript(() => localStorage.setItem('cet6_onboarded', '1'));
+  const page = await context.newPage();
+
+  await page.goto(QUIZ_URL);
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForFunction(() => Array.isArray(window.FULL_WORDS) && FULL_WORDS.length > 0, null, { timeout: 15000 });
+  await page.evaluate(() => {
+    currentPool = 'full';
+    updatePoolUI();
+    savePrefs();
+  });
+  await page.selectOption('#gateSelect', '2');
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+
+  const snapshot = await page.evaluate(() => {
+    const saved = JSON.parse(localStorage.getItem('cet6_quiz_app_v2') || 'null');
+    quizActive = false;
+    return saved.suspendedQuiz;
+  });
+  expect(snapshot.poolType).toBe('full');
+
+  const waiting = await page.evaluate(() => {
+    _fullWordsLoaded = false;
+    window._resumeQuizLoading = false;
+    checkSuspendedQuiz();
+    window.__resumeWordsReady = null;
+    window.ensureFullWords = function(cb) { window.__resumeWordsReady = cb; };
+    resumeQuiz();
+    const btn = document.querySelector('#savedBar button[onclick="resumeQuiz()"]');
+    return {
+      disabled: !!(btn && btn.disabled),
+      savedId: state.suspendedQuiz && state.suspendedQuiz.currentId,
+      callbackQueued: typeof window.__resumeWordsReady === 'function'
+    };
+  });
+  expect(waiting).toEqual({ disabled: true, savedId: snapshot.currentId, callbackQueued: true });
+
+  await page.evaluate(() => {
+    _fullWordsLoaded = true;
+    window.__resumeWordsReady();
+  });
+  await page.waitForFunction(() => quizActive && quizState.current);
+  await expect(page.locator('.opt-btn')).toHaveCount(4);
+
+  await context.close();
+});
+
+test('start review waits for an asynchronously loading full vocabulary pool', async ({ browser }) => {
+  const context = await browser.newContext();
+  await context.addInitScript(() => localStorage.setItem('cet6_onboarded', '1'));
+  const page = await context.newPage();
+
+  await page.goto(QUIZ_URL);
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForFunction(() => Array.isArray(window.FULL_WORDS) && FULL_WORDS.length > 0, null, { timeout: 15000 });
+  await page.evaluate(() => {
+    currentPool = 'full';
+    updatePoolUI();
+    const w = FULL_WORDS[0];
+    state.stats.wordAttempts['full:' + w.id] = {
+      attempts: 1,
+      correct: 1,
+      wrong: 0,
+      learnedAt: Date.now() - 10 * 60 * 1000,
+      grid: [0, 0, 0, 0, 0, 0, 0]
+    };
+    savePrefs();
+    saveState();
+    quizActive = false;
+    renderReviewBar();
+  });
+
+  const waiting = await page.evaluate(() => {
+    _fullWordsLoaded = false;
+    window._startReviewLoading = false;
+    window.__reviewWordsReady = null;
+    window.ensureFullWords = function(cb) { window.__reviewWordsReady = cb; };
+    startReview();
+    const btn = document.querySelector('#reviewBar button[onclick="startReview()"]');
+    return {
+      disabled: !!(btn && btn.disabled),
+      callbackQueued: typeof window.__reviewWordsReady === 'function',
+      active: quizActive
+    };
+  });
+  expect(waiting).toEqual({ disabled: true, callbackQueued: true, active: false });
+
+  await page.evaluate(() => {
+    _fullWordsLoaded = true;
+    window.__reviewWordsReady();
+  });
+  await page.waitForFunction(() => quizActive && quizState.current);
+  await expect(page.locator('.opt-btn')).toHaveCount(4);
+
+  await context.close();
+});
+
 test('refresh preserves an in-progress 4-week plan quiz', async ({ browser }) => {
   const context = await browser.newContext();
   await context.addInitScript(() => localStorage.setItem('cet6_onboarded', '1'));
