@@ -317,9 +317,8 @@ theme-button{position:relative;display:inline-block;outline:none}
 .toggle-fs-btn:active{transform:scale(0.96)}
 .quiz-top-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
 .quiz-top-row .q-label{margin-bottom:0;flex:1;min-width:0;word-break:break-word}
-/* 全屏时按钮 fixed 悬浮右上角，标签容器右侧让位避免遮挡 */
-.quiz-card.fullscreen .quiz-top-row{padding-right:76px}
-.quiz-card.fullscreen .quiz-top-row .q-label{max-width:calc(100% - 76px)}
+/* 全屏时隐藏重复标签，工具栏仅为右上角退出按钮预留稳定高度 */
+.quiz-card.fullscreen .quiz-top-row{min-height:48px;margin-bottom:8px;padding-right:0}
 .quiz-card.fullscreen .quiz-top-row .q-label{display:none}
 .quiz-card.fullscreen{position:fixed;top:0;left:0;width:100vw;height:100vh;height:100dvh;z-index:200;display:flex;flex-direction:column;overflow:hidden;border-radius:0;margin:0;padding:0}
 .quiz-card.fullscreen .quiz-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:32px;padding-bottom:16px}
@@ -538,6 +537,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>🧾 反馈词性：</strong>答错后的“其余选项”按“英文单词 → 音标/朗读 → 词性 → 中文释义”排列，中文释义会自动去掉原文前导词性，避免重复或粘连显示。</div>
       <div class="rb"><strong>🧽 多词性清洗：</strong>释义中的 <code>n.&amp;v.</code> 等连接符会被清理，多词性中文义项若仅以空格相连会自动补中文逗号，避免出现释义粘连。</div>
       <div class="rb"><strong>📱 手机全屏：</strong>全屏做题时窄屏四个选项采用紧凑两列布局，隐藏左上角与导航重复的标签，仅保留中间导航条题号；在题面空白区域左右滑动可切换上一题/下一题，点击选项、输入框、导图或画布不会触发滑动。</div>
+      <div class="rb"><strong>🧱 全屏布局：</strong>退出全屏按钮单独占用顶部工具栏空间，上一题/题号/下一题导航不会与其重叠。</div>
       <div class="rb"><strong>⭐ 重点词：</strong>在单词标题与音标右侧/旁边点击「☆ 标记重点」或「★ 已标记」即可标记或取消当前单词；状态会同步到「重点词」列表，并影响「智能练习」的优先级。</div>
       <div class="rb"><strong>🗺️ 词群导图：</strong>答完题后自动显示当前词的词群关系图（单词浏览器中点「🗺️ 导图」按钮也可查看）——中心=词群主题或当前词，四周圆圈=关联词。圆圈外侧的 <span class="gl-badge">2</span> 绿色数字徽标表示该词下面还有几个分支：点击带徽标的圆圈逐层展开，没有徽标的圆圈=末端词（无分支），点击会朗读发音。点击单词文字同样朗读，点「← 返回上级」退回上一层。连线颜色区分关系：绿=派生（扩/合成）、蓝=同根、橙=近义、红=反义、粉=形近、灰=相关，虚线=形近/反义。</div>
       <div class="rb"><strong>📖 单元筛选与学习量：</strong>可手动切换要学习的 Unit（大纲词汇 Unit 1-14 / 核心词汇 Unit 1-10）；每次学习量按书中页数设定（1页≈20词，可选 1/2/3 页）。</div>

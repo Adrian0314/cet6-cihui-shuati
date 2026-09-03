@@ -230,10 +230,15 @@ test('en2cn distractors avoid near-duplicate senses and fullscreen supports swip
       columns: getComputedStyle(options).gridTemplateColumns.split(' ').length,
       labelWhiteSpace: getComputedStyle(label).whiteSpace,
       labelDisplay: getComputedStyle(label).display,
-      navQuestion: card.querySelector('#jumpInput') && card.querySelector('#jumpInput').value
+      navQuestion: card.querySelector('#jumpInput') && card.querySelector('#jumpInput').value,
+      controlsDoNotOverlap: (() => {
+        const toggle = card.querySelector('#toggleFsBtn').getBoundingClientRect();
+        const nav = card.querySelector('.quiz-nav').getBoundingClientRect();
+        return toggle.bottom <= nav.top || toggle.right <= nav.left || nav.right <= toggle.left;
+      })()
     };
   });
-  expect(layout).toEqual({ fullscreen: true, columns: 2, labelWhiteSpace: 'nowrap', labelDisplay: 'none', navQuestion: '1' });
+  expect(layout).toEqual({ fullscreen: true, columns: 2, labelWhiteSpace: 'nowrap', labelDisplay: 'none', navQuestion: '1', controlsDoNotOverlap: true });
   await page.setViewportSize({ width: 1200, height: 900 });
   const desktopFullscreen = await page.evaluate(() => ({
     labelDisplay: getComputedStyle(document.querySelector('#quizCard .q-label')).display,
