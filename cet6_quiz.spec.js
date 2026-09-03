@@ -1369,12 +1369,31 @@ test.describe('mode-specific other-option feedback', () => {
     });
   }
 
-  test('en2cn: other options show cleaned Chinese only', async ({ page }) => {
+  test('en2cn: question options stay Chinese while feedback names the words', async ({ page }) => {
     await page.selectOption('#modeSelect', 'en2cn');
-    const result = await answerWrong(page);
+    await page.click('button:has-text("开始做题")');
+    await page.waitForSelector('.opt-btn');
+    const questionOptions = await page.locator('.opt-btn').allTextContents();
+    questionOptions.forEach(text => {
+      const withoutPos = text.replace(/\b(?:n|v|adj|adv|prep|conj|pron|num|art|det|aux|modal|vt|vi|phr|phrase|interj)\.(?:\s*\/\s*(?:n|v|adj|adv|prep|conj|pron|num|art|det|aux|modal|vt|vi|phr|phrase|interj)\.)*/gi, '');
+      expect(withoutPos).not.toMatch(/[A-Za-z]/);
+    });
+    await page.evaluate(() => {
+      const q = quizState.questions[quizState.pos];
+      const wrongIdx = q.options.findIndex((o, i) => i !== q.correctIndex);
+      document.querySelectorAll('.opt-btn')[wrongIdx].click();
+    });
+    await page.waitForSelector('.feedback.show.fail');
+    const result = await page.evaluate(() => {
+      const fb = document.querySelector('.feedback.show.fail');
+      const options = fb && fb.querySelector('.feedback-options');
+      return {
+        optionRows: options ? options.querySelectorAll(':scope > div').length : 0,
+        text: options ? options.textContent : ''
+      };
+    });
     expect(result.optionRows).toBe(3); // 其余选项仍保留 3 行
-    expect(result.rows.length).toBe(0); // 但不再输出英文单词/音标
-    result.optionBodies.forEach(text => expect(text).not.toMatch(/[A-Za-z]/));
+    expect(result.text).toMatch(/[A-Za-z]+/); // 反馈区显示对应英文单词
   });
 
   test('cn2en: other options still include english word (regression)', async ({ page }) => {
