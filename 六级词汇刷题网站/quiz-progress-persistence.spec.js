@@ -212,7 +212,7 @@ test('en2cn distractors avoid near-duplicate senses and fullscreen supports swip
     notableNoteworthy: true,
     notwithstandingOptions: 3,
     closePair: false,
-    en2cnPos: expect.stringContaining('介词'),
+    en2cnPos: expect.stringContaining('prep.'),
     cn2enPos: expect.stringContaining('prep.'),
     reproachPos: expect.stringContaining('n. / v.')
   }));

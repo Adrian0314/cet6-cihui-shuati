@@ -532,7 +532,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>🏰 闯关模式：</strong>严格对应书中使用指南——闯关1「词群速记」：结合词群导图快速检测，认识/不认识直接判断；闯关2「选择检测」：对应书中学完一个 Lesson 后的检测（选择题/默写题）；闯关3「Unit综合测」：学完一个 Unit 后的综合检测（覆盖整个 Unit）。词群导图怎么看，见下方「🗺️ 词群导图」。</div>
       <div class="rb"><strong>📖 答题后信息顺序：</strong>提交答案或跳过后，题目与正确答案下方紧接默认展开的“单词详解”（巧记、例句、派生词）；随后显示“⚠️ 易混淆词”辨析和词群归属信息，最后显示“🗺️ 词群导图”。点击“📖 单词详解”标题可收起或重新展开，导图可继续点击圆圈下钻查看关联词。</div>
       <div class="rb"><strong>🧹 选择题释义显示：</strong>系统会自动清理词库中误混入释义末尾的孤立词性标记，并修复已知词条错误（<code>animal</code> 补全释义、<code>their</code> 去除多余“们”、<code>hear</code> 清理尾部残缺标点、<code>manoeuvre</code> 校正音标与释义字段），避免选项出现多余的 <code>v.</code>、<code>adj.</code> 或只有词性没有中文释义的文本。在线入口二维码指向 GitHub Pages 最新做题页。</div>
-      <div class="rb"><strong>🧹 中文选项清理：</strong>英文→中文选择题显示中文词性标签（名词、动词、形容词等）和清洗后的中文释义，不显示英文单词、音标或英文括注；中文→英文选项显示英文单词、标准词性缩写和音标。系统会移除释义中混入的拉丁字母、音标及英文括号说明（包括缺少开头斜杠但以斜杠接词性结尾的异常格式），保留中文释义中的正常斜杠用法。超过 90 个汉字的极长释义或清洗后无中文的候选不会作为中文干扰项，系统优先从同词性、同前缀、易混淆或释义相近的短释义候选补位，保证四个选项可用且不修改原词库。</div>
+      <div class="rb"><strong>🧹 中文选项清理：</strong>英文→中文选择题仅保留英文词性缩写（如 <code>n.</code>、<code>v.</code>、<code>adj.</code>、<code>prep.</code>）和清洗后的中文释义，不显示英文单词、音标或英文括注；中文→英文选项显示英文单词、标准词性缩写和音标。系统会移除释义中混入的拉丁字母、音标及英文括号说明（包括缺少开头斜杠但以斜杠接词性结尾的异常格式），保留中文释义中的正常斜杠用法。超过 90 个汉字的极长释义或清洗后无中文的候选不会作为中文干扰项，系统优先从同词性、同前缀、易混淆或释义相近的短释义候选补位，保证四个选项可用且不修改原词库。</div>
       <div class="rb"><strong>🧩 选项释义去重：</strong>英文选中文模式会自动比较四个选项的中文核心释义，跳过完全相同或高度重叠的释义，避免 <code>inquire/enquire</code>、<code>optimal/optimum</code> 这类词同时造成歧义；词库中的合法同义词仍会保留，只有在候选不足的极小自定义词池中才使用重复释义兜底。</div>
       <div class="rb"><strong>📱 手机全屏：</strong>全屏做题时窄屏四个选项采用紧凑两列布局，顶部只显示“第 X / Y 题”（记忆模式显示“剩余 N 词”）；在题面空白区域左右滑动可切换上一题/下一题，点击选项、输入框、导图或画布不会触发滑动。</div>
       <div class="rb"><strong>⭐ 重点词：</strong>在单词标题与音标右侧/旁边点击「☆ 标记重点」或「★ 已标记」即可标记或取消当前单词；状态会同步到「重点词」列表，并影响「智能练习」的优先级。</div>
@@ -1925,33 +1925,30 @@ function getChineseOptionText(meaning) {
   return /[\u3400-\u9fff]/.test(s) ? s : '';
 }
 
-var POS_ZH_LABELS = {
-  n: '名词', v: '动词', adj: '形容词', adv: '副词', prep: '介词',
-  conj: '连词', pron: '代词', num: '数词', art: '冠词', det: '限定词',
-  aux: '助动词', modal: '情态动词', vt: '及物动词', vi: '不及物动词',
-  phr: '短语', phrase: '短语', interj: '感叹词'
+var POS_LABELS = {
+  n: true, v: true, adj: true, adv: true, prep: true, conj: true,
+  pron: true, num: true, art: true, det: true, aux: true, modal: true,
+  vt: true, vi: true, phr: true, phrase: true, interj: true
 };
 function wordPartOfSpeech(word) {
   if (!word || !word.meaning) return [];
   var result = [];
-  // Read all POS markers before the first Chinese character, including
-  // compact forms such as "n.&v." and spaced forms "n. & v.".
+  // Read all POS markers, including compact forms such as "n.&v." and
+  // spaced forms "n. & v." that may appear across multiple Chinese senses.
   var source = String(word.meaning);
   var matches = source.toLowerCase().match(/[a-z]{1,10}\./g) || [];
   matches.forEach(function(marker) {
     var pos = marker.slice(0, -1);
     // Ignore incidental abbreviations such as “e.g.” in a definition;
     // only recognised part-of-speech markers become option labels.
-    if (POS_ZH_LABELS[pos] && result.indexOf(pos) === -1) result.push(pos);
+    if (POS_LABELS[pos] && result.indexOf(pos) === -1) result.push(pos);
   });
   return result;
 }
 function optionPosHTML(word, mode) {
   var pos = wordPartOfSpeech(word);
   if (!pos.length) return '';
-  var label = mode === 'en2cn'
-    ? pos.map(function(p) { return POS_ZH_LABELS[p] || '词性'; }).join(' / ')
-    : pos.map(function(p) { return p + '.'; }).join(' / ');
+  var label = pos.map(function(p) { return p + '.'; }).join(' / ');
   return '<span class="option-pos">' + label + '</span>';
 }
 
