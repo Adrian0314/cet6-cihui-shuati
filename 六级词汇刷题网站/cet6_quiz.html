@@ -417,6 +417,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
 .q-word{font-size:2.15rem;line-height:1.25}
 .pos-badge{color:var(--accent);background:rgba(15,118,110,.1)}
 .opt-btn{min-height:58px;background:var(--surface2);border:1px solid transparent;border-radius:7px;padding:14px 16px}
+.opt-btn>span:last-child{min-width:0;overflow-wrap:anywhere}
 .opt-btn:hover{border-color:var(--accent);background:rgba(15,118,110,.08)}
 .opt-btn .ol{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;border-radius:5px;background:var(--surface);color:var(--accent);border:1px solid var(--border)}
 .opt-btn.correct{border-color:var(--green)!important;background:rgba(22,163,74,.1)!important}
@@ -454,6 +455,11 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
   .memory-setting{grid-column:1 / -1}
   .quiz-card{padding:22px 18px}
   .q-word{font-size:1.7rem}
+  .quiz-card.fullscreen .quiz-scroll{padding:14px 12px 8px;overflow-y:auto;touch-action:pan-y}
+  .quiz-card.fullscreen .quiz-top-row .q-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;word-break:normal}
+  .quiz-card.fullscreen .options{grid-template-columns:1fr 1fr;gap:8px}
+  .quiz-card.fullscreen .opt-btn{min-height:50px;padding:8px 10px;font-size:.86rem;line-height:1.25;gap:6px}
+  .quiz-card.fullscreen .opt-btn .ol{min-width:22px;width:22px;height:22px;font-size:.75em}
 }
 @media(max-width:480px){
   .settings-grid{grid-template-columns:1fr}
@@ -461,6 +467,13 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
   .memory-setting .setting-note{margin-top:0}
   .quiz-card{padding:18px 14px}
   .q-word{font-size:1.5rem}
+  .quiz-card.fullscreen .quiz-scroll{padding:10px 8px 6px;overflow-y:auto}
+  .quiz-card.fullscreen .quiz-top-row{margin-bottom:4px}
+  .quiz-card.fullscreen .q-word{font-size:1.35rem}
+  .quiz-card.fullscreen .question-progress{margin-bottom:8px;padding:6px 8px}
+  .quiz-card.fullscreen .options{gap:6px}
+  .quiz-card.fullscreen .opt-btn{min-height:44px;padding:6px 7px;font-size:.78rem;line-height:1.2}
+  .quiz-card.fullscreen .opt-btn .ol{min-width:20px;width:20px;height:20px;font-size:.7em}
 }
 
 </style>
@@ -520,6 +533,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>🧹 选择题释义显示：</strong>系统会自动清理词库中误混入释义末尾的孤立词性标记，并修复已知词条错误（<code>animal</code> 补全释义、<code>their</code> 去除多余“们”、<code>hear</code> 清理尾部残缺标点、<code>manoeuvre</code> 校正音标与释义字段），避免选项出现多余的 <code>v.</code>、<code>adj.</code> 或只有词性没有中文释义的文本。在线入口二维码指向 GitHub Pages 最新做题页。</div>
       <div class="rb"><strong>🧹 中文选项清理：</strong>英文→中文选择题只显示中文释义和标点，会自动移除混入的音标、拉丁字母、词性缩写及英文括号说明（包括缺少开头斜杠但以斜杠接词性结尾的异常格式），保留中文释义中的正常斜杠用法；中文→英文选项仍保留独立音标辅助。超过 90 个汉字的极长释义或清洗后无中文的候选不会作为中文干扰项，系统优先从同词性、同前缀、易混淆或释义相近的短释义候选补位，保证四个选项可用且不修改原词库。</div>
       <div class="rb"><strong>🧩 选项释义去重：</strong>英文选中文模式会自动比较四个选项的中文核心释义，跳过完全相同或高度重叠的释义，避免 <code>inquire/enquire</code>、<code>optimal/optimum</code> 这类词同时造成歧义；词库中的合法同义词仍会保留，只有在候选不足的极小自定义词池中才使用重复释义兜底。</div>
+      <div class="rb"><strong>📱 手机全屏：</strong>全屏做题时窄屏四个选项采用紧凑两列布局，题目标签过长会省略；在题面空白区域左右滑动可切换上一题/下一题，点击选项、输入框、导图或画布不会触发滑动。</div>
       <div class="rb"><strong>⭐ 重点词：</strong>在单词标题与音标右侧/旁边点击「☆ 标记重点」或「★ 已标记」即可标记或取消当前单词；状态会同步到「重点词」列表，并影响「智能练习」的优先级。</div>
       <div class="rb"><strong>🗺️ 词群导图：</strong>答完题后自动显示当前词的词群关系图（单词浏览器中点「🗺️ 导图」按钮也可查看）——中心=词群主题或当前词，四周圆圈=关联词。圆圈外侧的 <span class="gl-badge">2</span> 绿色数字徽标表示该词下面还有几个分支：点击带徽标的圆圈逐层展开，没有徽标的圆圈=末端词（无分支），点击会朗读发音。点击单词文字同样朗读，点「← 返回上级」退回上一层。连线颜色区分关系：绿=派生（扩/合成）、蓝=同根、橙=近义、红=反义、粉=形近、灰=相关，虚线=形近/反义。</div>
       <div class="rb"><strong>📖 单元筛选与学习量：</strong>可手动切换要学习的 Unit（大纲词汇 Unit 1-14 / 核心词汇 Unit 1-10）；每次学习量按书中页数设定（1页≈20词，可选 1/2/3 页）。</div>
@@ -1915,6 +1929,12 @@ function getChineseOptionText(meaning) {
 function meaningChineseKey(meaning) {
   return getChinese(meaning).replace(/[^\u3400-\u9fff]/g, '');
 }
+function meaningChineseSegments(meaning) {
+  var text = getChinese(meaning || '');
+  return text.split(/[，,；;、。]/).map(function(part) {
+    return part.replace(/[^\u3400-\u9fff]/g, '');
+  }).filter(function(part) { return part.length >= 2; });
+}
 
 // 判断两个释义是否过于接近。完全相同或核心汉字高度重叠时，
 // 同一道英文选中文题只保留一个，避免用户无法凭释义作答。
@@ -1924,10 +1944,34 @@ function meaningsTooClose(a, b) {
   if (!ka || !kb) return false;
   if (ka === kb) return true;
   var minLen = Math.min(ka.length, kb.length);
-  if (minLen < 4) return false;
   var shorter = ka.length <= kb.length ? ka : kb;
   var longer = ka.length <= kb.length ? kb : ka;
-  if (longer.indexOf(shorter) !== -1 && shorter.length / longer.length >= 0.85) return true;
+  // 短释义也要去重：例如“尽管”与“尽管如此”只有两个核心字，
+  // 旧的 minLen<4 保护会让它们同时出现在选项中。
+  if (shorter.length >= 2 && longer.indexOf(shorter) !== -1 &&
+      shorter.length / longer.length >= (shorter.length < 4 ? 0.5 : 0.85)) return true;
+  // 处理语序/标点略有差异但共享长连续短语的释义。
+  var common = 0;
+  for (var si = 0; si < shorter.length; si++) {
+    for (var sj = si + 2; sj <= shorter.length; sj++) {
+      var part = shorter.substring(si, sj);
+      if (part.length > common && longer.indexOf(part) !== -1) common = part.length;
+    }
+  }
+  if (common >= 3 && common / shorter.length >= 0.75) return true;
+  if (minLen < 4) return false;
+  var segA = meaningChineseSegments(a && a.meaning != null ? a.meaning : a);
+  var segB = meaningChineseSegments(b && b.meaning != null ? b.meaning : b);
+  if (segA.length && segB.length) {
+    var shared = 0;
+    segA.forEach(function(sa) {
+      if (segB.some(function(sb) { return sa === sb || sa.indexOf(sb) !== -1 || sb.indexOf(sa) !== -1; })) shared++;
+    });
+    var segMin = Math.min(segA.length, segB.length);
+    // Split by meaning markers catches notable/noteworthy (two shared
+    // senses out of three) even when whole-string n-gram similarity is low.
+    if (shared >= 2 && shared / segMin >= 0.5) return true;
+  }
   var sa = Object.create(null), sb = Object.create(null), union = 0, inter = 0;
   for (var i = 0; i < ka.length - 1; i++) sa[ka.substring(i, i + 2)] = true;
   for (var j = 0; j < kb.length - 1; j++) sb[kb.substring(j, j + 2)] = true;
@@ -3046,22 +3090,25 @@ function autoSaveProgress() {
 // after the page is visible again; a click with no preceding input is ignored.
 var _resumeInputGuardUntil = 0;
 var _resumeInputGuardArmed = false;
-var _resumeInputGuardMs = 900;
 var _resumeLifecycleSeenHidden = false;
 function armResumeInputGuard() {
-  _resumeInputGuardUntil = Date.now() + _resumeInputGuardMs;
+  // Keep the guard until a fresh foreground input explicitly disarms it.
+  // A queued mobile click can arrive well after the app switch.
+  _resumeInputGuardUntil = 0;
   _resumeInputGuardArmed = true;
 }
 function resumeInputGuardActive() {
   if (!_resumeInputGuardArmed) return false;
-  if (Date.now() >= _resumeInputGuardUntil) {
+  if (_resumeInputGuardUntil && Date.now() >= _resumeInputGuardUntil) {
     _resumeInputGuardArmed = false;
     return false;
   }
   return true;
 }
 function markResumeUserInput() {
-  if (resumeInputGuardActive()) _resumeInputGuardArmed = false;
+  // Input delivered while the document is hidden may belong to the touch
+  // that caused the app switch. Only a new foreground input can arm a click.
+  if (!document.hidden && resumeInputGuardActive()) _resumeInputGuardArmed = false;
 }
 // visibilitychange is the lifecycle signal mobile browsers reliably emit when
 // switching apps/tabs. pagehide/beforeunload remain as complementary fallbacks.
@@ -3087,14 +3134,12 @@ document.addEventListener('click', function(e) {
   // emits pointerdown/touchstart and disarms this guard before click arrives.
   e.preventDefault();
   e.stopImmediatePropagation();
-  _resumeInputGuardArmed = false;
 }, true);
 document.addEventListener('keydown', function(e) {
   if (!resumeInputGuardActive()) return;
   if (e.key === ' ' || e.key === 'Spacebar') {
     e.preventDefault();
     e.stopImmediatePropagation();
-    _resumeInputGuardArmed = false;
   }
 }, true);
 window.addEventListener('pageshow', function(e) {
@@ -3997,6 +4042,53 @@ function renderQuizCard() {
     }
   } catch (e) {}
   scrollQuestionProgressToCurrent(card.querySelector('.question-progress'));
+  bindQuizSwipe(card);
+}
+
+// Mobile navigation: horizontal swipes on the question surface move between
+// questions while vertical scrolling, option taps, inputs, maps and canvases
+// retain their native interactions. The listener is bound once because the
+// quiz card's innerHTML is replaced on every question.
+function bindQuizSwipe(card) {
+  if (!card || card._quizSwipeBound) return;
+  card._quizSwipeBound = true;
+  var start = null;
+  function isSwipeBlockedTarget(target) {
+    return !!(target && target.closest && target.closest('button,input,textarea,select,a,canvas,.gmap-wrap,.question-progress'));
+  }
+  function pointTargetIsBlocked(point) {
+    if (!point || !document.elementFromPoint) return false;
+    return isSwipeBlockedTarget(document.elementFromPoint(point.clientX, point.clientY));
+  }
+  card.addEventListener('touchstart', function(e) {
+    if (!quizActive || !card.classList.contains('fullscreen') || e.touches.length !== 1) { start = null; return; }
+    var target = e.target;
+    if (isSwipeBlockedTarget(target)) {
+      start = null;
+      return;
+    }
+    var t = e.touches[0];
+    start = { x: t.clientX, y: t.clientY, at: Date.now(), blocked: pointTargetIsBlocked(t) };
+  }, { passive: true });
+  card.addEventListener('touchmove', function(e) {
+    if (!start || e.touches.length !== 1) return;
+    var t = e.touches[0];
+    if (isSwipeBlockedTarget(e.target) || pointTargetIsBlocked(t)) start.blocked = true;
+  }, { passive: true });
+  card.addEventListener('touchend', function(e) {
+    if (!start || e.changedTouches.length !== 1) { start = null; return; }
+    var t = e.changedTouches[0];
+    var dx = t.clientX - start.x;
+    var dy = t.clientY - start.y;
+    var elapsed = Date.now() - start.at;
+    var endOnInteractive = isSwipeBlockedTarget(e.target) || pointTargetIsBlocked(t);
+    var blocked = start.blocked || endOnInteractive;
+    start = null;
+    if (blocked || !quizActive || quizState.isMemory || !card.classList.contains('fullscreen') || elapsed > 700 || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.3) return;
+    e.preventDefault();
+    if (dx > 0) prevQuestion();
+    else advanceQuestion();
+  }, { passive: false });
 }
 
 function recordStat(word, mode, isCorrect, isClose, isDictation) {

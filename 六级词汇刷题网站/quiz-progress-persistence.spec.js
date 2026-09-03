@@ -98,7 +98,7 @@ test('a delayed skip click after returning from another app is ignored', async (
   await page.click('button:has-text("开始做题")');
   await page.waitForSelector('#skipBtn');
 
-  const result = await page.evaluate(() => {
+  const earlyIgnored = await page.evaluate(() => {
     Object.defineProperty(document, 'hidden', { configurable: true, value: true });
     document.dispatchEvent(new Event('visibilitychange'));
     Object.defineProperty(document, 'hidden', { configurable: true, value: false });
@@ -108,6 +108,22 @@ test('a delayed skip click after returning from another app is ignored', async (
     // has no pointerdown/touchstart from the current visible session.
     skip.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     const ignored = quizState.done === 0 && !quizState.answers[quizState.pos];
+    return ignored;
+  });
+  expect(earlyIgnored).toBe(true);
+
+  // The protection must also cover a click queued longer than the old short
+  // timeout while the phone is switching back to the page.
+  await page.waitForTimeout(1000);
+  const lateIgnored = await page.evaluate(() => {
+    const skip = document.getElementById('skipBtn');
+    skip.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    return quizState.done === 0 && !quizState.answers[quizState.pos];
+  });
+  expect(lateIgnored).toBe(true);
+
+  const result = await page.evaluate(() => {
+    const skip = document.getElementById('skipBtn');
     // A touch that began just before the app switch must also not become a
     // skip after the browser delivers its click on the visible page.
     Object.defineProperty(document, 'hidden', { configurable: true, value: true });
@@ -120,9 +136,8 @@ test('a delayed skip click after returning from another app is ignored', async (
     // A genuine tap starts with pointerdown and must remain functional.
     skip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
     skip.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    return { ignored, ignoredTouchResume, handled: quizState.done === 1, answer: quizState.answers[quizState.pos] };
+    return { ignored: true, ignoredTouchResume, handled: quizState.done === 1, answer: quizState.answers[quizState.pos] };
   });
-
   expect(result).toEqual({ ignored: true, ignoredTouchResume: true, handled: true, answer: 'skip' });
   await page.click('#nextBtn');
   await page.waitForSelector('#skipBtn');
@@ -160,6 +175,69 @@ test('spaces in dictation inputs and replayed foreground keys never skip', async
   });
 
   expect(result).toEqual({ inputSpaceIgnored: true, foregroundSpaceIgnored: true });
+  await context.close();
+});
+
+test('en2cn distractors avoid near-duplicate senses and fullscreen supports swipe navigation', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await context.addInitScript(() => localStorage.setItem('cet6_onboarded', '1'));
+  const page = await context.newPage();
+  await page.goto(QUIZ_URL);
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForFunction(() => Array.isArray(window.ALL_WORDS) && ALL_WORDS.length > 0);
+
+  const duplicateCheck = await page.evaluate(() => {
+    const word = ALL_WORDS.find(w => w.word === 'notwithstanding');
+    const options = getDistractors(word, 'en2cn', 3);
+    const all = [word, ...options];
+    let closePair = false;
+    for (let i = 0; i < all.length; i++) {
+      for (let j = i + 1; j < all.length; j++) {
+        if (meaningsTooClose(all[i], all[j])) closePair = true;
+      }
+    }
+    return {
+      notableNoteworthy: meaningsTooClose(
+        { meaning: 'adj.值得注意的；显著的，显要的' },
+        { meaning: 'adj.值得注意的；显著的，重要的' }
+      ),
+      notwithstandingOptions: options.length,
+      closePair
+    };
+  });
+  expect(duplicateCheck).toEqual({ notableNoteworthy: true, notwithstandingOptions: 3, closePair: false });
+
+  await page.selectOption('#gateSelect', '2');
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+  await page.click('#toggleFsBtn');
+  const layout = await page.evaluate(() => {
+    const card = document.getElementById('quizCard');
+    const label = card.querySelector('.q-label');
+    const options = card.querySelector('.options');
+    return {
+      fullscreen: card.classList.contains('fullscreen'),
+      columns: getComputedStyle(options).gridTemplateColumns.split(' ').length,
+      labelWhiteSpace: getComputedStyle(label).whiteSpace
+    };
+  });
+  expect(layout).toEqual({ fullscreen: true, columns: 2, labelWhiteSpace: 'nowrap' });
+
+  const swiped = await page.evaluate(() => {
+    const card = document.getElementById('quizCard');
+    const surface = card.querySelector('.q-word');
+    const touch = (type, x, y) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      const point = { clientX: x, clientY: y };
+      Object.defineProperty(event, type === 'touchstart' ? 'touches' : 'changedTouches', { value: [point] });
+      surface.dispatchEvent(event);
+    };
+    const before = quizState.pos;
+    touch('touchstart', 280, 300);
+    touch('touchend', 100, 304);
+    return { before, after: quizState.pos };
+  });
+  expect(swiped).toEqual({ before: 0, after: 1 });
   await context.close();
 });
 
