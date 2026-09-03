@@ -202,10 +202,20 @@ test('en2cn distractors avoid near-duplicate senses and fullscreen supports swip
         { meaning: 'adj.值得注意的；显著的，重要的' }
       ),
       notwithstandingOptions: options.length,
-      closePair
+      closePair,
+      en2cnPos: optionPosHTML(word, 'en2cn'),
+      cn2enPos: optionPosHTML(word, 'cn2en'),
+      reproachPos: optionPosHTML({ word: 'reproach', meaning: 'n.&v.责备，指责' }, 'cn2en')
     };
   });
-  expect(duplicateCheck).toEqual({ notableNoteworthy: true, notwithstandingOptions: 3, closePair: false });
+  expect(duplicateCheck).toEqual(expect.objectContaining({
+    notableNoteworthy: true,
+    notwithstandingOptions: 3,
+    closePair: false,
+    en2cnPos: expect.stringContaining('介词'),
+    cn2enPos: expect.stringContaining('prep.'),
+    reproachPos: expect.stringContaining('n. / v.')
+  }));
 
   await page.selectOption('#gateSelect', '2');
   await page.click('button:has-text("开始做题")');
