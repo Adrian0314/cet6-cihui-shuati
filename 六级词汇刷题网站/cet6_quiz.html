@@ -419,7 +419,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
 .pos-badge{color:var(--accent);background:rgba(15,118,110,.1)}
 .opt-btn{min-height:58px;background:var(--surface2);border:1px solid transparent;border-radius:7px;padding:14px 16px}
 .opt-btn>span:last-child{min-width:0;overflow-wrap:anywhere}
-.option-pos{display:inline-block;margin-right:5px;color:var(--accent);font-size:.78em;font-weight:700;white-space:nowrap}
+.option-pos{display:inline-block;margin:0 5px;color:var(--accent);font-size:.78em;font-weight:700;white-space:nowrap}
 .opt-btn:hover{border-color:var(--accent);background:rgba(15,118,110,.08)}
 .opt-btn .ol{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;border-radius:5px;background:var(--surface);color:var(--accent);border:1px solid var(--border)}
 .opt-btn.correct{border-color:var(--green)!important;background:rgba(22,163,74,.1)!important}
@@ -535,7 +535,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>🧹 选择题释义显示：</strong>系统会自动清理词库中误混入释义末尾的孤立词性标记，并修复已知词条错误（<code>animal</code> 补全释义、<code>their</code> 去除多余“们”、<code>hear</code> 清理尾部残缺标点、<code>manoeuvre</code> 校正音标与释义字段），避免选项出现多余的 <code>v.</code>、<code>adj.</code> 或只有词性没有中文释义的文本。在线入口二维码指向 GitHub Pages 最新做题页。</div>
       <div class="rb"><strong>🧹 中文选项清理：</strong>英文→中文题目选项仅保留英文词性缩写（如 <code>n.</code>、<code>v.</code>、<code>adj.</code>、<code>prep.</code>）和清洗后的中文释义，不显示英文单词、音标或英文括注；答错后的“其余选项”反馈会显示对应英文单词、词性和音标，便于复盘。中文→英文选项显示英文单词、标准词性缩写和音标。系统会移除释义中混入的拉丁字母、音标及英文括号说明（包括缺少开头斜杠但以斜杠接词性结尾的异常格式），保留中文释义中的正常斜杠用法。超过 90 个汉字的极长释义或清洗后无中文的候选不会作为中文干扰项，系统优先从同词性、同前缀、易混淆或释义相近的短释义候选补位，保证四个选项可用且不修改原词库。</div>
       <div class="rb"><strong>🧩 选项释义去重：</strong>英文选中文模式会自动比较四个选项的中文核心释义，跳过完全相同或高度重叠的释义，避免 <code>inquire/enquire</code>、<code>optimal/optimum</code> 这类词同时造成歧义；词库中的合法同义词仍会保留，只有在候选不足的极小自定义词池中才使用重复释义兜底。</div>
-      <div class="rb"><strong>🧾 反馈词性：</strong>答错后的“其余选项”中，英文单词后只显示一次词性和音标，中文释义会自动去掉原文前导词性，避免重复显示。</div>
+      <div class="rb"><strong>🧾 反馈词性：</strong>答错后的“其余选项”按“英文单词 → 音标/朗读 → 词性 → 中文释义”排列，中文释义会自动去掉原文前导词性，避免重复或粘连显示。</div>
       <div class="rb"><strong>🧽 多词性清洗：</strong>释义中的 <code>n.&amp;v.</code> 等连接符会被清理，多词性中文义项若仅以空格相连会自动补中文逗号，避免出现释义粘连。</div>
       <div class="rb"><strong>📱 手机全屏：</strong>全屏做题时窄屏四个选项采用紧凑两列布局，隐藏左上角与导航重复的标签，仅保留中间导航条题号；在题面空白区域左右滑动可切换上一题/下一题，点击选项、输入框、导图或画布不会触发滑动。</div>
       <div class="rb"><strong>⭐ 重点词：</strong>在单词标题与音标右侧/旁边点击「☆ 标记重点」或「★ 已标记」即可标记或取消当前单词；状态会同步到「重点词」列表，并影响「智能练习」的优先级。</div>
@@ -3215,9 +3215,9 @@ function wrongOptionsHTML(q, mode, chosenIndex) {
       ? ' <span style="color:var(--red);font-size:0.85em;margin-left:6px;">← 你选的</span>' : '';
     // 题目选项 en2cn 保持中文-only；答错反馈的其余选项显示英文单词、词性、音标及中文释义，便于复盘。
     // 反馈两种做题方向都使用完整词条信息，避免复盘时无法辨认选项对应的英文单词。
-    var text = '<strong>' + o.word + '</strong>' + optionPosHTML(o, mode) +
+    var text = '<strong>' + o.word + '</strong>' +
       (o.pronunciation ? ' <span style="color:var(--text2);font-size:0.85em;">' + o.pronunciation + '</span>' : '') +
-      speak + ' <span style="color:var(--text2);">' + (getChineseOptionText(o.meaning) || '(释义待补充)') + '</span>';
+      speak + optionPosHTML(o, mode) + '<span style="color:var(--text2);">' + (getChineseOptionText(o.meaning) || '(释义待补充)') + '</span>';
     rows += '<div style="margin:4px 0;"><span style="display:inline-block;min-width:20px;font-weight:700;color:var(--text2);">' + labels[i] + '.</span> ' + text + picked + '</div>';
   }
   return rows ? '<div class="feedback-options" style="margin:8px 0 2px;"><b>其余选项：</b>' + rows + '</div>' : '';

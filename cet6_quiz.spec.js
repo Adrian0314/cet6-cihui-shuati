@@ -1399,12 +1399,24 @@ test.describe('mode-specific other-option feedback', () => {
           const body = row.cloneNode(true);
           body.querySelectorAll('.option-pos').forEach(label => label.remove());
           return /\b(?:n|v|adj|adv|prep|conj|pron|num|art|det|aux|modal|vt|vi|phr|phrase|interj)\./i.test(body.textContent);
-        }) : false
+        }) : false,
+        order: (() => {
+          const html = wrongOptionsHTML({
+            correctIndex: 1,
+            options: [{ word: 'aggressive', pronunciation: '/ə\\'gresv/', meaning: 'adj.好斗的,侵略的' }, { word: 'answer', meaning: 'n.答案' }]
+          }, 'en2cn', -1);
+          return {
+            wordBeforePos: html.indexOf('<strong>aggressive</strong>') < html.indexOf('class="option-pos"'),
+            posBeforeChinese: html.indexOf('class="option-pos"') < html.indexOf('好斗的'),
+            notStuck: !html.includes('</strong><span class="option-pos">')
+          };
+        })()
       };
     });
     expect(result.optionRows).toBe(3); // 其余选项仍保留 3 行
     expect(result.text).toMatch(/[A-Za-z]+/); // 反馈区显示对应英文单词
     expect(result.duplicatePos).toBe(false);
+    expect(result.order).toEqual({ wordBeforePos: true, posBeforeChinese: true, notStuck: true });
   });
 
   test('cn2en: other options still include english word (regression)', async ({ page }) => {
