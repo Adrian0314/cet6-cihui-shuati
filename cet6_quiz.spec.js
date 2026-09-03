@@ -308,21 +308,26 @@ test('en2cn option text removes Latin residue and rejects empty candidates', asy
     cleaned: getChineseOptionText('n. 设备（bike；Sure）; be supposed to 使用'),
     slash: getChineseOptionText('n. 他/她/它们'),
     ipaSymbol: getChineseOptionText('n. 灰（古英语中的一个字母，也为音标）æ'),
-    empty: getChineseOptionText('adj. (obsolete)')
+    empty: getChineseOptionText('adj. (obsolete)'),
+    tumble: getChineseOptionText('n.跌倒 v.跌倒;倒塌;骤降'),
+    human: getChineseOptionText('n.人 adj.人(类)的')
   }));
   expect(result.cleaned).toBe('设备; 使用');
   expect(result.cleaned).not.toMatch(/[A-Za-z]/);
   expect(result.slash).toBe('他/她/它们');
   expect(result.ipaSymbol).not.toContain('æ');
   expect(result.empty).toBe('');
+  expect(result.tumble).toBe('跌倒，跌倒;倒塌;骤降');
+  expect(result.tumble).not.toContain('&');
+  expect(result.human).toBe('人，人类的');
 });
 
 test('all vocabulary en2cn option texts contain no Latin letters', async ({ page }) => {
   const bad = await page.evaluate(() => ALL_WORDS
     .map(word => ({ word: word.word, text: getChineseOptionText(word.meaning) }))
-    .filter(item => /[A-Za-z]/.test(item.text))
+    .filter(item => /[A-Za-z&＆]/.test(item.text) || /[\u3400-\u9fff]\s+[\u3400-\u9fff]/.test(item.text))
     .slice(0, 10));
-  expect(bad).toEqual([]);
+  expect(bad).toEqual([]); // 不得残留英文、& 连接符或未标点的中文义项拼接
 });
 
 test('feedback question line shows all POS tags for multi-POS word', async ({ page }) => {
