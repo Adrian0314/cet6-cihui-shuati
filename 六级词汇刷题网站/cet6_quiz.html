@@ -552,7 +552,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>🎯 每日目标：</strong>统计页可自选每日目标（做题+复习总数），达标后做题页会弹出庆祝提示；学习热力图的深绿色格子即代表"当日达标"。大纲词汇的艾宾浩斯打卡表则以当天计划的全部 Unit 完成为准，完成后计划栏显示“当天目标已完成”。</div>
       <div class="rb"><strong>🧠 记忆模式：</strong>做完一题即从队列移除，答错的词按当前词库的书中记忆规律自动排期回来复习。打开网页时若有到期单词，做题页顶部会显示复习横幅，点击"开始复习"一键清债；复习采用四选一快刷，复习中跳过视同答错。复习只从首次作答开始计，历史数据不迁移。</div>
       <div class="rb"><strong>🔊 朗读发音：</strong>点击喇叭按钮时优先使用普通媒体音频，以便跟随视频/音乐的蓝牙输出；网络音频无法播放时自动回退到系统 TTS。离线使用时仍可使用系统 TTS。</div>
-      <div class="rb"><strong>💾 中途退出：</strong>做题过程中会即时保存当前题位、已答数量和已选答案；手机切到后台、刷新页面或关闭网页时还会通过页面生命周期事件再保存一次，因此重新打开后点击顶部“继续做题”即可接着完成同一队列。手机从其他应用返回后的短暂恢复保护会忽略浏览器补发的旧“不会，跳过”点击，确认新的触摸后仍可正常操作。4 周 25 天计划会同时保存当日进度，复习提醒也会显示实际的已完成题数和待完成题数；当天新 Unit 的全部单词学完后会记录为已完成，不会再次生成同一 Unit 的整组复习；进入新的一天后，旧日未完成队列会按新的每日计划重置，已完成的旧快照会在重进时自动清除。</div>
+      <div class="rb"><strong>💾 中途退出：</strong>做题过程中会即时保存当前题位、已答数量和已选答案；手机切到后台、刷新页面或关闭网页时还会通过页面生命周期事件再保存一次，因此重新打开后点击顶部“继续做题”即可接着完成同一队列。手机从其他应用返回后的短暂恢复保护会持续忽略浏览器补发的旧“不会，跳过”点击；第一次真实点击选项不会被旧事件污染，只有前台真实按下跳过按钮后对应的点击才会执行跳过。4 周 25 天计划会同时保存当日进度，复习提醒也会显示实际的已完成题数和待完成题数；当天新 Unit 的全部单词学完后会记录为已完成，不会再次生成同一 Unit 的整组复习；进入新的一天后，旧日未完成队列会按新的每日计划重置，已完成的旧快照会在重进时自动清除。</div>
       <div class="rb"><strong>🧠 智能练习：</strong>这不是生成式 AI，而是按规则自动安排优先级：先练重点词和已经到期的复习词，再练从未做过、错误率较高或答错次数较多的词。系统从当前词库和 Unit 筛选范围中取词，数量按“每次学习”设置的 20/40/60 词决定，并沿用当前的做题方向、题目类型和闯关模式。智能练习不是只练错题；只练错题请使用“重做当前模式错题”，智能练习答错的单词仍会进入错题本。</div>
       <div class="rb" style="text-align:center;margin-top:8px;"><span style="color:var(--accent2);cursor:pointer;text-decoration:underline;" onclick="document.getElementById('rulesCard').classList.toggle('collapsed')">点击收起 ▲</span></div>
     </div>
@@ -3188,11 +3188,13 @@ function autoSaveProgress() {
 var _resumeInputGuardUntil = 0;
 var _resumeInputGuardArmed = false;
 var _resumeLifecycleSeenHidden = false;
+var _resumeSkipPointer = null;
 function armResumeInputGuard() {
   // Keep the guard until a fresh foreground input explicitly disarms it.
   // A queued mobile click can arrive well after the app switch.
   _resumeInputGuardUntil = 0;
   _resumeInputGuardArmed = true;
+  _resumeSkipPointer = null;
 }
 function resumeInputGuardActive() {
   if (!_resumeInputGuardArmed) return false;
@@ -3202,10 +3204,21 @@ function resumeInputGuardActive() {
   }
   return true;
 }
-function markResumeUserInput() {
-  // Input delivered while the document is hidden may belong to the touch
-  // that caused the app switch. Only a new foreground input can arm a click.
-  if (!document.hidden && resumeInputGuardActive()) _resumeInputGuardArmed = false;
+function markResumeUserInput(e) {
+  // Keep the guard armed for ordinary option taps. A browser may deliver the
+  // old skip click after that first tap; only an explicit fresh press on the
+  // skip button is allowed to release the guard for its matching click.
+  if (document.hidden || !resumeInputGuardActive()) return;
+  var target = e && e.target;
+  var skip = target && target.closest ? target.closest('#skipBtn,.skip-btn') : null;
+  if (skip) {
+    _resumeSkipPointer = {
+      target: skip,
+      at: Date.now(),
+      x: typeof e.clientX === 'number' ? e.clientX : null,
+      y: typeof e.clientY === 'number' ? e.clientY : null
+    };
+  }
 }
 // visibilitychange is the lifecycle signal mobile browsers reliably emit when
 // switching apps/tabs. pagehide/beforeunload remain as complementary fallbacks.
@@ -3227,8 +3240,19 @@ document.addEventListener('click', function(e) {
   var target = e.target;
   var skip = target && target.closest ? target.closest('#skipBtn,.skip-btn') : null;
   if (!skip) return;
+  var pointer = _resumeSkipPointer;
+  var sameTarget = pointer && pointer.target === skip;
+  var recent = pointer && Date.now() - pointer.at <= 1500;
+  var samePoint = !pointer || pointer.x === null || pointer.y === null ||
+    (typeof e.clientX !== 'number' || typeof e.clientY !== 'number') ||
+    (Math.abs(e.clientX - pointer.x) <= 24 && Math.abs(e.clientY - pointer.y) <= 24);
+  if (sameTarget && recent && samePoint) {
+    _resumeSkipPointer = null;
+    _resumeInputGuardArmed = false;
+    return;
+  }
   // Do not let a delayed lifecycle click skip a question. A real tap first
-  // emits pointerdown/touchstart and disarms this guard before click arrives.
+  // emits a matching pointerdown/touchstart on the skip button before click.
   e.preventDefault();
   e.stopImmediatePropagation();
 }, true);
@@ -4025,7 +4049,7 @@ function renderQuizCard() {
         '<button class="dict-submit-btn" id="dictSubmitBtn" onclick="handleDictationSubmit()">提交</button>' +
         '<button class="dict-submit-btn" id="handwriteBtn" onclick="openHandwritePad()" style="background:transparent;border:1px solid var(--accent);color:var(--accent);">✍️ 手写</button>' +
         '</div>' +
-        '<button class="skip-btn" id="skipBtn" onclick="handleSkip()" style="display:block;margin:18px auto 0;padding:10px 26px;background:transparent;border:1px dashed var(--border);color:var(--text2);border-radius:20px;cursor:pointer;font-size:0.85em;">不会，跳过</button>' +
+        '<button class="skip-btn" id="skipBtn" onclick="handleSkip(event)" style="display:block;margin:18px auto 0;padding:10px 26px;background:transparent;border:1px dashed var(--border);color:var(--text2);border-radius:20px;cursor:pointer;font-size:0.85em;">不会，跳过</button>' +
         '<div class="feedback" id="feedback"></div>';
     }
 
@@ -4116,7 +4140,7 @@ function renderQuizCard() {
       (answered || isSkip ? feedbackDetailsHTML(word, mode) : '') +
       '</div>' +
       '<div class="quiz-actions">' +
-      (answered || isSkip ? '' : '<button class="skip-btn" id="skipBtn" onclick="handleSkip()" style="display:block;margin:22px auto 0;padding:10px 26px;background:transparent;border:1px dashed var(--border);color:var(--text2);border-radius:20px;cursor:pointer;font-size:0.85em;">不会，跳过</button>') +
+      (answered || isSkip ? '' : '<button class="skip-btn" id="skipBtn" onclick="handleSkip(event)" style="display:block;margin:22px auto 0;padding:10px 26px;background:transparent;border:1px dashed var(--border);color:var(--text2);border-radius:20px;cursor:pointer;font-size:0.85em;">不会，跳过</button>') +
       '<button class="next-btn' + (answered || isSkip ? ' show' : '') + '" id="nextBtn" onclick="advanceQuestion()">' + (quizState.isMemory ? '继续学习 →' : '下一题 →') + '</button>' +
       '</div>';
 
@@ -6018,7 +6042,23 @@ function checkDailyGoal() {
 }
 
 // ============ SKIP & KEYBOARD ============
-function handleSkip() {
+function handleSkip(e) {
+  // The inline handler can still run for a stale button that was removed from
+  // the DOM while its click was queued. Recheck the foreground gesture here,
+  // because detached events never reach the document capture listener above.
+  if (resumeInputGuardActive()) {
+    var eventTarget = e && e.target;
+    var skip = eventTarget && eventTarget.closest ? eventTarget.closest('#skipBtn,.skip-btn') : null;
+    var pointer = _resumeSkipPointer;
+    var sameTarget = pointer && pointer.target === skip;
+    var recent = pointer && Date.now() - pointer.at <= 1500;
+    var samePoint = !pointer || pointer.x === null || pointer.y === null ||
+      !e || typeof e.clientX !== 'number' || typeof e.clientY !== 'number' ||
+      (Math.abs(e.clientX - pointer.x) <= 24 && Math.abs(e.clientY - pointer.y) <= 24);
+    if (!(sameTarget && recent && samePoint)) return;
+    _resumeSkipPointer = null;
+    _resumeInputGuardArmed = false;
+  }
   if (!quizActive || !quizState.current) return;
   if (isAnswered(quizState.pos)) return; // 已跳过不可再操作
   var q = quizState.current;

@@ -147,6 +147,52 @@ test('a delayed skip click after returning from another app is ignored', async (
   await context.close();
 });
 
+test('the first real option tap after a long background stay is not polluted by a stale skip click', async ({ browser }) => {
+  const context = await browser.newContext({ isMobile: true, hasTouch: true });
+  await context.addInitScript(() => localStorage.setItem('cet6_onboarded', '1'));
+  const page = await context.newPage();
+
+  await page.goto(QUIZ_URL);
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForFunction(() => Array.isArray(window.ALL_WORDS) && ALL_WORDS.length > 0);
+  await page.selectOption('#gateSelect', '2');
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  // Model a user returning after a long stay in another app. The guard has no
+  // timeout, so a stale click remains blocked regardless of elapsed time.
+  await page.waitForTimeout(2000);
+
+  await page.locator('.opt-btn').first().click();
+  const afterOption = await page.evaluate(() => ({
+    done: quizState.done,
+    answer: quizState.answers[quizState.pos],
+    skipHidden: document.getElementById('skipBtn') && document.getElementById('skipBtn').style.display === 'none'
+  }));
+  expect(afterOption.done).toBe(1);
+  expect(typeof afterOption.answer).toBe('number');
+  expect(afterOption.skipHidden).toBe(true);
+
+  // A delayed stale skip click after the option tap must still be ignored.
+  await page.evaluate(() => {
+    const skip = document.getElementById('skipBtn');
+    if (skip) skip.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  });
+  expect(await page.evaluate(() => quizState.done)).toBe(1);
+
+  await page.click('#nextBtn');
+  await page.waitForSelector('#skipBtn');
+  await page.click('#skipBtn');
+  expect(await page.evaluate(() => quizState.done)).toBe(2);
+  await context.close();
+});
+
 test('spaces in dictation inputs and replayed foreground keys never skip', async ({ browser }) => {
   const context = await browser.newContext({ isMobile: true, hasTouch: true });
   await context.addInitScript(() => localStorage.setItem('cet6_onboarded', '1'));
