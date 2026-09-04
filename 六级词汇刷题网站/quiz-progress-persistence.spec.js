@@ -182,7 +182,12 @@ test('the first real option tap after a long background stay is not polluted by 
   // A delayed stale skip click after the option tap must still be ignored.
   await page.evaluate(() => {
     const skip = document.getElementById('skipBtn');
-    if (skip) skip.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    if (!skip) return;
+    skip.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    // Detached legacy buttons can invoke their inline handler without
+    // bubbling through document; handleSkip() must protect this path too.
+    skip.remove();
+    skip.click();
   });
   expect(await page.evaluate(() => quizState.done)).toBe(1);
 

@@ -3189,12 +3189,16 @@ var _resumeInputGuardUntil = 0;
 var _resumeInputGuardArmed = false;
 var _resumeLifecycleSeenHidden = false;
 var _resumeSkipPointer = null;
+var _resumeSkipGestureApproved = false;
+var _resumeSkipBarrier = false;
 function armResumeInputGuard() {
   // Keep the guard until a fresh foreground input explicitly disarms it.
   // A queued mobile click can arrive well after the app switch.
   _resumeInputGuardUntil = 0;
   _resumeInputGuardArmed = true;
   _resumeSkipPointer = null;
+  _resumeSkipGestureApproved = false;
+  _resumeSkipBarrier = true;
 }
 function resumeInputGuardActive() {
   if (!_resumeInputGuardArmed) return false;
@@ -3243,11 +3247,11 @@ document.addEventListener('click', function(e) {
   var pointer = _resumeSkipPointer;
   var sameTarget = pointer && pointer.target === skip;
   var recent = pointer && Date.now() - pointer.at <= 1500;
-  var samePoint = !pointer || pointer.x === null || pointer.y === null ||
-    (typeof e.clientX !== 'number' || typeof e.clientY !== 'number') ||
-    (Math.abs(e.clientX - pointer.x) <= 24 && Math.abs(e.clientY - pointer.y) <= 24);
-  if (sameTarget && recent && samePoint) {
+  // Touchstart and the synthetic click that follows it often report
+  // different coordinates (or zero); target + recency is the reliable pair.
+  if (sameTarget && recent) {
     _resumeSkipPointer = null;
+    _resumeSkipGestureApproved = true;
     _resumeInputGuardArmed = false;
     return;
   }
@@ -6043,6 +6047,14 @@ function checkDailyGoal() {
 
 // ============ SKIP & KEYBOARD ============
 function handleSkip(e) {
+  // Detached inline handlers can bypass document-level capture listeners.
+  // During the post-resume barrier, only a click explicitly approved by a
+  // matching foreground skip gesture may reach the skip implementation.
+  if (_resumeSkipBarrier) {
+    if (!_resumeSkipGestureApproved) return;
+    _resumeSkipGestureApproved = false;
+    _resumeSkipBarrier = false;
+  }
   // The inline handler can still run for a stale button that was removed from
   // the DOM while its click was queued. Recheck the foreground gesture here,
   // because detached events never reach the document capture listener above.
@@ -6052,10 +6064,7 @@ function handleSkip(e) {
     var pointer = _resumeSkipPointer;
     var sameTarget = pointer && pointer.target === skip;
     var recent = pointer && Date.now() - pointer.at <= 1500;
-    var samePoint = !pointer || pointer.x === null || pointer.y === null ||
-      !e || typeof e.clientX !== 'number' || typeof e.clientY !== 'number' ||
-      (Math.abs(e.clientX - pointer.x) <= 24 && Math.abs(e.clientY - pointer.y) <= 24);
-    if (!(sameTarget && recent && samePoint)) return;
+    if (!(sameTarget && recent)) return;
     _resumeSkipPointer = null;
     _resumeInputGuardArmed = false;
   }
