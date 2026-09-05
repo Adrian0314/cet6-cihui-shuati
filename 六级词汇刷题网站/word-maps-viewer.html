@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>词群导图查看器 - 英语六级词群可视化</title>
+<meta name="theme-color" content="#7c3aed">
+<meta name="description" content="独立词群导图可视化：Unit 1-10 全部词群整树展示，支持搜索定位、发音、导出图片。数据来自《你还在背单词吗（刘晓艳）》书页导图。">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#fafafa;--surface:#fff;--surface2:#f3f0fa;
+  --text:#1a1a1a;--text2:#737373;--border:#e5e5e5;
+  --accent:#7c3aed;--accent-soft:rgba(124,58,237,.08);
+  --green:#059669;--blue:#2563eb;--orange:#d97706;--red:#dc2626;
+  --pink:#db2777;--gray:#737373;
+  --shadow:0 2px 10px rgba(0,0,0,.06);
+}
+@media(prefers-color-scheme:dark){
+  :root{
+    --bg:#0f172a;--surface:#1e293b;--surface2:#2a3752;
+    --text:#e2e8f0;--text2:#94a3b8;--border:#334155;
+    --accent-soft:rgba(167,139,250,.12);
+    --shadow:0 2px 10px rgba(0,0,0,.35);
+  }
+}
+html,body{height:100%}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  display:flex;flex-direction:column;
+}
+header{
+  background:var(--surface);border-bottom:1px solid var(--border);
+  padding:10px 14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;
+  box-shadow:var(--shadow);position:sticky;top:0;z-index:20;
+}
+header h1{font-size:1.05em;color:var(--accent);white-space:nowrap}
+header h1 .tag{
+  font-size:.68em;font-weight:600;color:var(--text2);
+  border:1px solid var(--border);border-radius:10px;padding:1px 8px;margin-left:6px;vertical-align:2px;
+}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;flex:1;min-width:0}
+.controls select,.controls input{
+  font:inherit;font-size:.88em;color:var(--text);
+  background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;outline:none;
+}
+.controls select:focus,.controls input:focus{border-color:var(--accent)}
+#unitSel{max-width:110px}
+#groupSel{flex:1;min-width:180px;max-width:420px}
+.search-wrap{position:relative}
+#search{width:190px;max-width:46vw}
+#searchResults{
+  position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:30;
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  box-shadow:0 8px 24px rgba(0,0,0,.15);max-height:300px;overflow:auto;display:none;
+}
+#searchResults .sr{
+  padding:7px 10px;font-size:.84em;cursor:pointer;border-bottom:1px solid var(--border);
+  display:flex;gap:6px;align-items:baseline;white-space:nowrap;overflow:hidden;
+}
+#searchResults .sr:last-child{border-bottom:none}
+#searchResults .sr:hover{background:var(--accent-soft)}
+#searchResults .sr .u{color:var(--accent);font-weight:600;flex-shrink:0}
+#searchResults .sr .g{color:var(--text2);overflow:hidden;text-overflow:ellipsis}
+#searchResults .sr .w{font-weight:600;flex-shrink:0}
+#searchResults .sr .none{color:var(--text2);text-align:center;width:100%}
+button{
+  font:inherit;font-size:.84em;cursor:pointer;
+  background:var(--surface);color:var(--text);
+  border:1px solid var(--border);border-radius:8px;padding:6px 10px;white-space:nowrap;
+  transition:background 150ms,transform 80ms;
+}
+button:hover{background:var(--accent-soft)}
+button:active{transform:scale(.96)}
+#stats{font-size:.8em;color:var(--text2);margin-left:auto;white-space:nowrap}
+main{flex:1;overflow:auto;position:relative;min-height:0}
+#stage{transform-origin:0 0;position:relative;display:inline-block}
+#svg{display:block;background:var(--bg)}
+svg text{user-select:none}
+.link{fill:none;stroke-width:1.6}
+.node{cursor:pointer}
+.node .card{fill:var(--surface);stroke:var(--border);stroke-width:1}
+.node:hover .card{stroke:var(--accent);stroke-width:1.6}
+.node.root .card{fill:var(--accent);stroke:var(--accent)}
+.node.root text{fill:#fff}
+.node .w{font-size:13px;font-weight:600;fill:var(--text)}
+.node.root .w{fill:#fff;font-size:15px}
+.node .ph{font-size:9.5px;fill:var(--text2)}
+.node .rel{
+  font-size:8.5px;font-weight:700;fill:#fff;
+}
+.node.collapsed .card{stroke-dasharray:4 3}
+.node.hit .card{stroke:var(--orange);stroke-width:2.5}
+.node.hit .w{fill:var(--orange)}
+#tooltip{
+  position:fixed;z-index:40;display:none;max-width:320px;
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  box-shadow:0 8px 24px rgba(0,0,0,.18);padding:10px 12px;font-size:.84em;line-height:1.55;
+  pointer-events:none;
+}
+#tooltip .t-w{font-size:1.05em;font-weight:700;color:var(--accent)}
+#tooltip .t-ph{color:var(--text2);font-size:.92em;margin-left:6px}
+#tooltip .t-me{color:var(--text);margin-top:2px}
+#tooltip .t-rel{display:inline-block;margin-top:5px;font-size:.78em;font-weight:600;color:#fff;border-radius:8px;padding:1px 8px}
+#toast{
+  position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:50;
+  background:rgba(17,24,39,.92);color:#fff;font-size:.84em;border-radius:10px;
+  padding:8px 16px;display:none;max-width:86vw;box-shadow:0 4px 16px rgba(0,0,0,.3);
+}
+#err{
+  display:none;margin:40px auto;max-width:560px;text-align:center;color:var(--text2);
+  font-size:.92em;line-height:1.8;padding:0 20px;
+}
+#err b{color:var(--red)}
+#legend{
+  position:fixed;left:12px;bottom:12px;z-index:25;background:var(--surface);
+  border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow);
+  padding:8px 12px;font-size:.76em;color:var(--text2);display:flex;flex-wrap:wrap;gap:3px 12px;max-width:92vw;
+}
+#legend .lg{display:inline-flex;align-items:center;gap:5px}
+#legend .dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.hint{
+  position:fixed;right:12px;bottom:12px;z-index:25;background:var(--surface);
+  border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow);
+  padding:8px 12px;font-size:.76em;color:var(--text2);max-width:280px;
+}
+@media(max-width:760px){
+  header{padding:8px 10px}
+  header h1{font-size:.95em}
+  #stats{display:none}
+  #legend{left:8px;bottom:8px;padding:6px 10px;font-size:.7em}
+  .hint{display:none}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🗺️ 词群导图查看器<span class="tag" id="modeTag">在线版</span></h1>
+  <div class="controls">
+    <select id="unitSel" title="选择单元"></select>
+    <select id="groupSel" title="选择词群"></select>
+    <button id="btnPrevGroup" title="上一个词群（←）">◀ 上一个</button>
+    <button id="btnNextGroup" title="下一个词群（→）">下一个 ▶</button>
+    <div class="search-wrap">
+      <input id="search" type="search" placeholder="🔍 搜索单词…" autocomplete="off">
+      <div id="searchResults"></div>
+    </div>
+    <button id="btnZoomIn" title="放大">➕</button>
+    <button id="btnZoomOut" title="缩小">➖</button>
+    <button id="btnReset" title="重置视图">⟲ 复位</button>
+    <button id="btnSvg" title="导出矢量图">⬇ SVG</button>
+    <button id="btnPng" title="导出图片">⬇ PNG</button>
+    <span id="stats"></span>
+  </div>
+</header>
+
+<main id="main">
+  <div id="err"></div>
+  <div id="stage"><svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+</main>
+
+<div id="legend"></div>
+<div class="hint">滚轮/双指缩放 · 拖拽平移 · 点击单词即可发音 · 悬停看释义 · ←/→ 切换词群</div>
+<div id="tooltip"></div>
+<div id="toast"></div>
+
+<script src="data/unit-maps.js"></script>
+<script src="data/core-words.js"></script>
+<script>
+(function(){
+'use strict';
+
+/* ================= 数据 ================= */
+var DATA = window.__UNIT_MAPS_DATA__;
+var DATA_ERR = null;
+if (!DATA) {
+  DATA_ERR = '未找到词群导图数据';
+}
+// 核心词库索引（发音/释义/词性以刷题网站词库为准，data/core-words.js 由 cet6_quiz.html 词表生成）
+var CORE = window.__CORE_WORDS__ || null;
+var CORENORM = window.__CORE_WORDS_NORM__ || null;
+function normKeyOf(s){
+  return String(s).toLowerCase().replace(/\(.*?\)/g, '').replace(/[\s\-'’]/g, '');
+}
+function coreInfo(word){
+  if (!CORE) return null;
+  var e = CORE[word];
+  if (!e) e = CORE[String(word).toLowerCase()];
+  if (!e && CORENORM) {
+    var wk = CORENORM[normKeyOf(word)];
+    if (wk) e = CORE[wk];
+  }
+  return e || null;
+}
+// 词库发音有效性：过滤 OCR 残缺值（如 "/-ize/"、"'-zation/" 这类）
+function isValidPron(p){
+  if (!p) return false;
+  var s = String(p).replace(/^\//,'').replace(/\/$/,'');
+  if (s.length < 3) return false;
+  if (/^[-/]/.test(s)) return false;
+  if (!/[a-z]/.test(s)) return false;
+  return true;
+}
+
+/* ================= 关系配色（与刷题网站一致） ================= */
+var REL_COLORS = {
+  '扩':'#059669','合成':'#059669','派生':'#059669','去im':'#059669',
+  '同根':'#2563eb',
+  '近义':'#d97706',
+  '反义':'#dc2626',
+  '形近':'#db2777',
+  '相关':'#737373','音近':'#737373'
+};
+function relColor(r){ return REL_COLORS[r] || '#737373'; }
+
+/* ================= 状态 ================= */
+var collapsed = new Set();   // 折叠的节点对象
+var scale = 1, tx = 0, ty = 0;
+var nodePos = [];            // 渲染出的节点位置信息
+var currentUnit = null, currentGid = null;
+var hitKey = null;           // 高亮单词
+
+/* ================= 元素 ================= */
+var $ = function(id){ return document.getElementById(id); };
+var unitSel = $('unitSel'), groupSel = $('groupSel');
+var search = $('search'), searchResults = $('searchResults');
+var svg = $('svg'), stage = $('stage'), main = $('main');
+var tooltip = $('tooltip'), toast = $('toast'), legend = $('legend');
+var statsEl = $('stats');
+
+/* ================= 布局常量 ================= */
+var COL_W = 230;      // 相邻层级水平间距
+var NODE_H = 46;      // 卡片高度
+var ROW_H = 58;       // 行距（叶子行）
+var GAP = 10;         // 子树间距
+var PAD = 24;         // 画布边距
+
+/* ================= 工具 ================= */
+function esc(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function speak(word){
+  try{
+    if (window.speechSynthesis) {
+      speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance(word);
+      u.lang = 'en-US'; u.rate = 0.95;
+      speechSynthesis.speak(u);
+    }
+  }catch(e){}
+}
+function nodeWidth(node){
+  var s = String(node.word || '');
+  // 中文/全角字符按 14.5px/字估算，半角按 8.5px/字估算（粗体 13px 字号）
+  var cjk = (s.match(/[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]/g) || []).length;
+  var w = Math.max(96, (s.length - cjk) * 8.5 + cjk * 14.5 + 34);
+  return Math.min(w, 230);
+}
+function hasKids(n){ return n.children && n.children.length > 0; }
+function isCollapsed(n){ return collapsed.has(n); }
+
+/* ================= 树布局 ================= */
+function subtreeHeight(n){
+  if (!hasKids(n) || isCollapsed(n)) return ROW_H;
+  var hs = 0;
+  for (var i=0;i<n.children.length;i++) hs += subtreeHeight(n.children[i]);
+  return hs + GAP * (n.children.length - 1);
+}
+function placeTree(roots, x, top){
+  var y = top;
+  roots.forEach(function(n){
+    var h = subtreeHeight(n);
+    n._x = x; n._y = top + h / 2;
+    if (hasKids(n) && !isCollapsed(n)) {
+      var cy = top;
+      n.children.forEach(function(c){
+        var ch = subtreeHeight(c);
+        placeTree([c], x + COL_W, cy);
+        cy += ch + GAP;
+      });
+    }
+    top += h + GAP;
+  });
+}
+function treeSize(roots){
+  var h = 0;
+  roots.forEach(function(n){ h += subtreeHeight(n); });
+  h += GAP * (roots.length - 1);
+  return { w: 0, h: h + PAD * 2 };
+}
+
+/* ================= 渲染 ================= */
+function currentGroup(){
+  if (!DATA || currentUnit == null || currentGid == null) return null;
+  var u = DATA[currentUnit];
+  return u ? u[currentGid] : null;
+}
+function render(){
+  var g = currentGroup();
+  if (!g) { svg.setAttribute('width', 0); svg.setAttribute('height', 0); return; }
+  tooltip.style.display = 'none';   // 重建前隐藏残留 tooltip
+  nodePos = [];
+  var roots = g.level1Nodes || [];
+  placeTree(roots, PAD + COL_W, PAD);
+  var size = treeSize(roots);
+  // 根节点（词群名）放在最左侧
+  var rootNode = { word: g.group_name, phonetic:'', meaning:'', pos:'', relation:'', children: roots };
+  // 根节点卡片左缘对齐 PAD：中心 x = PAD + 卡片宽/2，避免卡片/文字被画布左边界裁掉（此前"优秀的相关"只剩半边）
+  rootNode._x = PAD + nodeWidth(rootNode) / 2;
+  rootNode._y = PAD + size.h / 2 - ROW_H / 2 - GAP;
+
+  var out = [];
+  var edges = [];
+  var idx = 0;
+
+  function drawNode(n, isRoot, depth){
+    var w = nodeWidth(n), h = NODE_H;
+    var x = n._x - w / 2, y = n._y - h / 2;
+    var key = isRoot ? 'root' : (n.word + '#' + depth);
+    var isHit = !isRoot && hitKey && n.word === hitKey;
+    var cls = 'node' + (isRoot ? ' root' : '') + (isCollapsed(n) ? ' collapsed' : '') + (isHit ? ' hit' : '');
+    var rel = n.relation || '';
+    var col = isRoot ? '#7c3aed' : relColor(rel);
+    var id = idx++;
+    // 发音/释义/词性：优先用刷题网站词库数据（与网站显示一致），词库无此词或发音残缺时回退导图数据
+    var cinfo = isRoot ? null : coreInfo(n.word);
+    var effPhon = (cinfo && isValidPron(cinfo.p)) ? cinfo.p : n.phonetic;
+    var effMeaning = (cinfo && cinfo.m) ? cinfo.m : n.meaning;
+    var effPos = (cinfo && cinfo.o) ? cinfo.o : n.pos;
+    nodePos.push({ id:id, key:key, x:x, y:y, w:w, h:h, node:n, isRoot:isRoot, word:n.word, phon:effPhon, meaning:effMeaning, pos:effPos });
+
+    out.push('<g class="' + cls + '" data-id="' + id + '" data-word="' + esc(n.word) + '">');
+    out.push('<rect class="card" x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="9" style="stroke:' + (isRoot ? '#7c3aed' : '') + '"/>');
+    // 关系色条
+    if (!isRoot && rel) out.push('<rect x="' + x + '" y="' + y + '" width="4" height="' + h + '" rx="2" style="fill:' + col + '"/>');
+    // 单词
+    var txtX = x + 12;
+    out.push('<text class="w" x="' + txtX + '" y="' + (y + h/2 - 3) + '">' + esc(n.word) + '</text>');
+    // 音标
+    var ph = String(effPhon || '').replace(/^\//,'').replace(/\/$/,'');
+    if (ph && !isRoot) out.push('<text class="ph" x="' + txtX + '" y="' + (y + h/2 + 13) + '">' + esc(ph) + '</text>');
+    // 关系徽标（渲染后按单词真实宽度重定位，避免遮挡单词）
+    if (!isRoot && rel) {
+      var rw = rel.length * 9.5 + 10;
+      out.push('<rect class="rel rel-badge" x="' + (x + w - rw - 6) + '" y="' + (y + 5) + '" width="' + rw + '" height="15" rx="7.5" style="fill:' + col + '"/>');
+      out.push('<text class="rel-badge-t" x="' + (x + w - rw/2 - 6) + '" y="' + (y + 16) + '" text-anchor="middle" font-size="8.5" font-weight="700" fill="#fff" pointer-events="none">' + esc(rel) + '</text>');
+    }
+    out.push('</g>');
+
+    if (isRoot) {
+      roots.forEach(function(c){
+        edges.push([n._x + nodeWidth(n)/2, n._y, c._x - nodeWidth(c)/2, c._y, relColor(c.relation||'')]);
+      });
+    } else if (hasKids(n) && !isCollapsed(n)) {
+      n.children.forEach(function(c){
+        edges.push([n._x + nodeWidth(n)/2, n._y, c._x - nodeWidth(c)/2, c._y, relColor(c.relation||'')]);
+      });
+    }
+  }
+
+  drawNode(rootNode, true, 0);
+  var drawKids = function(list, depth){
+    list.forEach(function(n){
+      drawNode(n, false, depth);
+      if (hasKids(n) && !isCollapsed(n)) drawKids(n.children, depth+1);
+    });
+  };
+  drawKids(roots, 1);
+
+  edges.forEach(function(e){
+    var x1=e[0], y1=e[1], x2=e[2], y2=e[3], col=e[4];
+    var mx = (x1 + x2) / 2;
+    out.push('<path class="link" d="M' + x1 + ' ' + y1 + ' C ' + mx + ' ' + y1 + ', ' + mx + ' ' + y2 + ', ' + x2 + ' ' + y2 + '" style="stroke:' + col + '"/>');
+  });
+
+  svg.innerHTML = out.join('');
+  fixBadges();       // 关系徽标按单词真实渲染宽度重定位，避免遮挡单词
+  updateCanvasSize(); // 画布尺寸按实际节点包围盒计算（修复深层节点如 parliamentary 被画布裁掉）
+  bindTooltips();    // 每个节点卡片绑定 mouseenter/mouseleave：放上去才显示，靠近不显示
+
+  // 统计
+  var total = countWords(roots);
+  var gidList = Object.keys(DATA[currentUnit]).map(Number).sort(function(a,b){return a-b;});
+  var pos = gidList.indexOf(Number(currentGid)) + 1;
+  statsEl.textContent = 'Unit ' + currentUnit + ' · 词群 ' + pos + '/' + gidList.length + ' · 共 ' + total + ' 词';
+  applyTransform();
+}
+/* 关系徽标重定位：徽标贴在单词文字右侧 8px，卡片不够宽则扩展（上限 230，避免与下一列重叠），
+   文字过长放不下时回退右对齐。折叠按钮跟随卡片右缘。 */
+function fixBadges(){
+  svg.querySelectorAll('g.node').forEach(function(g){
+    var id = Number(g.getAttribute('data-id'));
+    var p = nodePos[id];
+    if (!p) return;
+    var badge = g.querySelector('.rel-badge');
+    var card = g.querySelector('rect.card');
+    var cx = Number(card.getAttribute('x'));
+    var cw = Number(card.getAttribute('width'));
+    if (!badge) {
+      // 无徽标但卡片未变：无需处理（折叠按钮位置不变）
+      return;
+    }
+    var tw = g.querySelector('text.w');
+    var tb = tw.getBBox();
+    var rw = Number(badge.getAttribute('width'));
+    var bx = tb.x + tb.width + 8;
+    var maxW = 230;
+    var need = bx + rw + 8 - cx;
+    if (need > cw && need <= maxW) { cw = need; card.setAttribute('width', cw); }
+    if (bx + rw > cx + cw - 4) bx = cx + cw - rw - 6;
+    badge.setAttribute('x', bx);
+    var bt = g.querySelector('.rel-badge-t');
+    if (bt) bt.setAttribute('x', bx + rw / 2);
+    p.w = cw;
+    // （折叠按钮已移除，卡片右缘无需跟随元素）
+  });
+}
+/* 画布尺寸：按所有已绘制卡片的实际包围盒 + 边距计算，设置 SVG 尺寸/viewBox 与舞台大小 */
+function updateCanvasSize(){
+  var minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
+  nodePos.forEach(function(p){
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x + p.w > maxX) maxX = p.x + p.w;
+    if (p.y + p.h > maxY) maxY = p.y + p.h;
+  });
+  if (maxX < minX) { minX = 0; minY = 0; maxX = PAD * 2; maxY = PAD * 2; }
+  var vx = Math.max(0, minX - PAD), vy = Math.max(0, minY - PAD);
+  var cw = maxX - minX + PAD * 2, ch = maxY - minY + PAD * 2;
+  svg.setAttribute('width', cw);
+  svg.setAttribute('height', ch);
+  svg.setAttribute('viewBox', vx + ' ' + vy + ' ' + cw + ' ' + ch);
+  var bg = svg.querySelector('#bgRect');
+  if (!bg) {
+    bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    bg.id = 'bgRect';
+    svg.insertBefore(bg, svg.firstChild);
+  }
+  bg.setAttribute('x', vx); bg.setAttribute('y', vy);
+  bg.setAttribute('width', cw); bg.setAttribute('height', ch);
+  bg.setAttribute('fill', 'var(--bg)');
+  stage.style.width = cw + 'px';
+  stage.style.height = ch + 'px';
+}
+function countWords(list){
+  var n = 0;
+  list.forEach(function(x){ n += 1 + (x.children ? countWords(x.children) : 0); });
+  return n;
+}
+function applyTransform(){
+  stage.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')';
+}
+
+/* ================= 选择器填充 ================= */
+function fillUnits(){
+  if (!DATA) return;
+  var units = Object.keys(DATA).map(Number).sort(function(a,b){return a-b;});
+  unitSel.innerHTML = '';
+  units.forEach(function(u){
+    var o = document.createElement('option');
+    o.value = u; o.textContent = 'Unit ' + u;
+    unitSel.appendChild(o);
+  });
+  if (units.length) {
+    currentUnit = units[0];
+    unitSel.value = String(units[0]);
+  }
+}
+function fillGroups(){
+  if (!DATA || currentUnit == null) return;
+  var u = DATA[currentUnit];
+  var gids = Object.keys(u).map(Number).sort(function(a,b){return a-b;});
+  groupSel.innerHTML = '';
+  gids.forEach(function(gid){
+    var g = u[gid];
+    var cnt = countWords(g.level1Nodes || []);
+    var o = document.createElement('option');
+    o.value = gid;
+    o.textContent = gid + '. ' + g.group_name + '（' + cnt + ' 词）';
+    groupSel.appendChild(o);
+  });
+  if (gids.length) {
+    currentGid = gids[0];
+    groupSel.value = String(gids[0]);
+  }
+}
+function fillLegend(){
+  legend.innerHTML = '';
+  var items = [['扩/派生','#059669'],['同根','#2563eb'],['近义','#d97706'],['反义','#dc2626'],['形近','#db2777'],['相关','#737373']];
+  items.forEach(function(it){
+    var s = document.createElement('span');
+    s.className = 'lg';
+    s.innerHTML = '<span class="dot" style="background:' + it[1] + '"></span>' + it[0];
+    legend.appendChild(s);
+  });
+}
+
+/* ================= 搜索 ================= */
+var searchTimer = null;
+search.addEventListener('input', function(){
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(doSearch, 180);
+});
+function doSearch(){
+  var q = search.value.trim().toLowerCase();
+  var box = searchResults;
+  if (q.length < 1) { box.style.display = 'none'; return; }
+  var hits = [];
+  Object.keys(DATA).forEach(function(u){
+    Object.keys(DATA[u]).forEach(function(gid){
+      var g = DATA[u][gid];
+      var walk = function(ns){
+        (ns || []).forEach(function(n){
+          if (String(n.word).toLowerCase().indexOf(q) !== -1) {
+            hits.push({ u:u, gid:gid, gname:g.group_name, word:n.word, node:n });
+          }
+          walk(n.children);
+        });
+      };
+      walk(g.level1Nodes || []);
+    });
+  });
+  if (hits.length > 20) hits = hits.slice(0, 20);
+  box.innerHTML = '';
+  if (!hits.length) {
+    box.innerHTML = '<div class="sr none">未找到匹配单词</div>';
+  } else {
+    hits.forEach(function(h){
+      var d = document.createElement('div');
+      d.className = 'sr';
+      d.innerHTML = '<span class="u">U' + h.u + '</span><span class="w">' + esc(h.word) + '</span><span class="g">' + esc(h.gname) + '</span>';
+      d.addEventListener('click', function(){ jumpTo(h.u, h.gid, h.word); });
+      box.appendChild(d);
+    });
+  }
+  box.style.display = 'block';
+}
+function jumpTo(u, gid, word){
+  search.value = '';
+  searchResults.style.display = 'none';
+  currentUnit = u; currentGid = gid;
+  unitSel.value = String(u);
+  groupSel.value = String(gid);
+  // 展开该词所在分支
+  var g = DATA[u][gid];
+  var found = null;
+  (function walk(ns, path){
+    (ns || []).forEach(function(n){
+      if (n.word === word) { found = path.slice(); }
+      walk(n.children, path.concat([n]));
+    });
+  })(g.level1Nodes || [], []);
+  if (found) found.forEach(function(n){ collapsed.delete(n); });
+  hitKey = word;
+  render();
+  // 滚动到高亮节点
+  var p = nodePos.filter(function(x){ return x.word === word; })[0];
+  if (p) {
+    var cx = (p.x + p.w/2) * scale + tx;
+    var cy = (p.y + p.h/2) * scale + ty;
+    main.scrollTo({ top: Math.max(0, cy - main.clientHeight/2.4), left: Math.max(0, cx - main.clientWidth/2), behavior:'smooth' });
+  }
+  toastMsg('已定位：' + word + '（U' + u + ' ' + g.group_name + '）');
+  setTimeout(function(){ hitKey = null; render(); }, 2600);
+}
+
+/* ================= 事件 ================= */
+unitSel.addEventListener('change', function(){
+  currentUnit = Number(unitSel.value);
+  fillGroups();
+  hitKey = null;
+  render();
+});
+groupSel.addEventListener('change', function(){
+  currentGid = Number(groupSel.value);
+  hitKey = null;
+  render();
+});
+/* 上一个/下一个词群快速翻动：全局顺序 = Unit 升序 × Unit 内 gid 升序，首尾回绕。
+   支持按钮与键盘 ←/→（在搜索框/下拉框输入时除外） */
+var groupOrder = [];
+function buildGroupOrder(){
+  groupOrder = [];
+  if (!DATA) return;
+  Object.keys(DATA).map(Number).sort(function(a,b){return a-b;}).forEach(function(u){
+    Object.keys(DATA[u]).map(Number).sort(function(a,b){return a-b;}).forEach(function(gid){
+      groupOrder.push({ u: u, gid: gid });
+    });
+  });
+}
+function goGroup(delta){
+  if (!groupOrder.length || currentUnit == null || currentGid == null) return;
+  var idx = -1;
+  for (var i = 0; i < groupOrder.length; i++) {
+    if (groupOrder[i].u === Number(currentUnit) && groupOrder[i].gid === Number(currentGid)) { idx = i; break; }
+  }
+  if (idx < 0) idx = 0;
+  var ni = idx + delta;
+  var wrapped = false;
+  if (ni < 0) { ni = groupOrder.length - 1; wrapped = true; }
+  if (ni >= groupOrder.length) { ni = 0; wrapped = true; }
+  var t = groupOrder[ni];
+  currentUnit = t.u; currentGid = t.gid;
+  unitSel.value = String(t.u);
+  groupSel.value = String(t.gid);
+  hitKey = null;
+  render();
+  if (wrapped) {
+    var g = currentGroup();
+    toastMsg('已回绕到' + (delta < 0 ? '最后一个' : '第一个') + '词群：U' + t.u + (g ? ' ' + g.group_name : ''));
+  }
+}
+$('btnPrevGroup').addEventListener('click', function(){ goGroup(-1); });
+$('btnNextGroup').addEventListener('click', function(){ goGroup(1); });
+document.addEventListener('keydown', function(ev){
+  var tag = ev.target && ev.target.tagName;
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+  if (ev.key === 'ArrowLeft') { ev.preventDefault(); goGroup(-1); }
+  else if (ev.key === 'ArrowRight') { ev.preventDefault(); goGroup(1); }
+});
+svg.addEventListener('click', function(ev){
+  if (suppressClick) { suppressClick = false; return; }   // 拖拽/滑动后的 click 不触发朗读
+  var t = ev.target;
+  while (t && t !== svg && !t.getAttribute('data-id')) t = t.parentNode;
+  if (!t || t === svg) return;
+  var id = t.getAttribute('data-id');
+  if (id != null) {
+    var info = nodePos[Number(id)];
+    if (info && !info.isRoot) speak(info.word);
+  }
+});
+/* 每个节点卡片绑定 tooltip：mouseenter 进入卡片才显示（不冒泡、严格命中），
+   mouseleave 离开卡片立即隐藏——鼠标靠近（连线/空隙/背景）不会误显示 */
+function bindTooltips(){
+  svg.querySelectorAll('g.node').forEach(function(g){
+    g.addEventListener('mouseenter', function(){
+      var info = nodePos[Number(g.getAttribute('data-id'))];
+      if (!info) return;
+      var n = info.node, rel = n.relation || '';
+      var html = '<span class="t-w">' + esc(n.word) + '</span>';
+      if (info.phon) html += '<span class="t-ph">' + esc(info.phon) + '</span>';
+      if (info.meaning) html += '<div class="t-me">' + esc(info.meaning) + '</div>';
+      if (rel) html += '<span class="t-rel" style="background:' + relColor(rel) + '">' + esc(rel) + '</span>';
+      if (!info.isRoot) html += '<div style="margin-top:5px;font-size:.78em;color:var(--text2)">点击单词即可发音</div>';
+      tooltip.innerHTML = html;
+      tooltip.style.display = 'block';
+      var r = g.querySelector('rect.card').getBoundingClientRect();
+      moveTooltipTo(r.left + r.width / 2, r.top - 8);
+    });
+    g.addEventListener('mouseleave', function(){
+      tooltip.style.display = 'none';
+    });
+  });
+}
+function moveTooltipTo(x, y){
+  var tw = tooltip.offsetWidth || 220, th = tooltip.offsetHeight || 80;
+  var px = Math.min(x + 14, window.innerWidth - tw - 10);
+  var py = y - th - 10;
+  if (py < 8) py = y + 18;
+  tooltip.style.left = px + 'px';
+  tooltip.style.top = py + 'px';
+}
+svg.addEventListener('mousemove', function(ev){
+  if (tooltip.style.display === 'block') moveTooltipTo(ev.clientX, ev.clientY);
+});
+
+/* ================= 缩放 / 平移 / 手势 ================= */
+function zoomAt(factor, cx, cy){
+  var ns = Math.min(3, Math.max(0.15, scale * factor));
+  var k = ns / scale;
+  tx = cx - (cx - tx) * k;
+  ty = cy - (cy - ty) * k;
+  scale = ns;
+  applyTransform();
+}
+main.addEventListener('wheel', function(ev){
+  ev.preventDefault();
+  var rect = main.getBoundingClientRect();
+  zoomAt(Math.exp(-ev.deltaY * 0.0012), ev.clientX - rect.left, ev.clientY - rect.top);
+}, { passive:false });
+$('btnZoomIn').addEventListener('click', function(){
+  zoomAt(1.25, main.clientWidth/2, main.clientHeight/2);
+});
+$('btnZoomOut').addEventListener('click', function(){
+  zoomAt(0.8, main.clientWidth/2, main.clientHeight/2);
+});
+$('btnReset').addEventListener('click', function(){
+  scale = 1; tx = 0; ty = 0;
+  applyTransform();
+  main.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+});
+
+/* 拖拽平移：mousedown + window mousemove/mouseup。
+   不用 setPointerCapture（它会把 pointerup 后的 click 派发到 main，导致点卡片/喇叭朗读失效）；
+   拖拽移动超过阈值后抑制随后的 click，避免拖完误触发朗读。 */
+var drag = null, suppressClick = false;
+main.addEventListener('mousedown', function(ev){
+  if (ev.target.closest('svg')) {
+    drag = { x: ev.clientX, y: ev.clientY, tx: tx, ty: ty };
+  }
+});
+window.addEventListener('mousemove', function(ev){
+  if (drag) {
+    var dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
+    if (Math.hypot(dx, dy) > 4) {
+      drag.moved = true;
+      tx = drag.tx + dx;
+      ty = drag.ty + dy;
+      applyTransform();
+    }
+  }
+});
+window.addEventListener('mouseup', function(){
+  if (drag && drag.moved) suppressClick = true;
+  drag = null;
+});
+
+// 触摸：单指滑动平移 + 双指缩放；轻点（tap）仍由 click 处理朗读
+var pinch = null, touchDrag = null;
+main.addEventListener('touchstart', function(ev){
+  if (ev.touches.length === 2) {
+    touchDrag = null;
+    pinch = { d: dist(ev.touches), s: scale, tx: tx, ty: ty, cx: (ev.touches[0].clientX + ev.touches[1].clientX)/2, cy: (ev.touches[0].clientY + ev.touches[1].clientY)/2 };
+  } else if (ev.touches.length === 1) {
+    touchDrag = { x: ev.touches[0].clientX, y: ev.touches[0].clientY, tx: tx, ty: ty };
+  }
+}, { passive:true });
+main.addEventListener('touchmove', function(ev){
+  if (pinch && ev.touches.length === 2) {
+    ev.preventDefault();
+    var d = dist(ev.touches);
+    var ns = Math.min(3, Math.max(0.15, pinch.s * d / pinch.d));
+    var k = ns / pinch.s;
+    var rect = main.getBoundingClientRect();
+    var cx = pinch.cx - rect.left, cy = pinch.cy - rect.top;
+    tx = cx - (cx - pinch.tx) * k;
+    ty = cy - (cy - pinch.ty) * k;
+    scale = ns;
+    applyTransform();
+  } else if (touchDrag && ev.touches.length === 1) {
+    ev.preventDefault();
+    var dx = ev.touches[0].clientX - touchDrag.x, dy = ev.touches[0].clientY - touchDrag.y;
+    if (Math.hypot(dx, dy) > 8) {
+      touchDrag.moved = true;
+      tx = touchDrag.tx + dx;
+      ty = touchDrag.ty + dy;
+      applyTransform();
+    }
+  }
+}, { passive:false });
+main.addEventListener('touchend', function(){
+  pinch = null;
+  if (touchDrag && touchDrag.moved) suppressClick = true;
+  touchDrag = null;
+});
+function dist(t){ return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); }
+
+/* ================= 导出 ================= */
+function svgString(){
+  // 页面内 SVG 依赖外部 CSS 类，导出前把计算样式固化为内联属性
+  var srcEls = svg.querySelectorAll('*');
+  var i, el, s;
+  for (i = 0; i < srcEls.length; i++) {
+    el = srcEls[i]; s = getComputedStyle(el);
+    if (s.fill && s.fill !== 'none') el.setAttribute('fill', s.fill);
+    if (s.stroke && s.stroke !== 'none') el.setAttribute('stroke', s.stroke);
+    if (el.tagName === 'text') {
+      el.setAttribute('font-size', s.fontSize);
+      el.setAttribute('font-family', s.fontFamily);
+    }
+    if (el.tagName === 'path' && s.strokeWidth) el.setAttribute('stroke-width', s.strokeWidth);
+    if (s.fillOpacity && s.fillOpacity !== '1') el.setAttribute('fill-opacity', s.fillOpacity);
+  }
+  var clone = svg.cloneNode(true);
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  var w = svg.getAttribute('width'), h = svg.getAttribute('height');
+  clone.setAttribute('width', w);
+  clone.setAttribute('height', h);
+  clone.setAttribute('viewBox', svg.getAttribute('viewBox'));
+  var s2 = new XMLSerializer().serializeToString(clone);
+  return '<?xml version="1.0" encoding="UTF-8"?>\n' + s2;
+}
+function download(name, blob){
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 800);
+}
+function safeName(s){
+  return String(s || 'wordmap').replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 40);
+}
+$('btnSvg').addEventListener('click', function(){
+  if (!currentGroup()) return;
+  var blob = new Blob([svgString()], { type: 'image/svg+xml' });
+  download('词群导图_U' + currentUnit + '_' + safeName(currentGroup().group_name) + '.svg', blob);
+  toastMsg('SVG 已导出');
+});
+$('btnPng').addEventListener('click', function(){
+  if (!currentGroup()) return;
+  var w = Number(svg.getAttribute('width')), h = Number(svg.getAttribute('height'));
+  var scale2 = 2;
+  var img = new Image();
+  img.onload = function(){
+    var cv = document.createElement('canvas');
+    cv.width = Math.round(w * scale2); cv.height = Math.round(h * scale2);
+    var ctx = cv.getContext('2d');
+    ctx.fillStyle = getComputedStyle(document.body).backgroundColor;
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.drawImage(img, 0, 0, cv.width, cv.height);
+    cv.toBlob(function(blob){
+      if (blob) {
+        download('词群导图_U' + currentUnit + '_' + safeName(currentGroup().group_name) + '.png', blob);
+        toastMsg('PNG 已导出');
+      } else {
+        toastMsg('PNG 导出失败，可尝试导出 SVG');
+      }
+    }, 'image/png');
+  };
+  img.onerror = function(){ toastMsg('PNG 导出失败（浏览器限制），可尝试导出 SVG'); };
+  img.src = URL.createObjectURL(new Blob([svgString()], { type: 'image/svg+xml' }));
+});
+function toastMsg(msg){
+  toast.textContent = msg;
+  toast.style.display = 'block';
+  clearTimeout(toastMsg._t);
+  toastMsg._t = setTimeout(function(){ toast.style.display = 'none'; }, 2600);
+}
+
+/* ================= 启动 ================= */
+function init(){
+  if (DATA_ERR) {
+    var e = $('err');
+    e.style.display = 'block';
+    e.innerHTML = '<b>加载失败：</b>未找到词群导图数据。<br>请确认 <code>data/unit-maps.js</code> 与本页面在同一目录（<code>data</code> 文件夹与页面同级）。<br>若使用的是离线单文件版，请重新生成或使用在线版：<br><a href="https://adrian0314.github.io/cet6-cihui-shuati/word-maps-viewer.html" style="color:var(--accent)">在线版链接</a>';
+    $('stage').style.display = 'none';
+    return;
+  }
+  // 旧版词库缓存检测：Service Worker 缓存了旧 core-words.js 时提示强刷
+  if (CORE && Object.keys(CORE).length < 7000 && location.protocol !== 'file:') {
+    toastMsg('⚠️ 检测到浏览器缓存了旧版词库数据（' + Object.keys(CORE).length + ' 词），部分单词发音可能不完整——请再刷新一次页面');
+  }
+  // 模式标识
+  if (location.protocol === 'file:') {
+    $('modeTag').textContent = window.__UNIT_MAPS_DATA_INLINE__ ? '离线单文件版' : '离线版（依赖 data 目录）';
+  }
+  fillUnits();
+  fillGroups();
+  fillLegend();
+  buildGroupOrder();
+  render();
+}
+init();
+
+})();
+</script>
+</body>
+</html>

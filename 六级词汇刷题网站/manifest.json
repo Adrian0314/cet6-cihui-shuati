@@ -1,0 +1,16 @@
+{
+  "name": "英语六级词汇刷题系统",
+  "short_name": "六级刷题",
+  "description": "1500核心词 + 5500全词汇 · 频率分级 · 间隔复习 · 错题本 · 统计",
+  "start_url": "cet6_quiz.html",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#7c3aed",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

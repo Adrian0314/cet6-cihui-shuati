@@ -1,0 +1,3171 @@
+// Playwright tests for CET-6 Quiz System
+// Run with: npx playwright test
+import { test, expect } from '@playwright/test';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const REPO_DIR = process.cwd();
+const QUIZ_URL = pathToFileURL(resolve(REPO_DIR, 'cet6_quiz.html')).href;
+const FULL_WORDS_PATH = resolve(REPO_DIR, 'data', 'full-words.js');
+const FULL_WORDS_INTEGRITY_SHA256 = '424764dce6317971ebe815c6e8bcc22fde76f427d18c608c77c05c3090ce0cb5';
+
+function readExternalFullWords() {
+  const script = readFileSync(FULL_WORDS_PATH, 'utf8');
+  const match = script.match(/window\.__FULL_WORDS_DATA__\s*=\s*(\[[\s\S]*\])\s*;*\s*$/);
+  if (!match) throw new Error('Unable to parse window.__FULL_WORDS_DATA__ from data/full-words.js');
+  return JSON.parse(match[1]);
+}
+
+test.beforeEach(async ({ page }) => {
+  // 预置 localStorage，跳过首次引导浮层，避免遮挡点击
+  await page.addInitScript(() => localStorage.setItem('cet6_onboarded', '1'));
+  await page.goto(QUIZ_URL);
+  await page.waitForLoadState('domcontentloaded');
+  // 默认闯关1速记：依赖选项按钮的测试切到闯关2（选择题）
+  await page.selectOption('#gateSelect', '2');
+  await page.waitForTimeout(100);
+});
+
+test('external Ebbinghaus data matches the authoritative vocabulary projection', () => {
+  const words = readExternalFullWords();
+  const projection = words.map(({ id, unit, lesson, word, meaning, seq, isStar }) => ({
+    id, unit, lesson, word, meaning, seq, isStar
+  }));
+
+  expect(words).toHaveLength(3324);
+  expect(words.every(word => Object.keys(word).sort().join(',') === 'id,isStar,lesson,meaning,seq,unit,word')).toBe(true);
+  expect(projection).toEqual(words);
+  expect(createHash('sha256').update(JSON.stringify(projection)).digest('hex')).toBe(FULL_WORDS_INTEGRITY_SHA256);
+});
+
+test('Ebbinghaus word maps are limited to overlapping mapped core words', async ({ page }) => {
+  await page.waitForFunction(() => window.__FULL_WORDS_DATA__);
+  await page.evaluate(() => new Promise(resolve => ensureUnitMaps(resolve)));
+
+  const maps = await page.evaluate(() => {
+    currentPool = 'full';
+    const overlappingMappedWord = FULL_WORDS.find(word => word.word === 'ambition');
+    const EbbinghausOnlyWord = FULL_WORDS.find(word => word.word === 'stabilise/-ize');
+    return {
+      overlapping: groupMapSVG(overlappingMappedWord),
+      EbbinghausOnly: groupMapSVG(EbbinghausOnlyWord)
+    };
+  });
+
+  expect(maps.overlapping).toContain('gmap-wrap');
+  expect(maps.EbbinghausOnly).toBe('');
+});
+
+test('page loads successfully', async ({ page }) => {
+  await expect(page.locator('h1')).toContainText('英语六级词汇');
+});
+
+test('start quiz shows options', async ({ page }) => {
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+  const count = await page.locator('.opt-btn').count();
+  expect(count).toBe(4);
+});
+
+test('answering a question updates progress', async ({ page }) => {
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+  await page.locator('.opt-btn').first().click();
+  await page.waitForSelector('.next-btn.show');
+  const feedback = await page.locator('.feedback.show').textContent();
+  expect(feedback).toBeTruthy();
+});
+
+test('stats tab loads charts', async ({ page }) => {
+  await page.click('button[data-tab="stats-page"]');
+  await page.waitForTimeout(500);
+  const canvasCount = await page.locator('canvas').count();
+  expect(canvasCount).toBeGreaterThan(0);
+});
+
+test('browse tab shows word list', async ({ page }) => {
+  await page.click('button[data-tab="browse"]');
+  await page.waitForSelector('#browseList strong');
+  const count = await page.locator('#browseList strong').count();
+  expect(count).toBeGreaterThan(0);
+});
+
+test('keyboard shortcut 1 selects first option', async ({ page }) => {
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+  await page.keyboard.press('1');
+  await page.waitForSelector('.next-btn.show');
+  await expect(page.locator('.feedback.show')).toBeVisible();
+});
+
+test('skip button works', async ({ page }) => {
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.skip-btn');
+  await page.click('.skip-btn');
+  await page.waitForSelector('.next-btn.show');
+  await expect(page.locator('#feedback')).toContainText('已跳过');
+});
+
+test('tab switching works', async ({ page }) => {
+  const tabs = ['wrong', 'retry', 'stats-page', 'browse', 'quiz'];
+  for (const tab of tabs) {
+    await page.click(`button[data-tab="${tab}"]`);
+    await page.waitForTimeout(200);
+    await expect(page.locator(`#tab-${tab}`)).toBeVisible();
+  }
+});
+
+test('fullscreen button text stays correct after re-render', async ({ page }) => {
+  // 进入答题
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+  await page.waitForTimeout(400); // 等选项入场动画结束
+  await expect(page.locator('#toggleFsBtn')).toContainText('全屏');
+
+  // 点击进入全屏 → 按钮文字应为「退出全屏」
+  await page.click('#toggleFsBtn');
+  await expect(page.locator('#toggleFsBtn')).toContainText('退出全屏');
+  await expect(page.locator('#quizCard')).toHaveClass(/fullscreen/);
+
+  // 答题 → 下一题（触发 renderQuizCard 重建按钮）→ 文字不应回退为「全屏」
+  await page.locator('.opt-btn').first().click();
+  await page.waitForSelector('.next-btn.show');
+  await page.click('.next-btn');
+  await page.waitForSelector('.opt-btn');
+  await page.waitForTimeout(400); // 等新题选项入场动画结束
+  await expect(page.locator('#toggleFsBtn')).toContainText('退出全屏');
+  await expect(page.locator('#quizCard')).toHaveClass(/fullscreen/);
+
+  // 再次点击 → 退出全屏 → 文字变回「全屏」
+  await page.click('#toggleFsBtn');
+  await expect(page.locator('#toggleFsBtn')).toContainText('全屏');
+  await expect(page.locator('#quizCard')).not.toHaveClass(/fullscreen/);
+});
+
+test('heatmap renders with range switch and tooltip', async ({ page }) => {
+  // 注入一天学习数据（今天：10题，9对，达标）
+  await page.evaluate(() => {
+    const k = 'cet6_quiz_app_v2';
+    let st = {};
+    try { st = JSON.parse(localStorage.getItem(k) || '{}'); } catch (e) {}
+    st.stats = st.stats || {};
+    st.stats.dailyHistory = st.stats.dailyHistory || {};
+    const today = new Date().toISOString().split('T')[0];
+    st.stats.dailyHistory[today] = { attempts: 10, correct: 9, wrong: 1 };
+    st.dailyGoal = 10; // 与注入的 10 题匹配，让今天达标
+    localStorage.setItem(k, JSON.stringify(st));
+  });
+  await page.reload();
+  await page.waitForLoadState('domcontentloaded');
+
+  await page.click('button[data-tab="stats-page"]');
+  await page.waitForTimeout(300);
+  const canvas = page.locator('#heatmapChart');
+  await expect(canvas).toBeVisible();
+  const dims = await canvas.evaluate(c => ({ w: c.width, h: c.height }));
+  expect(dims.w).toBeGreaterThan(200);
+  expect(dims.h).toBe(200);
+
+  // 范围切换按钮工作
+  await page.click('.hm-range[data-days="30"]');
+  await expect(page.locator('.hm-range.active')).toHaveAttribute('data-days', '30');
+  await page.click('.hm-range[data-days="365"]');
+  await expect(page.locator('.hm-range.active')).toHaveAttribute('data-days', '365');
+  await page.click('.hm-range[data-days="90"]');
+  await expect(page.locator('.hm-range.active')).toHaveAttribute('data-days', '90');
+
+  // 点击今天格子 → tooltip 显示：做题数/正确率/达标/连续打卡
+  const box = await canvas.boundingBox();
+  const pos = await canvas.evaluate(() => {
+    const today = new Date().toISOString().split('T')[0];
+    for (const cell of _heatCells) {
+      if (cell.date === today) return { x: cell.x + cell.size / 2, y: cell.y + cell.size / 2 };
+    }
+    return null;
+  });
+  expect(pos).not.toBeNull();
+  await page.mouse.click(box.x + pos.x, box.y + pos.y);
+  await expect(page.locator('#heatmapTip')).toBeVisible();
+  await expect(page.locator('#heatmapTip')).toContainText('做题 10 题');
+  await expect(page.locator('#heatmapTip')).toContainText('正确率 90%');
+  await expect(page.locator('#heatmapTip')).toContainText('已达标');
+  await expect(page.locator('#heatmapTip')).toContainText('连续打卡 1 天');
+
+  // 点击 canvas 外部（标题）→ tooltip 隐藏
+  await page.locator('h2:has-text("学习热力图")').click();
+  await expect(page.locator('#heatmapTip')).toBeHidden();
+});
+
+test('multi-POS words render uniform POS badges', async ({ page }) => {
+  // splitMeaning 解析逻辑：多词性 / 联合词性 / 中间夹音标
+  const r1 = await page.evaluate(() => splitMeaning('n.手指 v.告发，拨弄'));
+  expect(r1).toEqual([{ pos: 'n.', cn: '手指' }, { pos: 'v.', cn: '告发，拨弄' }]);
+  const r2 = await page.evaluate(() => splitMeaning('v./n. 辩论，讨论'));
+  expect(r2).toEqual([{ pos: 'v./n.', cn: '辩论，讨论' }]);
+  const r3 = await page.evaluate(() => splitMeaning("n.影响 /ɪm'pækt/ v.有影响"));
+  expect(r3).toEqual([{ pos: 'n.', cn: '影响' }, { pos: 'v.', cn: '有影响' }]);
+
+  // 题目渲染：多词性单词的每个词性都有 badge
+  const badgeCount = await page.evaluate(() => {
+    const w = ALL_WORDS.find(x => (x.meaning.match(/[a-z]+\./g) || []).length > 1);
+    const entries = splitMeaning(w.meaning);
+    const html = entries.map(e => (e.pos ? '<span class="pos-badge">' + e.pos + '</span>' : '') + e.cn).join(' ');
+    return (html.match(/pos-badge/g) || []).length;
+  });
+  expect(badgeCount).toBeGreaterThan(1);
+});
+
+test('wrong answer lists other options with labels and picked mark', async ({ page }) => {
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+  await page.waitForTimeout(400); // 等选项入场动画
+
+  // 故意答错：点击正确选项之外的一项
+  const wrongIdx = await page.evaluate(() => {
+    const ci = quizState.current.correctIndex;
+    return (ci + 1) % 4;
+  });
+  await page.click(`#opt-${wrongIdx}`);
+  await page.waitForSelector('.next-btn.show');
+
+  const fb = page.locator('.feedback.show');
+  await expect(fb).toContainText('回答错误');
+  // 其余选项列表：标题 + 三个错误选项（每个有朗读按钮）
+  await expect(fb).toContainText('其余选项');
+  const rows = fb.locator('div:has-text("你选的")');
+  await expect(rows.first()).toContainText('← 你选的');
+  const speakCount = await fb.locator('span[onclick*="speakWord"]').count();
+  expect(speakCount).toBeGreaterThanOrEqual(3); // 正确答案 1 + 三个错误选项各 1
+  // 三个错误选项都有编号标签（A./B./C./D.）
+  const labelCount = await fb.locator('span:has-text(".")').count();
+  expect(labelCount).toBeGreaterThanOrEqual(3);
+});
+
+test('handwrite pad draws and recognizes into input with dict correction', async ({ page }) => {
+  await page.click('#typeRow .mode-btn[data-type="dictation"]');
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('#dictInput');
+  await page.waitForSelector('#handwriteBtn');
+
+  // 打开手写板
+  await page.click('#handwriteBtn');
+  await expect(page.locator('#hwOverlay')).toBeVisible();
+
+  // 在画布上画一笔
+  const box = await page.locator('#hwCanvas').boundingBox();
+  await page.mouse.move(box.x + 50, box.y + 60);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 180, box.y + 140, { steps: 20 });
+  await page.mouse.up();
+
+  // 注入 fake Tesseract：识别出 'detrimentul'（有拼写错误）
+  await page.evaluate(() => {
+    window.Tesseract = {
+      createWorker: (lang, oem, opts) => Promise.resolve({
+        recognize: () => Promise.resolve({ data: { text: 'detrimentul' } })
+      })
+    };
+  });
+
+  await page.click('#hwRecognizeBtn');
+  // 识别完成 → 弹层关闭、输入框回填（词库纠错为 detrimental）
+  await expect(page.locator('#hwOverlay')).toBeHidden();
+  const val = await page.locator('#dictInput').inputValue();
+  expect(val.toLowerCase()).toBe('detrimental');
+});
+
+test('normalizeOCRText corrects via dictionary', async ({ page }) => {
+  // 英文：编辑距离 ≤2 的词库纠错
+  const r1 = await page.evaluate(() => normalizeOCRText('detrimentul', 'eng'));
+  expect(r1.toLowerCase()).toBe('detrimental');
+  const r2 = await page.evaluate(() => normalizeOCRText('harmful  deteriorat', 'eng'));
+  expect(r2.toLowerCase()).toBe('harmful deteriorate');
+  // 距离 2 但长度差过大的短词不应误纠（词库含 poison，'poisen' 距离1会被纠成 poison——预期纠正）
+  const r2b = await page.evaluate(() => normalizeOCRText('poisen', 'eng'));
+  expect(r2b.toLowerCase()).toBe('poison');
+  // 中文：清理噪声，保留中文与标点
+  const r3 = await page.evaluate(() => normalizeOCRText('有害 的，不 利', 'chi_sim'));
+  expect(r3).toBe('有害的，不利');
+});
+
+test('getChineseFull keeps all POS tags (display) while getChinese strips first (logic)', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    const m = 'v.快速增长 n.火箭';
+    return { full: getChineseFull(m), stripped: getChinese(m) };
+  });
+  expect(r.full).toBe('v.快速增长 n.火箭');
+  expect(r.stripped).toBe('快速增长 n.火箭'); // 原行为不变（供搜索/比较逻辑）
+  const r2 = await page.evaluate(() => getChineseFull("n.影响 /ɪm'pækt/ v.有影响"));
+  expect(r2).toBe('n.影响 v.有影响');
+  const r3 = await page.evaluate(() => getChineseFull('v./n. 辩论，讨论'));
+  expect(r3).toBe('v./n. 辩论，讨论');
+});
+
+test('en2cn option text removes Latin residue and rejects empty candidates', async ({ page }) => {
+  const result = await page.evaluate(() => ({
+    cleaned: getChineseOptionText('n. 设备（bike；Sure）; be supposed to 使用'),
+    slash: getChineseOptionText('n. 他/她/它们'),
+    ipaSymbol: getChineseOptionText('n. 灰（古英语中的一个字母，也为音标）æ'),
+    empty: getChineseOptionText('adj. (obsolete)'),
+    tumble: getChineseOptionText('n.跌倒 v.跌倒;倒塌;骤降'),
+    human: getChineseOptionText('n.人 adj.人(类)的')
+  }));
+  expect(result.cleaned).toBe('设备; 使用');
+  expect(result.cleaned).not.toMatch(/[A-Za-z]/);
+  expect(result.slash).toBe('他/她/它们');
+  expect(result.ipaSymbol).not.toContain('æ');
+  expect(result.empty).toBe('');
+  expect(result.tumble).toBe('跌倒，跌倒;倒塌;骤降');
+  expect(result.tumble).not.toContain('&');
+  expect(result.human).toBe('人，人类的');
+});
+
+test('all vocabulary en2cn option texts contain no Latin letters', async ({ page }) => {
+  const bad = await page.evaluate(() => ALL_WORDS
+    .map(word => ({ word: word.word, text: getChineseOptionText(word.meaning) }))
+    .filter(item => /[A-Za-z&＆]/.test(item.text) || /[\u3400-\u9fff]\s+[\u3400-\u9fff]/.test(item.text))
+    .slice(0, 10));
+  expect(bad).toEqual([]); // 不得残留英文、& 连接符或未标点的中文义项拼接
+});
+
+test('feedback question line shows all POS tags for multi-POS word', async ({ page }) => {
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+  await page.waitForTimeout(400);
+
+  // 循环翻题直到遇到多词性单词（有界 30 次）
+  let found = false;
+  for (let i = 0; i < 30; i++) {
+    found = await page.evaluate(() => (splitMeaning(quizState.current.word.meaning).length > 1));
+    if (found) break;
+    await page.evaluate(() => { handleSkip(); });
+    await page.waitForSelector('.next-btn.show');
+    await page.click('.next-btn');
+    await page.waitForSelector('.opt-btn');
+    await page.waitForTimeout(350);
+  }
+  expect(found).toBe(true);
+
+  // 答错 → 反馈区「题目：」行应包含 ≥2 个词性标记
+  const wrongIdx = await page.evaluate(() => {
+    const ci = quizState.current.correctIndex;
+    return (ci + 1) % 4;
+  });
+  await page.click(`#opt-${wrongIdx}`);
+  await page.waitForSelector('.next-btn.show');
+  const qLine = await page.locator('.feedback.show div:has-text("题目：")').first().textContent();
+  const posCount = (qLine.match(/[a-z]+\./g) || []).length;
+  expect(posCount).toBeGreaterThanOrEqual(2);
+});
+
+test('next question scrolls back to question top', async ({ page }) => {
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+  await page.waitForTimeout(400);
+
+  // 答题后把页面滚到底部（模拟用户在看详解）
+  await page.locator('.opt-btn').first().click();
+  await page.waitForSelector('.next-btn.show');
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+
+  await page.click('.next-btn');
+  await page.waitForSelector('.opt-btn');
+  await page.waitForTimeout(300);
+
+  const pos = await page.evaluate(() => {
+    const card = document.getElementById('quizCard');
+    return { scrollY: window.scrollY, cardTop: card.offsetTop };
+  });
+  // 题目卡片回到视口上部（页面变矮时 scrollTo 会被 clamp，允许卡片顶部距离视口顶 < 200px）
+  expect(pos.scrollY).toBeLessThan(pos.cardTop);
+  expect(pos.cardTop - pos.scrollY).toBeLessThan(200);
+});
+
+test('fullscreen next question scrolls quiz-scroll back to top', async ({ page }) => {
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+  await page.waitForTimeout(400);
+  await page.click('#toggleFsBtn'); // 进入全屏
+  await page.waitForTimeout(300);
+
+  // 答一题并把 quiz-scroll 滚到底
+  await page.locator('.opt-btn').first().click();
+  await page.waitForSelector('.next-btn.show');
+  await page.evaluate(() => {
+    const el = document.querySelector('.quiz-card .quiz-scroll');
+    el.scrollTop = el.scrollHeight;
+  });
+
+  await page.click('.next-btn');
+  await page.waitForSelector('.opt-btn');
+  await page.waitForTimeout(300);
+
+  const top = await page.evaluate(() => document.querySelector('.quiz-card .quiz-scroll').scrollTop);
+  expect(top).toBe(0);
+});
+
+// ===== 新词库功能测试 =====
+
+test('gate1 speed-memory: know button advances, unknown shows explanation', async ({ page }) => {
+  // 切回闯关1速记
+  await page.evaluate(() => {
+    const g1 = document.querySelector('#gateRow .mode-btn[data-gate="1"]');
+    if (g1) g1.click();
+  });
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('#gateKnowBtn');
+  const word1 = await page.locator('.q-word').textContent();
+  // 认识 → 直接下一词
+  await page.click('#gateKnowBtn');
+  await page.waitForTimeout(300);
+  const word2 = await page.locator('.q-word').textContent();
+  expect(word2).not.toBe(word1);
+  // 不认识 → 显示释义和讲解
+  await page.click('#gateUnknownBtn');
+  await page.waitForSelector('.feedback.show');
+  await expect(page.locator('.feedback.show')).toContainText('未掌握');
+  await expect(page.locator('.word-detail')).toBeVisible();
+});
+
+test('gate1 keyboard: 1=knew advances, 2=unknown shows feedback', async ({ page }) => {
+  await page.evaluate(() => {
+    const g1 = document.querySelector('#gateRow .mode-btn[data-gate="1"]');
+    if (g1) g1.click();
+  });
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('#gateKnowBtn');
+  const w1 = await page.locator('.q-word').textContent();
+  await page.keyboard.press('1');
+  await page.waitForTimeout(300);
+  const w2 = await page.locator('.q-word').textContent();
+  expect(w2).not.toBe(w1);
+  await page.keyboard.press('2');
+  await page.waitForSelector('.feedback.show');
+});
+
+test('unit filter restricts pool and count', async ({ page }) => {
+  const chips = await page.evaluate(() => [...document.querySelectorAll('#unitFilterRow .freq-chip')].map(c => c.textContent.trim()));
+  expect(chips).toContain('U1');
+  // 点 U3
+  await page.evaluate(() => document.querySelector('#unitFilterRow .freq-chip[data-unit="3"]').click());
+  await page.waitForTimeout(300);
+  const active = await page.evaluate(() => [...document.querySelectorAll('#unitFilterRow .freq-chip.active')].map(c => c.textContent.trim()));
+  expect(active).toEqual(['U3']);
+  const count = await page.locator('#freqCount').textContent();
+  expect(count).toMatch(/共 \d+ 词/);
+});
+
+test('learn size buttons exist and quiz uses 20-word default', async ({ page }) => {
+  const sizes = await page.evaluate(() => [...document.querySelectorAll('#sizeRow .mode-btn')].map(b => b.textContent.trim()));
+  expect(sizes.length).toBe(3);
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+  await page.waitForTimeout(400);
+  const label = await page.locator('.q-label').textContent();
+  expect(label).toContain('/ 20 题');
+});
+
+test('switch to Ebbinghaus pool shows Unit 1-10 chips', async ({ page }) => {
+  await page.selectOption('#poolSelect', 'full');
+  await page.waitForTimeout(300);
+  const chips = await page.evaluate(() => [...document.querySelectorAll('#unitFilterRow .freq-chip')].map(c => c.textContent.trim()));
+  expect(chips).toContain('U10');
+  expect(chips).not.toContain('U11');
+});
+
+test('core and Ebbinghaus word IDs resolve within their selected pool', async ({ page }) => {
+  await page.selectOption('#poolSelect', 'full');
+  await page.waitForFunction(() => window.__FULL_WORDS_DATA__ && window.__FULL_WORDS_DATA__.length === 3324);
+
+  const words = await page.evaluate(() => {
+    currentPool = 'core';
+    const core = getWord(2);
+    currentPool = 'full';
+    const full = getWord(2);
+    return { core: core && core.word, full: full && full.word };
+  });
+
+  expect(words).toEqual({ core: 'aggressive', full: 'ambitious' });
+});
+
+test('word attempts stay isolated between pools', async ({ page }) => {
+  await page.selectOption('#poolSelect', 'full');
+  await page.waitForFunction(() => window.__FULL_WORDS_DATA__ && window.__FULL_WORDS_DATA__.length === 3324);
+
+  const result = await page.evaluate(() => {
+    state.stats.wordAttempts = {};
+    state.wrongHistory = [];
+
+    currentPool = 'core';
+    quizState.poolType = 'core';
+    recordStat(getWord(2, 'core'), 'cn2en', true, false, false);
+    state.wrongHistory.push({ wordId: 2, pool: 'core', mode: 'cn2en' });
+
+    currentPool = 'full';
+    quizState.poolType = 'full';
+    recordStat(getWord(2, 'full'), 'cn2en', false, false, false);
+    state.wrongHistory.push({ wordId: 2, pool: 'full', mode: 'cn2en' });
+
+    return {
+      core: state.stats.wordAttempts['core:2'],
+      full: state.stats.wordAttempts['full:2'],
+      labels: state.wrongHistory.map(record => recordWord(record).word)
+    };
+  });
+
+  expect(result.core).toMatchObject({ attempts: 1, correct: 1, wrong: 0 });
+  expect(result.full).toMatchObject({ attempts: 1, correct: 0, wrong: 1 });
+  expect(result.labels).toEqual(['aggressive', 'ambitious']);
+});
+
+test('legacy state migration normalizes pools, history, and malformed counters', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const migrated = normalizeState({
+      stats: {
+        wordAttempts: {
+          '2': { attempts: 2, correct: 1, wrong: 1 },
+          'full:2': { attempts: 1, correct: 0, wrong: 1 },
+          broken: null
+        },
+        dailyHistory: { '2026-08-20': { attempts: 3, correct: 2 }, bad: null }
+      },
+      wrongWordIds: { cn2en: { 2: true }, cn2en_full: { 2: true }, bad: [] },
+      wrongHistory: [{ wordId: 2, mode: 'en2cn' }, { wordId: 'bad' }],
+      prefs: { pool: 'invalid', units: [], size: 0, gate: 9, mode: 'invalid', type: 'invalid' },
+      ebbingStart: '2026-08-19'
+    });
+    return {
+      schema: migrated.schemaVersion,
+      keys: Object.keys(migrated.stats.wordAttempts).sort(),
+      legacy: migrated.stats.wordAttempts['core:2'],
+      full: migrated.stats.wordAttempts['full:2'],
+      history: migrated.wrongHistory,
+      wrongKeys: Object.keys(migrated.wrongWordIds).sort(),
+      prefs: migrated.prefs,
+      active: migrated.ebbingActive,
+      dailyKeys: Object.keys(migrated.stats.dailyHistory)
+    };
+  });
+
+  expect(result.schema).toBe(3);
+  expect(result.keys).toEqual(['core:2', 'full:2']);
+  expect(result.legacy).toMatchObject({ attempts: 2, correct: 1, wrong: 1 });
+  expect(result.full).toMatchObject({ attempts: 1, correct: 0, wrong: 1 });
+  expect(result.history).toHaveLength(1);
+  expect(result.history[0].pool).toBe('core');
+  expect(result.wrongKeys).toEqual(['cn2en_core', 'cn2en_full', 'en2cn_core', 'en2cn_full']);
+  expect(result.prefs).toMatchObject({ pool: 'core', units: [0], size: 20, gate: 1, mode: 'cn2en', type: 'choice' });
+  expect(result.active).toBe(true);
+  expect(result.dailyKeys).toEqual(['2026-08-20']);
+});
+
+test('stats helpers use local calendar keys and selected pool only', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    state.stats.wordAttempts = {
+      'core:2': { attempts: 4, correct: 3, wrong: 1 },
+      'full:2': { attempts: 8, correct: 2, wrong: 6 }
+    };
+    currentPool = 'core';
+    const core = wordAttemptEntries('core').map(entry => entry[0]);
+    currentPool = 'full';
+    const full = wordAttemptEntries('full').map(entry => entry[0]);
+    const local = localDateKey(new Date(2026, 7, 20, 0, 30, 0));
+    return { core, full, local };
+  });
+
+  expect(result.core).toEqual(['core:2']);
+  expect(result.full).toEqual(['full:2']);
+  expect(result.local).toBe('2026-08-20');
+});
+
+test('ebbinghaus 4-week-25-day table logic', async ({ page }) => {
+  // Unit 1 复习日：第2、4、7、13天（+1/+3/+6/+12）；第14天后 Unit14 在第15/17/20/26天复习（26>25 表内截止）
+  const res = await page.evaluate(() => {
+    function ebbingUnitsDueOn(dayN, learnedUnits) {
+      var due = [];
+      for (var u = 1; u <= learnedUnits; u++) {
+        if (dayN - u === 1 || dayN - u === 3 || dayN - u === 6 || dayN - u === 12) due.push(u);
+      }
+      return due;
+    }
+    return {
+      d2: ebbingUnitsDueOn(2, 2),  // 第2天：U1(+1) + 新学U2
+      d4: ebbingUnitsDueOn(4, 4),  // 第4天：U1(+3) U3(+1)
+      d7: ebbingUnitsDueOn(7, 7),  // 第7天：U1(+6) U4(+3) U6(+1)
+      d13: ebbingUnitsDueOn(13, 13), // 第13天：U1(+12) U7(+6) U10(+3) U12(+1)
+      d19: ebbingUnitsDueOn(19, 14)  // 第19天：U7(+12) U13(+6)
+    };
+  });
+  expect(res.d2).toEqual([1]);
+  expect(res.d4).toEqual([1, 3]);
+  expect(res.d7).toEqual([1, 4, 6]);
+  expect(res.d13).toEqual([1, 7, 10, 12]);
+  expect(res.d19).toEqual([7, 13]);
+});
+
+test('Ebbinghaus plan bar shows study plan on core pool', async ({ page }) => {
+  // 旧数据只有起始日时没有任何已完成证据，不能按日历直接跳过第 1 天。
+  await page.evaluate(() => {
+    const y = new Date(Date.now() - 86400000);
+    const key = y.toISOString().split('T')[0];
+    const st = JSON.parse(localStorage.getItem('cet6_quiz_app_v2') || 'null') || {};
+    st.ebbingStart = key;
+    localStorage.setItem('cet6_quiz_app_v2', JSON.stringify(st));
+  });
+  await page.reload();
+  await page.selectOption('#poolSelect', 'core');
+  await page.waitForTimeout(800);
+  const plan = await page.locator('#ebbingPlan').textContent();
+  expect(plan).toContain('第 1 天');
+  expect(plan).toContain('Unit 1');
+  expect(plan).not.toContain('Unit 2');
+});
+
+test('full-pool review completion can start the core 25-day plan', async ({ page }) => {
+  await page.evaluate(() => {
+    currentPool = 'full';
+    state.ebbingActive = false;
+    state.ebbingStart = null;
+    state.ebbingPlan = null;
+    quizActive = true;
+    quizState = {
+      mode: 'en2cn',
+      isReview: true,
+      isMemory: false,
+      isRetry: false,
+      isSmart: false,
+      ids: [1],
+      pos: 0,
+      questions: [],
+      answers: {},
+      done: 1,
+      reviewCorrect: 1,
+      current: null,
+      poolType: 'full'
+    };
+    finishQuiz();
+  });
+
+  await expect(page.locator('#startEbbingPlanBtn')).toBeVisible();
+  await page.locator('#startEbbingPlanBtn').click();
+
+  const result = await page.evaluate(() => ({
+    pool: currentPool,
+    active: state.ebbingActive,
+    plan: state.ebbingPlan,
+    selectorValue: document.getElementById('poolSelect').value,
+    planText: document.getElementById('ebbingPlan').textContent
+  }));
+
+  expect(result.pool).toBe('core');
+  expect(result.selectorValue).toBe('core');
+  expect(result.active).toBe(true);
+  expect(result.plan).toMatchObject({ day: 1, completedUnits: [] });
+  expect(result.planText).toContain('Unit 1');
+});
+
+test('8-grid review: grid progress shows after learning in Ebbinghaus pool', async ({ page }) => {
+  await page.selectOption('#poolSelect', 'full');
+  await page.waitForTimeout(300);
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+  await page.waitForTimeout(400);
+  await page.locator('.opt-btn').first().click();
+  await page.waitForSelector('.next-btn.show');
+  // 讲解区应显示打卡格进度
+  const detail = await page.locator('.word-detail').textContent();
+  expect(detail).toContain('打卡');
+});
+
+// ============ PAGE NAV (页导航：单 Unit 独立编页 20词/页) ============
+
+test('8-grid review is chained from the previous completed grid instead of first learning time', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const now = Date.now();
+    state.stats.wordAttempts = {
+      'full:1': {
+        attempts: 1, correct: 1, wrong: 0,
+        learnedAt: now - 31 * 60000,
+        grid: [now - 60 * 1000, 0, 0, 0, 0, 0, 0]
+      }
+    };
+    currentPool = 'full';
+    const immediatelyAfterFiveMinuteReview = dueWordsByGrid();
+    state.stats.wordAttempts['full:1'].grid[0] = now - 31 * 60000;
+    const thirtyMinutesAfterFiveMinuteReview = dueWordsByGrid();
+    return { immediatelyAfterFiveMinuteReview, thirtyMinutesAfterFiveMinuteReview };
+  });
+
+  expect(result.immediatelyAfterFiveMinuteReview).toEqual([]);
+  expect(result.thirtyMinutesAfterFiveMinuteReview).toEqual([1]);
+});
+
+test('8-grid review advances one stage from both review entry points and defers failed retries', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const now = Date.now();
+    const word = getWord(1, 'full');
+    state.stats.wordAttempts = {
+      'full:1': { attempts: 1, correct: 1, wrong: 0, learnedAt: now - 10 * 60000, grid: [0, 0, 0, 0, 0, 0, 0] },
+      'full:2': { attempts: 1, correct: 1, wrong: 0, learnedAt: now - 10 * 60000, grid: [0, 0, 0, 0, 0, 0, 0] },
+      'full:3': { attempts: 1, correct: 1, wrong: 0, learnedAt: now - 10 * 60000, grid: [0, 0, 0, 0, 0, 0, 0] }
+    };
+    currentPool = 'full';
+    quizState = { poolType: 'full', isReview: true, isMemory: false };
+    recordStat(word, 'en2cn', true, false, false);
+    quizState = { poolType: 'full', isReview: false, isMemory: true };
+    recordStat(getWord(2, 'full'), 'en2cn', true, false, false);
+    quizState = { poolType: 'full', isReview: true, isMemory: false };
+    recordStat(getWord(3, 'full'), 'en2cn', false, false, false);
+    return {
+      reviewStage: state.stats.wordAttempts['full:1'].grid[0],
+      memoryStage: state.stats.wordAttempts['full:2'].grid[0],
+      retryAt: state.stats.wordAttempts['full:3'].retryAt,
+      due: dueWordsByGrid()
+    };
+  });
+
+  expect(result.reviewStage).toEqual(expect.any(Number));
+  expect(result.memoryStage).toEqual(expect.any(Number));
+  expect(result.retryAt).toBeGreaterThan(Date.now() - 1000);
+  expect(result.due).not.toContain(3);
+});
+
+test('core 25-day plan exactly matches the book table in its stated Unit order', async ({ page }) => {
+  const plan = await page.evaluate(() => EBBING_25_DAY_PLAN.map(day => day.slice()));
+  expect(plan).toEqual([
+    [1], [2, 1], [3, 2], [4, 1, 3], [5, 2, 4], [6, 3, 5], [7, 1, 4, 6],
+    [8, 2, 5, 7], [9, 3, 6, 8], [10, 4, 7, 9], [11, 5, 8, 10], [12, 1, 6, 9, 11],
+    [13, 2, 7, 10, 12], [14, 3, 8, 11, 13], [4, 9, 12, 14], [5, 10, 13], [6, 11, 14],
+    [7, 12], [8, 13], [9, 14], [10], [11], [12], [13], [14]
+  ]);
+});
+
+test('active core Day 1 memory quiz contains only Unit 1 words in book order', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const today = dayKeyStr(new Date());
+    state = normalizeState({
+      ebbingActive: true,
+      ebbingStart: today,
+      ebbingPlan: { day: 1, dayKey: today, completedUnits: [] }
+    });
+    currentPool = 'core';
+    startMemoryQuiz('en2cn');
+    const expected = ALL_WORDS.filter(word => word.unit === 1).map(word => word.id);
+    const unit2Ids = ALL_WORDS.filter(word => word.unit === 2).map(word => word.id);
+    const memoryIds = quizState.ids.slice();
+    quizActive = false;
+    startReview();
+    return { memoryIds, reviewIds: quizState.ids.slice(), expected, unit2Ids };
+  });
+
+  expect(result.memoryIds).toEqual(result.expected);
+  expect(result.reviewIds).toEqual(result.expected);
+  expect(result.memoryIds.some(id => result.unit2Ids.includes(id))).toBe(false);
+  expect(result.reviewIds.some(id => result.unit2Ids.includes(id))).toBe(false);
+});
+
+test('core Day 1 completion keeps fullscreen exit and return actions', async ({ page }) => {
+  await page.evaluate(() => {
+    const today = localDateKey(new Date());
+    currentPool = 'core';
+    state.ebbingActive = true;
+    state.ebbingStart = today;
+    state.ebbingPlan = { day: 1, dayKey: today, completedUnits: [] };
+    const dayOneIds = ALL_WORDS.filter(word => word.unit === 1).slice(0, 20).map(word => word.id);
+
+    quizActive = true;
+    quizState = {
+      mode: 'en2cn',
+      isReview: false,
+      isMemory: false,
+      isRetry: false,
+      isSmart: false,
+      ids: dayOneIds,
+      pos: dayOneIds.length - 1,
+      questions: [],
+      answers: {},
+      done: dayOneIds.length,
+      current: null,
+      poolType: 'core',
+      isEbbingPlan: true
+    };
+    document.getElementById('quizCard').classList.add('fullscreen');
+    finishQuiz();
+  });
+
+  await expect(page.locator('#quizCard > .empty')).toBeVisible();
+  await expect(page.locator('#returnToStartBtn')).toBeVisible();
+  await expect(page.locator('#toggleFsBtn')).toBeVisible();
+  await page.locator('#toggleFsBtn').click();
+  await expect(page.locator('#quizCard')).not.toHaveClass(/fullscreen/);
+  await page.locator('#returnToStartBtn').click();
+  await expect(page.locator('#tab-quiz')).toBeVisible();
+});
+
+test('skipping the final core plan word does not complete its Unit', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const today = dayKeyStr(new Date());
+    state = normalizeState({
+      ebbingActive: true,
+      ebbingStart: today,
+      ebbingPlan: { day: 1, dayKey: today, completedUnits: [] }
+    });
+    currentPool = 'core';
+    startReview();
+    const lastId = quizState.ids[quizState.ids.length - 1];
+    quizState.pos = quizState.ids.length - 1;
+    quizState.current = { word: getWord(lastId, 'core') };
+    quizState.ebbingPlanRemaining = { 1: 1 };
+    quizState.ebbingPlanAnswered = {};
+    handleSkip();
+    return state.ebbingPlan.completedUnits.slice();
+  });
+
+  expect(result).toEqual([]);
+});
+
+test('ending an unanswered core plan review does not record every Unit as complete', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const today = dayKeyStr(new Date());
+    state = normalizeState({
+      ebbingActive: true,
+      ebbingStart: today,
+      ebbingPlan: { day: 1, dayKey: today, completedUnits: [] }
+    });
+    currentPool = 'core';
+    startReview();
+    finishQuiz();
+    return {
+      completedUnits: state.ebbingPlan.completedUnits.slice(),
+      legacyLog: (state.ebbingUnitLog[today] || []).slice()
+    };
+  });
+
+  expect(result).toEqual({ completedUnits: [], legacyLog: [] });
+});
+
+test('core plan emits complete Unit word lists in the table order and preserves word order within every Unit', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const today = dayKeyStr(new Date());
+    state = normalizeState({
+      ebbingActive: true,
+      ebbingStart: today,
+      ebbingPlan: { day: 4, dayKey: today, completedUnits: [] }
+    });
+    currentPool = 'core';
+    const ids = dueUnitWordIds();
+    const expected = [4, 1, 3].flatMap(unit => ALL_WORDS.filter(word => word.unit === unit).map(word => word.id));
+    return { ids, expected };
+  });
+  expect(result.ids).toEqual(result.expected);
+});
+
+test('core plan keeps a missed Day 1 on Day 2 and unlocks Day 2 only on Day 3 after makeup', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const day1 = new Date(2026, 7, 24);
+    const day2 = new Date(2026, 7, 25);
+    const day3 = new Date(2026, 7, 26);
+    state = normalizeState({
+      ebbingActive: true,
+      ebbingStart: dayKeyStr(day1),
+      ebbingPlan: { day: 1, dayKey: dayKeyStr(day1), completedUnits: [] }
+    });
+    syncEbbingPlan(day2);
+    const day2MakeupOnly = { day: state.ebbingPlan.day, completedUnits: state.ebbingPlan.completedUnits.slice(), units: dueUnitsByEbbing(day2) };
+    markEbbingPlanUnitComplete(1, day2);
+    const day2AfterMakeup = { day: state.ebbingPlan.day, completedUnits: state.ebbingPlan.completedUnits.slice(), units: dueUnitsByEbbing(day2) };
+    syncEbbingPlan(day3);
+    const day3Plan = { day: state.ebbingPlan.day, completedUnits: state.ebbingPlan.completedUnits.slice(), units: dueUnitsByEbbing(day3) };
+    return { day2MakeupOnly, day2AfterMakeup, day3Plan };
+  });
+
+  expect(result.day2MakeupOnly).toEqual({ day: 1, completedUnits: [], units: [1] });
+  expect(result.day2AfterMakeup).toEqual({ day: 1, completedUnits: [1], units: [] });
+  expect(result.day3Plan).toEqual({ day: 2, completedUnits: [], units: [2, 1] });
+});
+
+test('Ebbinghaus plan bar marks the day complete only after every scheduled Unit, including a reset makeup day', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const day2 = new Date();
+    day2.setHours(12, 0, 0, 0);
+    const day1 = new Date(day2);
+    day1.setDate(day1.getDate() - 1);
+    state = normalizeState({
+      ebbingActive: true,
+      ebbingStart: dayKeyStr(day1),
+      ebbingPlan: { day: 2, dayKey: dayKeyStr(day2), completedUnits: [] }
+    });
+    currentPool = 'core';
+
+    markEbbingPlanUnitComplete(2, day2);
+    renderEbbingPlan();
+    const afterNewUnit = document.getElementById('ebbingPlan').textContent;
+    markEbbingPlanUnitComplete(1, day2);
+    const afterAllUnits = document.getElementById('ebbingPlan').textContent;
+    const storedCompleted = JSON.parse(localStorage.getItem('cet6_quiz_app_v2')).ebbingPlan.completedUnits.slice();
+
+    state = normalizeState({
+      ebbingActive: true,
+      ebbingStart: dayKeyStr(day1),
+      ebbingPlan: { day: 1, dayKey: dayKeyStr(day1), completedUnits: [] }
+    });
+    syncEbbingPlan(day2);
+    markEbbingPlanUnitComplete(1, day2);
+    return {
+      afterNewUnit,
+      afterAllUnits,
+      storedCompleted,
+      resetPlan: state.ebbingPlan,
+      resetPlanText: document.getElementById('ebbingPlan').textContent
+    };
+  });
+
+  expect(result.afterNewUnit).not.toContain('当天目标已完成');
+  expect(result.afterAllUnits).toContain('当天目标已完成');
+  expect(result.storedCompleted).toEqual([2, 1]);
+  expect(result.resetPlan).toMatchObject({ day: 1, completedUnits: [1] });
+  expect(result.resetPlanText).toContain('当天目标已完成');
+});
+
+test('learning the day\'s new Unit does not recreate a full-unit review queue', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const today = dayKeyStr(new Date());
+    const attempts = {};
+    ALL_WORDS.filter(word => word.unit === 8).forEach(word => {
+      attempts[wordStateKey(word.id, 'core')] = { attempts: 1, correct: 1, wrong: 0, learnedAt: Date.now() };
+    });
+    state = normalizeState({
+      ebbingActive: true,
+      ebbingStart: today,
+      ebbingPlan: { day: 8, dayKey: today, completedUnits: [2, 5, 7] },
+      stats: { wordAttempts: attempts }
+    });
+    currentPool = 'core';
+    const dueBeforeSync = dueUnitsByEbbing();
+    const idsAfterReload = dueUnitWordIds();
+    return {
+      completed: state.ebbingPlan.completedUnits.slice(),
+      due: dueBeforeSync,
+      ids: idsAfterReload,
+      complete: isEbbingPlanComplete(state.ebbingPlan)
+    };
+  });
+
+  expect(result.completed).toEqual([2, 5, 7, 8]);
+  expect(result.due).toEqual([]);
+  expect(result.ids).toEqual([]);
+  expect(result.complete).toBe(true);
+});
+
+test('a fully answered plan snapshot is discarded instead of resurrected after refresh', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const today = dayKeyStr(new Date());
+    const attempts = {};
+    ALL_WORDS.filter(word => word.unit === 8).forEach(word => {
+      attempts[wordStateKey(word.id, 'core')] = { attempts: 1, correct: 1, wrong: 0, learnedAt: Date.now() };
+    });
+    state = normalizeState({
+      ebbingActive: true,
+      ebbingStart: today,
+      ebbingPlan: { day: 8, dayKey: today, completedUnits: [2, 5, 7] },
+      stats: { wordAttempts: attempts },
+      suspendedQuiz: (() => {
+        const ids = ALL_WORDS.filter(word => word.unit === 8).map(word => word.id);
+        const answers = {};
+        ids.forEach((id, index) => { answers[index] = 0; });
+        return {
+          isEbbingPlan: true, poolType: 'core', ebbingPlanDayKey: today,
+          ids, answers, done: ids.length
+        };
+      })()
+    });
+    currentPool = 'core';
+    checkSuspendedQuiz();
+    return { snapshot: state.suspendedQuiz, savedBar: document.getElementById('savedBar').classList.contains('show') };
+  });
+
+  expect(result.snapshot).toBeNull();
+  expect(result.savedBar).toBe(false);
+});
+
+test('startReview ignores a stale same-day full-Unit snapshot after the new Unit is learned', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const today = dayKeyStr(new Date());
+    const attempts = {};
+    ALL_WORDS.filter(word => word.unit === 8).forEach(word => {
+      attempts[wordStateKey(word.id, 'core')] = { attempts: 1, correct: 1, wrong: 0, learnedAt: Date.now() };
+    });
+    state = normalizeState({
+      ebbingActive: true,
+      ebbingStart: today,
+      ebbingPlan: { day: 8, dayKey: today, completedUnits: [2, 5, 7] },
+      stats: { wordAttempts: attempts },
+      suspendedQuiz: {
+        isEbbingPlan: true, poolType: 'core', ebbingPlanDayKey: today,
+        ids: ALL_WORDS.filter(word => word.unit === 8).map(word => word.id), answers: {}, done: 0
+      }
+    });
+    currentPool = 'core';
+    quizActive = false;
+    const alerts = [];
+    const originalAlert = window.alert;
+    window.alert = message => alerts.push(message);
+    startReview();
+    window.alert = originalAlert;
+    return {
+      active: quizActive,
+      snapshot: state.suspendedQuiz,
+      due: dueUnitWordIds(),
+      alerts
+    };
+  });
+
+  expect(result.active).toBe(false);
+  expect(result.snapshot).toBeNull();
+  expect(result.due).toEqual([]);
+  expect(result.alerts[0]).toContain('今天没有到期');
+});
+
+test('legacy core plan data migrates into the current 25-day progress state without discarding its completion log', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const today = dayKeyStr(new Date());
+    const migrated = normalizeState({
+      ebbingActive: true,
+      ebbingStart: today,
+      ebbingUnitLog: { [today]: [1] }
+    });
+    return { plan: migrated.ebbingPlan, log: migrated.ebbingUnitLog[today] };
+  });
+
+  expect(result.plan).toMatchObject({ day: 1, dayKey: expect.any(String), completedUnits: [1] });
+  expect(result.log).toEqual([1]);
+});
+
+test('restarting the core 25-day plan discards prior plan position while preserving unrelated study data', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const today = dayKeyStr(new Date());
+    state = normalizeState({
+      ebbingActive: false,
+      ebbingStart: null,
+      ebbingPlan: { day: 8, dayKey: today, completedUnits: [8] },
+      stats: { wordAttempts: { 'core:1': { attempts: 2, correct: 1, wrong: 1 } } }
+    });
+    activateEbbing();
+    return { plan: state.ebbingPlan, attempt: state.stats.wordAttempts['core:1'] };
+  });
+
+  expect(result.plan).toMatchObject({ day: 1, completedUnits: [] });
+  expect(result.attempt).toMatchObject({ attempts: 2, correct: 1, wrong: 1 });
+});
+
+test('page nav: single unit shows page number and controls', async ({ page }) => {
+  // 选 Unit 1（核心库，154词 → 8页），再开始做题
+  await page.evaluate(() => document.querySelector('#unitFilterRow .freq-chip[data-unit="1"]').click());
+  await page.waitForTimeout(300);
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.page-nav');
+  const nav = await page.locator('.page-nav').textContent();
+  expect(nav).toContain('Unit 1 · 第 1/8 页');
+  // 首页：上一页禁用，下一页可用
+  await expect(page.locator('.page-nav button:has-text("上一页")')).toBeDisabled();
+  await expect(page.locator('.page-nav button:has-text("下一页")')).toBeEnabled();
+});
+
+test('page nav: resume continues from saved page', async ({ page }) => {
+  await page.evaluate(() => document.querySelector('#unitFilterRow .freq-chip[data-unit="1"]').click());
+  await page.waitForTimeout(300);
+  // 预置续刷进度：core_u1 第3页
+  await page.evaluate(() => {
+    localStorage.setItem('cet6_page_progress_v1', JSON.stringify({ k: 'core_u1', page: 3 }));
+  });
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.page-nav');
+  const nav = await page.locator('.page-nav').textContent();
+  expect(nav).toContain('Unit 1 · 第 3/8 页');
+});
+
+test('page nav: next-page button jumps and saves progress', async ({ page }) => {
+  await page.evaluate(() => document.querySelector('#unitFilterRow .freq-chip[data-unit="1"]').click());
+  await page.waitForTimeout(300);
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.page-nav');
+  expect(await page.locator('.page-nav').textContent()).toContain('第 1/8 页');
+  // 点下一页 → 跳到第2页，并写入 localStorage
+  await page.locator('.page-nav button:has-text("下一页")').click();
+  await page.waitForSelector('.page-nav');
+  expect(await page.locator('.page-nav').textContent()).toContain('Unit 1 · 第 2/8 页');
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('cet6_page_progress_v1') || 'null'));
+  expect(saved).toEqual({ k: 'core_u1', page: 2 });
+});
+
+test('page nav: finishing a round advances resume page', async ({ page }) => {
+  await page.evaluate(() => document.querySelector('#unitFilterRow .freq-chip[data-unit="1"]').click());
+  await page.waitForTimeout(300);
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.page-nav');
+  expect(await page.locator('.page-nav').textContent()).toContain('第 1/8 页');
+  // 连答 20 题（learnSize 默认 20）完成本轮 → 续刷应推进到第2页
+  for (let i = 0; i < 20; i++) {
+    await page.locator('.opt-btn').first().click();
+    await page.waitForSelector('.next-btn.show', { timeout: 3000 });
+    await page.locator('.next-btn').click();
+    await page.waitForTimeout(120);
+  }
+  await expect(page.locator('#startBtn')).toContainText('再来一轮');
+  await page.click('#startBtn');
+  await page.waitForSelector('.page-nav');
+  const nav2 = await page.locator('.page-nav').textContent();
+  expect(nav2).toContain('Unit 1 · 第 2/8 页');
+});
+
+test('page nav: all-range shows position only without controls', async ({ page }) => {
+  // 默认「全部」范围：只显示位置参考，无跳页按钮
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.page-nav');
+  const nav = await page.locator('.page-nav').textContent();
+  expect(nav).toContain('第');
+  await expect(page.locator('.page-nav button')).toHaveCount(0);
+});
+
+test('page nav: memory mode shows position only without controls', async ({ page }) => {
+  await page.evaluate(() => document.querySelector('#unitFilterRow .freq-chip[data-unit="1"]').click());
+  await page.waitForTimeout(300);
+  await page.evaluate(() => document.getElementById('memoryBtn').click());
+  await page.waitForTimeout(100);
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.page-nav');
+  const nav = await page.locator('.page-nav').textContent();
+  expect(nav).toContain('Unit 1 · 第');
+  await expect(page.locator('.page-nav button')).toHaveCount(0);
+});
+
+test('page nav: retry mode hides page info', async ({ page }) => {
+  // 注入 4 个错题后重做，重做不显示页码
+  await page.evaluate(() => {
+    const st = JSON.parse(localStorage.getItem('cet6_quiz_app_v2') || '{}');
+    st.wrongWordIds = st.wrongWordIds || {};
+    st.wrongWordIds['cn2en_core'] = { 1: {}, 2: {}, 3: {}, 4: {} };
+    localStorage.setItem('cet6_quiz_app_v2', JSON.stringify(st));
+  });
+  await page.reload();
+  await page.waitForTimeout(800);
+  await page.click('#retryQuizBtn');
+  await page.waitForSelector('.opt-btn');
+  await page.waitForTimeout(300);
+  await expect(page.locator('.page-nav')).toHaveCount(0);
+});
+
+test.describe('back-to-top', () => {
+  // 确保每次从顶部开始验证滚动
+  test.beforeEach(async ({ page }) => {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(100);
+  });
+
+  test('hidden at top, appears on scroll, smooth scrolls up', async ({ page }) => {
+    const btn = page.locator('#backToTopBtn');
+    await expect(btn).not.toBeVisible();
+    const maxScroll = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+    expect(maxScroll).toBeGreaterThan(300);
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await page.waitForTimeout(300);
+    await expect(btn).toHaveClass(/show/);
+    await expect(btn).toBeVisible();
+    await btn.click();
+    await page.waitForFunction(() => window.scrollY === 0, null, { timeout: 5000 });
+    await page.waitForTimeout(200);
+    await expect(btn).not.toBeVisible();
+  });
+
+  test.describe('fullscreen', () => {
+    // 小视口模拟手机,确保 quiz-scroll 有真实滚动空间
+    test.use({ viewport: { width: 1280, height: 420 } });
+
+    // 进入全屏后作答进入详解,内容才溢出 quiz-scroll 产生滚动
+    async function enterFullscreenDetail(page) {
+      await page.click('button:has-text("开始做题")');
+      await page.waitForSelector('.opt-btn');
+      await page.click('#toggleFsBtn');
+      await page.waitForTimeout(200);
+      await page.locator('.opt-btn').first().click();
+      await page.waitForSelector('.next-btn.show');
+      await page.waitForTimeout(300);
+    }
+
+    test('appears on quiz-scroll scroll and smooth scrolls up', async ({ page }) => {
+      await enterFullscreenDetail(page);
+      const btn = page.locator('#backToTopBtn');
+      const scrollable = await page.evaluate(() => {
+        const sc = document.querySelector('.quiz-card.fullscreen .quiz-scroll');
+        return sc ? sc.scrollHeight - sc.clientHeight : 0;
+      });
+      expect(scrollable).toBeGreaterThan(300);
+      await page.evaluate(() => {
+        const sc = document.querySelector('.quiz-card.fullscreen .quiz-scroll');
+        if (sc) sc.scrollTop = sc.scrollHeight;
+      });
+      await page.waitForTimeout(300);
+      await expect(btn).toHaveClass(/show/);
+      await btn.click();
+      await page.waitForFunction(() => {
+        const sc = document.querySelector('.quiz-card.fullscreen .quiz-scroll');
+        return sc && sc.scrollTop === 0;
+      }, null, { timeout: 5000 });
+    });
+
+    test('hides again after exiting fullscreen at top', async ({ page }) => {
+      await enterFullscreenDetail(page);
+      const btn = page.locator('#backToTopBtn');
+      await page.evaluate(() => {
+        const sc = document.querySelector('.quiz-card.fullscreen .quiz-scroll');
+        if (sc) sc.scrollTop = sc.scrollHeight;
+      });
+      await page.waitForTimeout(300);
+      await expect(btn).toHaveClass(/show/);
+      await page.click('#toggleFsBtn');
+      await page.waitForTimeout(300);
+      await expect(btn).toHaveClass(/show/);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForTimeout(300);
+      await expect(btn).not.toBeVisible();
+    });
+  });
+});
+
+test.describe('keep prefs on exit', () => {
+  // 全局 beforeEach 已把闯关切到 gate2 并持久化；reload 后快照 = 当前持久化模式（gate2）
+  test.beforeEach(async ({ page }) => {
+    await page.reload();
+    await page.waitForTimeout(300);
+  });
+
+  test('tab switch without pref change: no dialog, switches directly', async ({ page }) => {
+    await page.click('button[data-tab="stats-page"]');
+    await page.waitForTimeout(300);
+    await expect(page.locator('#keepPrefsBar')).toHaveCount(0);
+    await expect(page.locator('#tab-stats-page')).toBeVisible();
+  });
+
+  test('tab switch after pref change: dialog appears', async ({ page }) => {
+    await page.click('#gateRow .mode-btn[data-gate="3"]'); // 调整
+    await page.click('button[data-tab="stats-page"]');
+    await page.waitForSelector('#keepPrefsBar');
+    await expect(page.locator('#keepPrefsBar')).toContainText('本次调整了做题模式');
+    await expect(page.locator('#keepPrefsYes')).toBeVisible();
+    await expect(page.locator('#keepPrefsNo')).toBeVisible();
+  });
+
+  test('keep button: snapshot updated, switch proceeds, no repeat dialog', async ({ page }) => {
+    await page.click('#gateRow .mode-btn[data-gate="3"]');
+    await page.click('button[data-tab="stats-page"]');
+    await page.waitForSelector('#keepPrefsBar');
+    await page.click('#keepPrefsYes');
+    await page.waitForTimeout(300);
+    await expect(page.locator('#keepPrefsBar')).toHaveCount(0);
+    await expect(page.locator('#tab-stats-page')).toBeVisible();
+    await page.click('button[data-tab="quiz"]');
+    await page.waitForTimeout(200);
+    await page.click('button[data-tab="stats-page"]');
+    await page.waitForTimeout(300);
+    await expect(page.locator('#keepPrefsBar')).toHaveCount(0);
+  });
+
+  test('revert button: prefs restored to snapshot, UI syncs', async ({ page }) => {
+    await page.click('#gateRow .mode-btn[data-gate="3"]');
+    await page.click('button[data-tab="stats-page"]');
+    await page.waitForSelector('#keepPrefsBar');
+    await page.click('#keepPrefsNo');
+    await page.waitForTimeout(400);
+    const gate = await page.evaluate(() => JSON.parse(localStorage.getItem('cet6_quiz_app_v2')).prefs.gate);
+    expect(gate).toBe(2);
+    await page.click('button[data-tab="quiz"]');
+    await page.waitForTimeout(200);
+    await expect(page.locator('#gateRow .mode-btn[data-gate="2"]')).toHaveClass(/active/);
+  });
+
+  test('memory mode survives switching pool mid-quiz (isMemory persisted)', async ({ page }) => {
+    await page.click('#memoryBtn'); // 开记忆模式
+    await page.click('button:has-text("开始做题")');
+    await page.waitForSelector('.opt-btn');
+    page.once('dialog', d => d.accept());
+    await page.selectOption('#poolSelect', 'full');
+    await page.waitForTimeout(400);
+    const isMem = await page.evaluate(() => {
+      const st = JSON.parse(localStorage.getItem('cet6_quiz_app_v2'));
+      return st.suspendedQuiz ? !!st.suspendedQuiz.isMemory : null;
+    });
+    expect(isMem).toBe(true);
+  });
+
+  test('switching mode mid-quiz not reverted by checkSuspendedQuiz', async ({ page }) => {
+    await page.click('button:has-text("开始做题")');
+    await page.waitForSelector('.opt-btn');
+    page.once('dialog', d => d.accept());
+    await page.click('.mode-btn[data-mode="en2cn"]');
+    await page.waitForTimeout(400);
+    const mode = await page.evaluate(() => JSON.parse(localStorage.getItem('cet6_quiz_app_v2')).prefs.mode);
+    expect(mode).toBe('en2cn');
+    await expect(page.locator('.mode-btn[data-mode="en2cn"]')).toHaveClass(/active/);
+  });
+});
+
+test.describe('external data (full-words.js)', () => {
+  test('switch to Ebbinghaus pool loads external data and can quiz', async ({ page }) => {
+    await page.selectOption('#poolSelect', 'full');
+    await page.waitForFunction(() => window.__FULL_WORDS_DATA__ && window.__FULL_WORDS_DATA__.length === 3324);
+    await expect(page.locator('#unitSelect option[value="1"]')).toBeAttached();
+    await page.click('button:has-text("开始做题")');
+    await page.waitForSelector('.opt-btn', { timeout: 10000 });
+    expect(await page.locator('.opt-btn').count()).toBe(4);
+  });
+
+  test('core pool quiz shows detail from built-in word fields', async ({ page }) => {
+    await page.click('button:has-text("开始做题")');
+    await page.waitForSelector('.opt-btn');
+    await page.locator('.opt-btn').first().click();
+    await page.waitForSelector('.next-btn.show');
+    await expect(page.locator('.word-detail')).toBeVisible();
+  });
+
+  test('Ebbinghaus pool quiz shows merged detail from external data', async ({ page }) => {
+    await page.selectOption('#poolSelect', 'full');
+    await page.waitForFunction(() => window.__FULL_WORDS_DATA__ && window.__FULL_WORDS_DATA__.length === 3324);
+    await page.click('button:has-text("开始做题")');
+    await page.waitForSelector('.opt-btn', { timeout: 10000 });
+    await page.locator('.opt-btn').first().click();
+    await page.waitForSelector('.next-btn.show', { timeout: 10000 });
+    await expect(page.locator('.word-detail')).toBeVisible();
+    const txt = await page.locator('.wd-body').textContent();
+    expect(txt.trim().length).toBeGreaterThan(0);
+  });
+});
+
+test.describe('theme toggle', () => {
+  test('switches data-theme and icon with circular reveal', async ({ page }) => {
+    const btn = page.locator('#themeBtn');
+    const initial = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    await btn.click();
+    await page.waitForFunction((prev) => {
+      const cur = document.documentElement.getAttribute('data-theme');
+      return cur !== prev && (cur === 'dark' || cur === 'light');
+    }, initial, { timeout: 5000 });
+    const after = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    expect(after === 'dark' || after === 'light').toBe(true);
+    expect(after).not.toBe(initial);
+    await page.waitForTimeout(700); // 等圆形扩散动画(450ms)结束
+    const icon = await btn.textContent();
+    expect(icon).toBe(after === 'dark' ? '☀️' : '🌙');
+  });
+
+  test('reduced-motion still switches theme', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const btn = page.locator('#themeBtn');
+    const initial = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    await btn.click();
+    await page.waitForFunction((prev) => document.documentElement.getAttribute('data-theme') !== prev, initial, { timeout: 5000 });
+    const after = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    expect(after === 'dark' || after === 'light').toBe(true);
+  });
+});
+
+test.describe('hover gating (pointer media query)', () => {
+  test('desktop (pointer:fine): hover feedback works', async ({ page }) => {
+    const btn = page.locator('.tab-btn[data-tab="wrong"]'); // 非 active，hover 才有变化
+    const before = await btn.evaluate(el => getComputedStyle(el).color);
+    await btn.hover();
+    await page.waitForTimeout(300);
+    const after = await btn.evaluate(el => getComputedStyle(el).color);
+    expect(after).not.toBe(before); // hover 后颜色变(--text2 → --text)
+  });
+
+  test('stats pbar renders with scaleX transform', async ({ page }) => {
+    await page.click('button[data-tab="stats-page"]');
+    await page.waitForTimeout(800); // 等统计页渲染
+    const info = await page.evaluate(() => {
+      const fills = [...document.querySelectorAll('.pbar .fill')];
+      const vis = fills.filter(el => el.getBoundingClientRect().width > 0);
+      const zero = el => getComputedStyle(el).transform === 'matrix(0, 0, 0, 1, 0, 0)';
+      return {
+        visible: vis.length,
+        nonZeroScaleX: vis.filter(el => !zero(el)).length,
+        originLeft: vis[0] ? getComputedStyle(vis[0]).transformOrigin.split(' ')[0] : null,
+      };
+    });
+    expect(info.visible).toBeGreaterThan(0);
+    expect(info.nonZeroScaleX).toBe(info.visible);
+    expect(info.originLeft).toBe('0px');
+  });
+});
+
+test.describe('touch device simulation', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+
+  test('hover feedback suppressed (pointer:coarse)', async ({ page }) => {
+    const media = await page.evaluate(() => ({
+      hover: window.matchMedia('(hover: hover)').matches,
+      coarse: window.matchMedia('(pointer: coarse)').matches,
+    }));
+    expect(media.hover).toBe(false);
+    expect(media.coarse).toBe(true);
+    const btn = page.locator('.tab-btn[data-tab="wrong"]');
+    const before = await btn.evaluate(el => getComputedStyle(el).color);
+    await btn.hover();
+    await page.waitForTimeout(300);
+    const after = await btn.evaluate(el => getComputedStyle(el).color);
+    expect(after).toBe(before); // hover 不变色(@media 不匹配)
+  });
+});
+
+test('page load with saved full pool does not crash before async words ready', async ({ page }) => {
+  // 模拟用户上次选了打卡词库：prefs.pool='full'
+  await page.addInitScript(() => {
+    const st = JSON.parse(localStorage.getItem('cet6_quiz_app_v2') || '{}');
+    st.prefs = st.prefs || {};
+    st.prefs.pool = 'full';
+    st.prefs.units = [0];
+    localStorage.setItem('cet6_quiz_app_v2', JSON.stringify(st));
+  });
+  let pageError = null;
+  page.on('pageerror', e => { pageError = e.message; });
+  await page.goto('file:///C:/Users/zheng/Desktop/%E5%AD%A6%E4%B9%A0%E4%B8%8E%E8%80%83%E8%AF%95/Study/%E8%8B%B1%E8%AF%AD%E5%9B%9B%E5%85%AD%E7%BA%A7/cet6_quiz.html');
+  await page.waitForLoadState('domcontentloaded');
+  // 页面加载瞬间(外部词库数据未到达)applyPrefs→updatePoolUI→updateFreqCount 不应崩溃
+  expect(pageError).toBeNull();
+  // 打卡词库异步加载完成
+  await page.waitForFunction(() => window.__FULL_WORDS_DATA__ && window.__FULL_WORDS_DATA__.length === 3324, null, { timeout: 10000 });
+  await page.waitForTimeout(300);
+  expect(pageError).toBeNull();
+  // 词数刷新为真实值
+  const txt = await page.locator('#freqCount').textContent();
+  expect(txt).toContain('3324');
+});
+
+test.describe('mode-specific other-option feedback', () => {
+  async function answerWrong(page) {
+    await page.evaluate(() => {
+      const g2 = document.querySelector('#gateRow .mode-btn[data-gate="2"]');
+      if (g2) g2.click();
+    });
+    await page.waitForTimeout(100);
+    await page.click('button:has-text("开始做题")');
+    await page.waitForSelector('.opt-btn');
+    await page.evaluate(() => {
+      const q = quizState.questions[quizState.pos];
+      const wrongIdx = q.options.findIndex((o, i) => i !== q.correctIndex);
+      document.querySelectorAll('.opt-btn')[wrongIdx].click();
+    });
+    await page.waitForSelector('.feedback.show.fail');
+    return page.evaluate(() => {
+      const fb = document.querySelector('.feedback.show');
+      const re = /([A-D])\.<\/span> <strong>([a-zA-Z]+)<\/strong>/g;
+      const found = [];
+      let mm;
+      while ((mm = re.exec(fb.innerHTML)) !== null) found.push({ label: mm[1], word: mm[2] });
+      const options = fb ? fb.querySelector('.feedback-options') : null;
+      return {
+        rows: found,
+        optionRows: options ? options.querySelectorAll(':scope > div').length : 0,
+        optionBodies: options ? Array.from(options.querySelectorAll(':scope > div')).map(row => row.textContent.replace(/^[A-D]\.\s*/, '')) : [],
+        html: fb ? fb.innerHTML : ''
+      };
+    });
+  }
+
+  test('en2cn: question options stay Chinese while feedback names the words', async ({ page }) => {
+    await page.selectOption('#modeSelect', 'en2cn');
+    await page.click('button:has-text("开始做题")');
+    await page.waitForSelector('.opt-btn');
+    const questionOptions = await page.locator('.opt-btn').allTextContents();
+    questionOptions.forEach(text => {
+      const withoutPos = text.replace(/\b(?:n|v|adj|adv|prep|conj|pron|num|art|det|aux|modal|vt|vi|phr|phrase|interj)\.(?:\s*\/\s*(?:n|v|adj|adv|prep|conj|pron|num|art|det|aux|modal|vt|vi|phr|phrase|interj)\.)*/gi, '');
+      expect(withoutPos).not.toMatch(/[A-Za-z]/);
+    });
+    await page.evaluate(() => {
+      const q = quizState.questions[quizState.pos];
+      const wrongIdx = q.options.findIndex((o, i) => i !== q.correctIndex);
+      document.querySelectorAll('.opt-btn')[wrongIdx].click();
+    });
+    await page.waitForSelector('.feedback.show.fail');
+    const result = await page.evaluate(() => {
+      const fb = document.querySelector('.feedback.show.fail');
+      const options = fb && fb.querySelector('.feedback-options');
+      return {
+        optionRows: options ? options.querySelectorAll(':scope > div').length : 0,
+        text: options ? options.textContent : '',
+        duplicatePos: options ? Array.from(options.querySelectorAll(':scope > div')).some(row => {
+          const body = row.cloneNode(true);
+          body.querySelectorAll('.option-pos').forEach(label => label.remove());
+          return /\b(?:n|v|adj|adv|prep|conj|pron|num|art|det|aux|modal|vt|vi|phr|phrase|interj)\./i.test(body.textContent);
+        }) : false,
+        order: (() => {
+          const html = wrongOptionsHTML({
+            correctIndex: 1,
+            options: [{ word: 'aggressive', pronunciation: '/ə\\'gresv/', meaning: 'adj.好斗的,侵略的' }, { word: 'answer', meaning: 'n.答案' }]
+          }, 'en2cn', -1);
+          return {
+            wordBeforePos: html.indexOf('<strong>aggressive</strong>') < html.indexOf('class="option-pos"'),
+            posBeforeChinese: html.indexOf('class="option-pos"') < html.indexOf('好斗的'),
+            notStuck: !html.includes('</strong><span class="option-pos">')
+          };
+        })()
+      };
+    });
+    expect(result.optionRows).toBe(3); // 其余选项仍保留 3 行
+    expect(result.text).toMatch(/[A-Za-z]+/); // 反馈区显示对应英文单词
+    expect(result.duplicatePos).toBe(false);
+    expect(result.order).toEqual({ wordBeforePos: true, posBeforeChinese: true, notStuck: true });
+  });
+
+  test('cn2en: other options still include english word (regression)', async ({ page }) => {
+    const result = await answerWrong(page); // 默认 cn2en
+    expect(result.optionRows).toBe(3);
+    expect(result.rows.length).toBe(3);
+    result.rows.forEach(r => expect(r.word).toMatch(/^[a-z]+$/i));
+  });
+});
+
+// ============ 新版词群导图（书页真实导图数据：放射状 + 下钻） ============
+test.describe('group map (new: unit-maps.js data)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.selectOption('#poolSelect', 'core');
+    await page.evaluate(() => new Promise(resolve => ensureUnitMaps(resolve)));
+  });
+
+  test('core pool quiz answer shows new group map with SVG nodes', async ({ page }) => {
+    // 核心词库默认；答题后反馈里应出现新版词群导图（gmap-wrap 容器）
+    await page.click('button:has-text("开始做题")');
+    await page.waitForSelector('.opt-btn');
+    await page.locator('.opt-btn').first().click();
+    await page.waitForSelector('.next-btn.show');
+    await expect(page.locator('.gmap-wrap')).toBeVisible();
+    await expect(page.locator('.gmap-wrap svg')).toBeVisible();
+    await expect(page.locator('.gmap-title')).toContainText('词群导图');
+  });
+
+  test('new group map node click drills down and shows back button', async ({ page }) => {
+    await page.click('button:has-text("开始做题")');
+    await page.waitForSelector('.opt-btn');
+    await page.locator('.opt-btn').first().click();
+    await page.waitForSelector('.next-btn.show');
+    // 找到有 ▾ 展开标记的节点（有子节点的词），点击应下钻
+    const hasDrill = await page.evaluate(() => {
+      const wrap = document.querySelector('.gmap-wrap');
+      if (!wrap) return false;
+      const texts = wrap.querySelectorAll('text');
+      for (const t of texts) {
+        if (t.textContent === '▾' || t.textContent.indexOf('▾') !== -1) return true;
+      }
+      return false;
+    });
+    if (!hasDrill) {
+      // 若当前词群一级词全无子节点（如 g1 的 conquer 等仍有 children），断言数据已加载即可
+      expect(await page.evaluate(() => !!window.__UNIT_MAPS_DATA__)).toBe(true);
+      return;
+    }
+    // 点击可展开节点（带 onclick 的 g 标签内 circle）
+    await page.evaluate(() => {
+      const wrap = document.querySelector('.gmap-wrap');
+      const gs = wrap.querySelectorAll('g[onclick*="groupMapDrill"]');
+      for (const g of gs) {
+        const tip = g.querySelector('title');
+        if (tip && g.querySelector('text')) { g.dispatchEvent(new MouseEvent('click', { bubbles: true })); break; }
+      }
+    });
+    await page.waitForTimeout(100);
+    // 下钻后应出现「返回上级」按钮
+    await expect(page.locator('.gmap-back')).toBeVisible();
+  });
+
+  test('unit-maps data: 14 groups in unit 1, each has level1Nodes', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const stats = await page.evaluate(() => {
+      const d = window.__UNIT_MAPS_DATA__;
+      const unit1 = d[1];
+      if (!unit1) return null;
+      const ids = Object.keys(unit1).map(Number).sort((a, b) => a - b);
+      let totalNodes = 0;
+      const walk = (ns) => { ns.forEach(n => { totalNodes++; if (n.children) walk(n.children); }); };
+      Object.keys(unit1).forEach(gid => walk(unit1[gid].level1Nodes));
+      return { ids, totalNodes };
+    });
+    expect(stats).not.toBeNull();
+    expect(stats.ids).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    expect(stats.totalNodes).toBeGreaterThan(200);
+  });
+
+  test('unit1 every core word is present in map data (no missing quiz word)', async ({ page }) => {
+    // 回归：precede/gene/rise 曾不在导图数据里，做题词找不到；现 unit1 全部 154 词必须都能在导图节点中找到
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const missing = await page.evaluate(() => {
+      const words = JSON.parse(document.getElementById('data-all-words').textContent);
+      const unit1 = words.filter(w => w.unit === 1);
+      const d = window.__UNIT_MAPS_DATA__[1];
+      const set = new Set();
+      const walk = ns => ns.forEach(n => { set.add(n.word.toLowerCase()); if (n.children) walk(n.children); });
+      Object.keys(d).forEach(g => walk(d[g].level1Nodes || []));
+      return unit1.filter(w => !set.has(w.word.toLowerCase())).map(w => w.word);
+    });
+    expect(missing).toEqual([]);
+  });
+
+  test('quiz word that is a deep node auto-drills to its level and shows highlighted', async ({ page }) => {
+    // 回归：二级词（如 deteriorate，是 generate 的子节点）此前主题层看不到；现自动下钻到所在层并高亮当前词
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const spot = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const wrap = document.createElement('div');
+      wrap.id = 'auto-map';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      wrap.innerHTML = window.groupMapSVG({ id: 'x', word: 'deteriorate', unit: 1, lesson: 1, seq: 1, group_id: 7, group_name: 'gen(e)相关' });
+      let ctext = null;
+      for (const t of wrap.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+      const center = ctext ? ctext.textContent : '';
+      const hasBack = !!wrap.querySelector('.gmap-back');
+      // 当前做题词应在节点中且高亮（active 节点圆 r=17）
+      let activeWord = null;
+      for (const g of wrap.querySelectorAll('g[onclick*="groupMapDrill"]')) {
+        const title = g.querySelector('title');
+        if (title && g.querySelector('circle').getAttribute('r') === '17') { activeWord = title.textContent.split(' ')[0]; }
+      }
+      wrap.remove();
+      return { center, hasBack, activeWord };
+    });
+    expect(spot.hasBack).toBe(true);                    // 自动下钻后应出现返回按钮
+    expect(spot.activeWord).toBe('deteriorate');        // 做题词在导图节点中且高亮
+  });
+
+  test('center word stays inside circle after drill (long words not covered)', async ({ page }) => {
+    // 回归：下钻后长中心词（如 subordinate/overwhelming）此前会被 r=30 的圆遮住。
+    // 现在中心文字单行、字号自适应、圆随宽度外扩，任何主题中心/一级下钻中心都应在圆内。
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const overflows = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const data = window.__UNIT_MAPS_DATA__[1];
+      const bad = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'regress-gmap';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '-9999px';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      const scan = () => {
+        const svg = wrap.querySelector('svg');
+        if (!svg) return;
+        const circle = svg.querySelector('circle');
+        const cx = +circle.getAttribute('cx'), cy = +circle.getAttribute('cy'), r = +circle.getAttribute('r');
+        let ctext = null;
+        for (const t of svg.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+        if (!ctext) return;
+        const corners = [...ctext.querySelectorAll('tspan')].flatMap(t => {
+          const b = t.getBBox();
+          return [Math.hypot(b.x - cx, b.y - cy), Math.hypot(b.x + b.width - cx, b.y - cy), Math.hypot(b.x - cx, b.y + b.height - cy), Math.hypot(b.x + b.width - cx, b.y + b.height - cy)];
+        });
+        const maxC = Math.max(...corners);
+        if (maxC - r > 1) bad.push({ center: ctext.textContent, r, over: Math.round((maxC - r) * 10) / 10 });
+      };
+      for (const gid of Object.keys(data)) {
+        // 用该词群真实一级节点词作 probe（新版按书页词群定位，占位词 'x' 会触发回退旧版）
+        const lv1word = (data[gid].level1Nodes && data[gid].level1Nodes[0]) ? data[gid].level1Nodes[0].word : 'x';
+        const probe = { id: 'p', word: lv1word, unit: 1, lesson: 1, seq: 1, group_id: Number(gid), group_name: data[gid].group_name };
+        wrap.innerHTML = window.groupMapSVG({ ...probe });
+        scan();
+        const drillWords = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"]')].map(g => g.querySelector('title')?.textContent.split(' ')[0]).filter(Boolean);
+        for (const wrd of drillWords.slice(0, 6)) {
+          wrap.innerHTML = window.groupMapSVG({ ...probe });
+          for (const g of wrap.querySelectorAll('g[onclick*="groupMapDrill"]')) {
+            const title = g.querySelector('title');
+            if (title && title.textContent.split(' ')[0] === wrd) { g.dispatchEvent(new MouseEvent('click', { bubbles: true })); break; }
+          }
+          scan();
+        }
+      }
+      wrap.remove();
+      return bad;
+    });
+    expect(overflows).toEqual([]);
+  });
+
+  test('long center word renders single-line and relation labels stay outside circle', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const spot = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const wrap = document.createElement('div');
+      wrap.id = 'regress-gmap2';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      wrap.innerHTML = window.groupMapSVG({ id: 'x', word: 'subordinate', unit: 1, lesson: 1, seq: 1, group_id: 3, group_name: 'ordinary 相关' });
+      // 下钻到 subordinate（11 个字符）
+      for (const g of wrap.querySelectorAll('g[onclick*="groupMapDrill"]')) {
+        const title = g.querySelector('title');
+        if (title && title.textContent.split(' ')[0] === 'subordinate') { g.dispatchEvent(new MouseEvent('click', { bubbles: true })); break; }
+      }
+      const svg = wrap.querySelector('svg');
+      let ctext = null;
+      for (const t of svg.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+      const tspans = ctext ? [...ctext.querySelectorAll('tspan')] : [];
+      const circle = svg.querySelector('circle');
+      const cx = +circle.getAttribute('cx'), cy = +circle.getAttribute('cy'), r = +circle.getAttribute('r');
+      // 关系标签（font-size=9.5）：中心在圆外，且文字包围盒内侧不贴中心圆（统一环带，间距≥4px）
+      const rels = [...svg.querySelectorAll('text')].filter(t => t.getAttribute('font-size') === '9.5').map(t => {
+        const rb = t.getBBox();
+        const centerD = Math.hypot(rb.x + rb.width / 2 - cx, rb.y + rb.height / 2 - cy);
+        const rad = Math.atan2(rb.y + rb.height / 2 - cy, rb.x + rb.width / 2 - cx);
+        const innerGap = centerD - r - rb.width / 2;   // 文字内侧到中心圆边的间隙
+        return { outside: centerD > r, innerGap };
+      });
+      const relsOutside = rels.length > 0 && rels.every(x => x.outside);
+      const minInnerGap = rels.length ? Math.min(...rels.map(x => x.innerGap)) : Infinity;
+      wrap.remove();
+      return { centerText: ctext ? ctext.textContent : '', lines: tspans.length, circleR: r, relsOutside, minInnerGap };
+    });
+    expect(spot.centerText).toBe('subordinate');
+    expect(spot.lines).toBe(1);   // 单行，不把单词拦腰折断
+    expect(spot.relsOutside).toBe(true);
+    expect(spot.minInnerGap).toBeGreaterThanOrEqual(4);  // 关系标签不贴中心圆（间距统一）
+  });
+
+  test('click circle drills down, click word text speaks only', async ({ page }) => {
+    // 行为约定：节点圆圈=展开下钻（不发音）；节点单词文字=朗读发音（不下钻）
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const result = await page.evaluate(() => {
+      window.currentPool = 'core';
+      window.__spoke = [];
+      window.speakWord = function (t) { window.__spoke.push(t); };
+      const wrap = document.createElement('div');
+      wrap.id = 'regress-gmap3';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      wrap.innerHTML = window.groupMapSVG({ id: 'x', word: 'ambition', unit: 1, lesson: 1, seq: 1, group_id: 1, group_name: '雄心相关' });
+      // 1) 点击 aggressive 的单词文字：应只发音、不下钻
+      const words = [...wrap.querySelectorAll('text[onclick*="groupMapSpeak"]')].filter(t => t.textContent === 'aggressive');
+      const wordEl = words[0];
+      wordEl.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const spokeAfterWord = window.__spoke.slice();
+      const backAfterWord = !!wrap.querySelector('.gmap-back');
+      // 2) 重置后点击 aggressive 的圆圈：应只下钻、不发音
+      window.__spoke = [];
+      const circles = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"]')].filter(g => {
+        const title = g.querySelector('title');
+        return title && title.textContent.split(' ')[0] === 'aggressive';
+      });
+      circles[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const spokeAfterCircle = window.__spoke.slice();
+      const backAfterCircle = !!wrap.querySelector('.gmap-back');
+      wrap.remove();
+      return { spokeAfterWord, backAfterWord, spokeAfterCircle, backAfterCircle };
+    });
+    expect(result.spokeAfterWord).toEqual(['aggressive']);   // 点单词 → 发音
+    expect(result.backAfterWord).toBe(false);                 // 点单词 → 不下钻
+    expect(result.spokeAfterCircle).toEqual([]);              // 点圆圈 → 不发音
+    expect(result.backAfterCircle).toBe(true);                // 点圆圈 → 下钻
+  });
+
+  test('node word text never touches any circle (min gap >= 6px)', async ({ page }) => {
+    // 回归：节点文字水平排布，斜向节点+长词曾扫进节点圆（121处贴圆，如 ambassador/aggressive）。
+    // 现按词长动态外推，扫描 unit1 全部图层断言文字包围盒到所属节点圆间距≥6px
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const gaps = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const all = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'gap-scan';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      const scan = () => {
+        const svg = wrap.querySelector('svg');
+        if (!svg) return;
+        const texts = [...svg.querySelectorAll('text')].filter(t => ['10.5', '9'].includes(t.getAttribute('font-size')));
+        const circles = [...svg.querySelectorAll('g[onclick*="groupMapDrill"] circle')].map(c => {
+          const title = c.parentElement.querySelector('title');
+          return { cx: +c.getAttribute('cx'), cy: +c.getAttribute('cy'), r: +c.getAttribute('r'), word: title ? title.textContent.split(' ')[0] : '?' };
+        });
+        for (const t of texts) {
+          const b = t.getBBox();
+          const wrd = t.textContent.replace(/…$/, '');
+          const pair = circles.find(c => c.word.startsWith(wrd));
+          if (!pair) continue;
+          const nx = Math.max(b.x, Math.min(pair.cx, b.x + b.width));
+          const ny = Math.max(b.y, Math.min(pair.cy, b.y + b.height));
+          all.push(Math.hypot(nx - pair.cx, ny - pair.cy) - pair.r);
+        }
+      };
+      const data = window.__UNIT_MAPS_DATA__[1];
+      for (const gid of Object.keys(data)) {
+        // 用词群真实一级词作 probe（新版按书页词群定位，占位词 'x' 会触发回退旧版）
+        const lv1word = (data[gid].level1Nodes && data[gid].level1Nodes[0]) ? data[gid].level1Nodes[0].word : 'x';
+        const probe = { id: 'x', word: lv1word, unit: 1, lesson: 1, seq: 1, group_id: Number(gid), group_name: data[gid].group_name };
+        wrap.innerHTML = window.groupMapSVG({ ...probe });
+        scan();
+        const drillWords = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"]')].map(g => g.querySelector('title')?.textContent.split(' ')[0]).filter(Boolean);
+        for (const wrd of drillWords.slice(0, 12)) {
+          wrap.innerHTML = window.groupMapSVG({ ...probe });
+          for (const g of wrap.querySelectorAll('g[onclick*="groupMapDrill"]')) {
+            const title = g.querySelector('title');
+            if (title && title.textContent.split(' ')[0] === wrd) { g.dispatchEvent(new MouseEvent('click', { bubbles: true })); break; }
+          }
+          scan();
+        }
+      }
+      wrap.remove();
+      return all;
+    });
+    expect(gaps.length).toBeGreaterThan(0);
+    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(6);
+  });
+
+  test('every unit1 quiz word is visible in its map (book grouping honored)', async ({ page }) => {
+    // 回归：orient/sight 等 11 个词在词库的 group_id 与书页导图词群不一致（如 orient 词库归 g1，书页归 g14），
+    // 此前在 word.group_id 对应词群找不到自己 → 做题显示错误词群。现按书页划分在整 unit 内定位词群。
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const missing = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const words = JSON.parse(document.getElementById('data-all-words').textContent).filter(w => w.unit === 1);
+      const bad = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'visible-check';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      for (const w of words) {
+        wrap.innerHTML = window.groupMapSVG({ id: 'x', word: w.word, unit: w.unit, lesson: w.lesson, seq: w.seq, group_id: w.group_id, group_name: w.group_name });
+        let ctext = null;
+        for (const t of wrap.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+        const center = ctext ? ctext.textContent : '';
+        const inNodes = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0].toLowerCase() === w.word.toLowerCase());
+        if (!inNodes && center.toLowerCase() !== w.word.toLowerCase()) bad.push(w.word);
+      }
+      wrap.remove();
+      return bad;
+    });
+    expect(missing).toEqual([]);
+  });
+
+  test('every node word is fully displayed (no truncation)', async ({ page }) => {
+    // 回归：长词节点（如 congressional 13字符、overwhelmingly 14字符）此前被 slice(0,9)+… 截断。
+    // 现完整显示，扫描 unit1 全部图层断言节点文字无省略号且与完整词匹配。
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const truncated = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const bad = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'full-word';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      const scan = () => {
+        const svg = wrap.querySelector('svg');
+        if (!svg) return;
+        const circleWords = [...svg.querySelectorAll('g[onclick*="groupMapDrill"] title')].map(t => t.textContent.split(' ')[0]);
+        for (const t of svg.querySelectorAll('text')) {
+          const fs = t.getAttribute('font-size');
+          if (fs !== '10.5' && fs !== '9') continue;
+          const wrd = t.textContent;
+          if (wrd === '▾') continue;   // 展开标记不是单词
+          if (wrd.includes('…')) bad.push(wrd);
+          else if (!circleWords.includes(wrd)) bad.push(wrd + '(未匹配完整词)');
+        }
+      };
+      const data = window.__UNIT_MAPS_DATA__[1];
+      for (const gid of Object.keys(data)) {
+        const lv1 = data[gid].level1Nodes || [];
+        const lv1word = lv1[0] ? lv1[0].word : 'x';
+        const probe = { id: 'x', word: lv1word, unit: 1, lesson: 1, seq: 1, group_id: Number(gid), group_name: data[gid].group_name };
+        wrap.innerHTML = window.groupMapSVG({ ...probe });
+        scan();
+        const drillWords = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"]')].map(g => g.querySelector('title')?.textContent.split(' ')[0]).filter(Boolean);
+        for (const wrd of drillWords.slice(0, 12)) {
+          wrap.innerHTML = window.groupMapSVG({ ...probe });
+          for (const g of wrap.querySelectorAll('g[onclick*="groupMapDrill"]')) {
+            const title = g.querySelector('title');
+            if (title && title.textContent.split(' ')[0] === wrd) { g.dispatchEvent(new MouseEvent('click', { bubbles: true })); break; }
+          }
+          scan();
+        }
+      }
+      wrap.remove();
+      return [...new Set(bad)];
+    });
+    expect(truncated).toEqual([]);
+  });
+
+  test('browse tab: unit1 word shows its group map via 导图 button', async ({ page }) => {
+    // 单词浏览器（词库 tab）每词条有「导图」按钮，点击后按词定位书页词群导图并渲染
+    await page.click('button[data-tab="browse"]');
+    await page.waitForSelector('#browseSearch');
+    // 等 FULL_WORDS 渲染出词条（可能需加载外置数据）
+    await page.fill('#browseSearch', 'congress');
+    await page.waitForFunction(() => {
+      const list = document.getElementById('browseList');
+      return list && list.innerHTML.indexOf('congress') !== -1 && list.innerHTML.indexOf('导图') !== -1;
+    });
+    // 点击 congress 词条的「导图」按钮（词条里第一个）
+    await page.evaluate(() => {
+      const list = document.getElementById('browseList');
+      const divs = list.querySelectorAll(':scope > div');
+      for (const d of divs) {
+        if (d.textContent.indexOf('congress') !== -1) {
+          const btn = [...d.querySelectorAll('button')].find(b => b.textContent.indexOf('导图') !== -1);
+          if (btn) { btn.click(); return true; }
+        }
+      }
+      return false;
+    });
+    await page.waitForFunction(() => {
+      const svg = document.querySelector('.gmap-wrap svg');
+      return !!svg;
+    });
+    // 导图应包含当前词 congress（节点或中心）
+    const has = await page.evaluate(() => {
+      const wrap = document.querySelector('.gmap-wrap');
+      if (!wrap) return false;
+      const inNodes = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0] === 'congress');
+      let ctext = '';
+      for (const t of wrap.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t.textContent; break; } }
+      return inNodes || ctext.toLowerCase() === 'congress';
+    });
+    expect(has).toBe(true);
+  });
+
+  test('browse tab: word absent from map data shows notice (no map)', async ({ page }) => {
+    // 词不在书页导图数据（如 unit>1 词）时，点「导图」应显示暂无提示，不显示空图
+    await page.click('button[data-tab="browse"]');
+    await page.waitForSelector('#browseSearch');
+    // 先确保导图数据已加载（独立测试环境）
+    await page.evaluate(() => new Promise(resolve => window.ensureUnitMaps ? window.ensureUnitMaps(resolve) : resolve()));
+    const absent = await page.evaluate(() => {
+      // 从 FULL_WORDS 里找一个在导图数据中找不到的词（不在任何 unit 任何词群节点）
+      const mapData = window.__UNIT_MAPS_DATA__;
+      let target = null;
+      if (!mapData) return null;
+      const nodeSet = new Set();
+      for (const u in mapData) for (const g in mapData[u]) {
+        (function walk(ns){ ns.forEach(n => { nodeSet.add(n.word.toLowerCase()); if (n.children) walk(n.children); }); })(mapData[u][g].level1Nodes || []);
+      }
+      for (const w of FULL_WORDS) {
+        if (!nodeSet.has(w.word.toLowerCase())) { target = w.word; break; }
+      }
+      return target;
+    });
+    expect(absent).not.toBeNull();
+    await page.fill('#browseSearch', absent);
+    await page.waitForFunction((w) => {
+      const list = document.getElementById('browseList');
+      return list && list.innerHTML.indexOf(w) !== -1;
+    }, absent);
+    const clicked = await page.evaluate((w) => {
+      const list = document.getElementById('browseList');
+      for (const d of list.querySelectorAll(':scope > div')) {
+        if (d.textContent.indexOf(w) !== -1) {
+          const btn = [...d.querySelectorAll('button')].find(b => b.textContent.indexOf('导图') !== -1);
+          if (btn) { btn.click(); return true; }
+        }
+      }
+      return false;
+    }, absent);
+    expect(clicked).toBe(true);
+    await page.waitForFunction((w) => {
+      const list = document.getElementById('browseList');
+      for (const d of list.querySelectorAll(':scope > div')) {
+        if (d.textContent.indexOf(w) !== -1) {
+          const box = d.querySelector('[id^="bdmap-"]');
+          if (box && box.style.display !== 'none' && box.innerHTML.indexOf('暂无此词') !== -1) return true;
+        }
+      }
+      return false;
+    }, absent);
+  });
+});
+
+// ============ unit2 词群导图 ============
+test.describe('group map (new: unit-maps.js data · unit2)', () => {
+  test('unit2 has 12 groups and covers all 189 core words', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const stats = await page.evaluate(() => {
+      const d = window.__UNIT_MAPS_DATA__[2];
+      if (!d) return null;
+      const ids = Object.keys(d).map(Number).sort((a, b) => a - b);
+      const words = JSON.parse(document.getElementById('data-all-words').textContent).filter(w => w.unit === 2);
+      const set = new Set();
+      const walk = ns => ns.forEach(n => { set.add(n.word.toLowerCase()); if (n.children) walk(n.children); });
+      Object.keys(d).forEach(g => walk(d[g].level1Nodes || []));
+      return { ids, missing: words.filter(w => !set.has(w.word.toLowerCase())).map(w => w.word), total: words.length };
+    });
+    expect(stats).not.toBeNull();
+    expect(stats.ids).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(stats.missing).toEqual([]);
+    expect(stats.total).toBe(189);
+  });
+
+  test('every unit2 quiz word is visible in its map (book grouping honored)', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const missing = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const words = JSON.parse(document.getElementById('data-all-words').textContent).filter(w => w.unit === 2);
+      const bad = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'u2-visible';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      for (const w of words) {
+        wrap.innerHTML = window.groupMapSVG({ id: 'x', word: w.word, unit: 2, lesson: w.lesson, seq: w.seq, group_id: w.group_id, group_name: w.group_name });
+        let ctext = null;
+        for (const t of wrap.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+        const center = ctext ? ctext.textContent : '';
+        const inNodes = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0].toLowerCase() === w.word.toLowerCase());
+        if (!inNodes && center.toLowerCase() !== w.word.toLowerCase()) bad.push(w.word);
+      }
+      wrap.remove();
+      return bad;
+    });
+    expect(missing).toEqual([]);
+  });
+
+  test('unit2 layout safe: center in circle, node text not touching, no truncation', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const out = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const data = window.__UNIT_MAPS_DATA__[2];
+      const badCenter = [], badGap = [], badTrunc = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'u2-layout';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      const scan = () => {
+        const svg = wrap.querySelector('svg');
+        if (!svg) return;
+        const circle = svg.querySelector('circle');
+        const cx = +circle.getAttribute('cx'), cy = +circle.getAttribute('cy'), r = +circle.getAttribute('r');
+        let ctext = null;
+        for (const t of svg.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+        if (ctext) {
+          const corners = [...ctext.querySelectorAll('tspan')].flatMap(t => {
+            const b = t.getBBox();
+            return [Math.hypot(b.x - cx, b.y - cy), Math.hypot(b.x + b.width - cx, b.y - cy), Math.hypot(b.x - cx, b.y + b.height - cy), Math.hypot(b.x + b.width - cx, b.y + b.height - cy)];
+          });
+          if (Math.max(...corners) - r > 1) badCenter.push(ctext.textContent);
+        }
+        const circles = [...svg.querySelectorAll('g[onclick*="groupMapDrill"] circle')].map(c => {
+          const title = c.parentElement.querySelector('title');
+          return { cx: +c.getAttribute('cx'), cy: +c.getAttribute('cy'), r: +c.getAttribute('r'), word: title ? title.textContent.split(' ')[0] : '?' };
+        });
+        const circleWords = circles.map(c => c.word);
+        for (const t of svg.querySelectorAll('text')) {
+          const fs = t.getAttribute('font-size');
+          if (fs !== '10.5' && fs !== '9') continue;
+          const wrd = t.textContent;
+          if (wrd === '▾') continue;
+          if (wrd.includes('…')) { badTrunc.push(wrd); continue; }
+          if (!circleWords.includes(wrd)) { badTrunc.push(wrd + '(未匹配)'); continue; }
+          const b = t.getBBox();
+          const pair = circles.find(c => c.word === wrd);
+          if (!pair) continue;
+          const nx = Math.max(b.x, Math.min(pair.cx, b.x + b.width));
+          const ny = Math.max(b.y, Math.min(pair.cy, b.y + b.height));
+          if (Math.hypot(nx - pair.cx, ny - pair.cy) - pair.r < 6) badGap.push(wrd);
+        }
+      };
+      for (const gid of Object.keys(data)) {
+        const lv1 = data[gid].level1Nodes || [];
+        const lv1word = lv1[0] ? lv1[0].word : 'x';
+        const probe = { id: 'x', word: lv1word, unit: 2, lesson: 1, seq: 1, group_id: Number(gid), group_name: data[gid].group_name };
+        wrap.innerHTML = window.groupMapSVG({ ...probe });
+        scan();
+        const drillWords = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"]')].map(g => g.querySelector('title')?.textContent.split(' ')[0]).filter(Boolean);
+        for (const wrd of drillWords.slice(0, 12)) {
+          wrap.innerHTML = window.groupMapSVG({ ...probe });
+          for (const g of wrap.querySelectorAll('g[onclick*="groupMapDrill"]')) {
+            const title = g.querySelector('title');
+            if (title && title.textContent.split(' ')[0] === wrd) { g.dispatchEvent(new MouseEvent('click', { bubbles: true })); break; }
+          }
+          scan();
+        }
+      }
+      wrap.remove();
+      return { badCenter: [...new Set(badCenter)], badGap: [...new Set(badGap)], badTrunc: [...new Set(badTrunc)] };
+    });
+    expect(out.badCenter).toEqual([]);
+    expect(out.badGap).toEqual([]);
+    expect(out.badTrunc).toEqual([]);
+  });
+
+  test('browse tab: unit2 word shows its group map', async ({ page }) => {
+    await page.click('button[data-tab="browse"]');
+    await page.waitForSelector('#browseSearch');
+    await page.fill('#browseSearch', 'diagnose');
+    await page.waitForFunction(() => {
+      const list = document.getElementById('browseList');
+      return list && list.innerHTML.indexOf('diagnose') !== -1 && list.innerHTML.indexOf('导图') !== -1;
+    });
+    await page.evaluate(() => {
+      const list = document.getElementById('browseList');
+      for (const d of list.querySelectorAll(':scope > div')) {
+        if (d.textContent.indexOf('diagnose') !== -1) {
+          const btn = [...d.querySelectorAll('button')].find(b => b.textContent.indexOf('导图') !== -1);
+          if (btn) { btn.click(); return true; }
+        }
+      }
+      return false;
+    });
+    await page.waitForFunction(() => !!document.querySelector('.gmap-wrap svg'));
+    const has = await page.evaluate(() => {
+      const wrap = document.querySelector('.gmap-wrap');
+      if (!wrap) return false;
+      return [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0] === 'diagnose');
+    });
+    expect(has).toBe(true);
+  });
+});
+
+// ============ unit3 词群导图 ============
+test.describe('group map (new: unit-maps.js data · unit3)', () => {
+  test('unit3 has 13 groups (incl ject=g11) and covers all 164 core words', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const stats = await page.evaluate(() => {
+      const d = window.__UNIT_MAPS_DATA__[3];
+      if (!d) return null;
+      const ids = Object.keys(d).map(Number).sort((a, b) => a - b);
+      const words = JSON.parse(document.getElementById('data-all-words').textContent).filter(w => w.unit === 3);
+      const set = new Set();
+      const walk = ns => ns.forEach(n => { set.add(n.word.toLowerCase()); if (n.children) walk(n.children); });
+      Object.keys(d).forEach(g => walk(d[g].level1Nodes || []));
+      return { ids, missing: words.filter(w => !set.has(w.word.toLowerCase())).map(w => w.word), total: words.length };
+    });
+    expect(stats).not.toBeNull();
+    expect(stats.ids).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+    expect(stats.missing).toEqual([]);
+    expect(stats.total).toBe(164);
+  });
+
+  test('every unit3 quiz word is visible in its map (incl ject-group words)', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const missing = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const words = JSON.parse(document.getElementById('data-all-words').textContent).filter(w => w.unit === 3);
+      const bad = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'u3-visible';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      for (const w of words) {
+        wrap.innerHTML = window.groupMapSVG({ id: 'x', word: w.word, unit: 3, lesson: w.lesson, seq: w.seq, group_id: w.group_id, group_name: w.group_name });
+        let ctext = null;
+        for (const t of wrap.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+        const center = ctext ? ctext.textContent : '';
+        const inNodes = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0].toLowerCase() === w.word.toLowerCase());
+        if (!inNodes && center.toLowerCase() !== w.word.toLowerCase()) bad.push(w.word);
+      }
+      wrap.remove();
+      return bad;
+    });
+    expect(missing).toEqual([]);
+  });
+
+  test('unit3 layout safe: center in circle, node text not touching, no truncation', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const out = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const data = window.__UNIT_MAPS_DATA__[3];
+      const badCenter = [], badGap = [], badTrunc = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'u3-layout';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      const scan = () => {
+        const svg = wrap.querySelector('svg');
+        if (!svg) return;
+        const circle = svg.querySelector('circle');
+        const cx = +circle.getAttribute('cx'), cy = +circle.getAttribute('cy'), r = +circle.getAttribute('r');
+        let ctext = null;
+        for (const t of svg.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+        if (ctext) {
+          const corners = [...ctext.querySelectorAll('tspan')].flatMap(t => {
+            const b = t.getBBox();
+            return [Math.hypot(b.x - cx, b.y - cy), Math.hypot(b.x + b.width - cx, b.y - cy), Math.hypot(b.x - cx, b.y + b.height - cy), Math.hypot(b.x + b.width - cx, b.y + b.height - cy)];
+          });
+          if (Math.max(...corners) - r > 1) badCenter.push(ctext.textContent);
+        }
+        const circles = [...svg.querySelectorAll('g[onclick*="groupMapDrill"] circle')].map(c => {
+          const title = c.parentElement.querySelector('title');
+          return { cx: +c.getAttribute('cx'), cy: +c.getAttribute('cy'), r: +c.getAttribute('r'), word: title ? title.textContent.split(' ')[0] : '?' };
+        });
+        const circleWords = circles.map(c => c.word);
+        for (const t of svg.querySelectorAll('text')) {
+          const fs = t.getAttribute('font-size');
+          if (fs !== '10.5' && fs !== '9') continue;
+          const wrd = t.textContent;
+          if (wrd === '▾') continue;
+          if (wrd.includes('…')) { badTrunc.push(wrd); continue; }
+          if (!circleWords.includes(wrd)) { badTrunc.push(wrd + '(未匹配)'); continue; }
+          const b = t.getBBox();
+          const pair = circles.find(c => c.word === wrd);
+          if (!pair) continue;
+          const nx = Math.max(b.x, Math.min(pair.cx, b.x + b.width));
+          const ny = Math.max(b.y, Math.min(pair.cy, b.y + b.height));
+          if (Math.hypot(nx - pair.cx, ny - pair.cy) - pair.r < 6) badGap.push(wrd);
+        }
+      };
+      for (const gid of Object.keys(data)) {
+        const lv1 = data[gid].level1Nodes || [];
+        const lv1word = lv1[0] ? lv1[0].word : 'x';
+        const probe = { id: 'x', word: lv1word, unit: 3, lesson: 1, seq: 1, group_id: Number(gid), group_name: data[gid].group_name };
+        wrap.innerHTML = window.groupMapSVG({ ...probe });
+        scan();
+        const drillWords = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"]')].map(g => g.querySelector('title')?.textContent.split(' ')[0]).filter(Boolean);
+        for (const wrd of drillWords.slice(0, 12)) {
+          wrap.innerHTML = window.groupMapSVG({ ...probe });
+          for (const g of wrap.querySelectorAll('g[onclick*="groupMapDrill"]')) {
+            const title = g.querySelector('title');
+            if (title && title.textContent.split(' ')[0] === wrd) { g.dispatchEvent(new MouseEvent('click', { bubbles: true })); break; }
+          }
+          scan();
+        }
+      }
+      wrap.remove();
+      return { badCenter: [...new Set(badCenter)], badGap: [...new Set(badGap)], badTrunc: [...new Set(badTrunc)] };
+    });
+    expect(out.badCenter).toEqual([]);
+    expect(out.badGap).toEqual([]);
+    expect(out.badTrunc).toEqual([]);
+  });
+
+  test('browse tab: unit3 word shows its group map', async ({ page }) => {
+    await page.click('button[data-tab="browse"]');
+    await page.waitForSelector('#browseSearch');
+    await page.fill('#browseSearch', 'contribute');
+    await page.waitForFunction(() => {
+      const list = document.getElementById('browseList');
+      return list && list.innerHTML.indexOf('contribute') !== -1 && list.innerHTML.indexOf('导图') !== -1;
+    });
+    await page.evaluate(() => {
+      const list = document.getElementById('browseList');
+      for (const d of list.querySelectorAll(':scope > div')) {
+        if (d.textContent.indexOf('contribute') !== -1) {
+          const btn = [...d.querySelectorAll('button')].find(b => b.textContent.indexOf('导图') !== -1);
+          if (btn) { btn.click(); return true; }
+        }
+      }
+      return false;
+    });
+    await page.waitForFunction(() => !!document.querySelector('.gmap-wrap svg'));
+    const has = await page.evaluate(() => {
+      const wrap = document.querySelector('.gmap-wrap');
+      if (!wrap) return false;
+      return [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0] === 'contribute');
+    });
+    expect(has).toBe(true);
+  });
+});
+
+// ============ unit4 词群导图 ============
+test.describe('group map (new: unit-maps.js data · unit4)', () => {
+  test('unit4 has 18 groups (incl 法律=g16) and covers all 232 core words', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const stats = await page.evaluate(() => {
+      const d = window.__UNIT_MAPS_DATA__[4];
+      if (!d) return null;
+      const ids = Object.keys(d).map(Number).sort((a, b) => a - b);
+      const words = JSON.parse(document.getElementById('data-all-words').textContent).filter(w => w.unit === 4);
+      const set = new Set();
+      const walk = ns => ns.forEach(n => { set.add(n.word.toLowerCase()); if (n.children) walk(n.children); });
+      Object.keys(d).forEach(g => walk(d[g].level1Nodes || []));
+      return { ids, missing: words.filter(w => !set.has(w.word.toLowerCase())).map(w => w.word), total: words.length };
+    });
+    expect(stats).not.toBeNull();
+    expect(stats.ids).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]);
+    expect(stats.missing).toEqual([]);
+    expect(stats.total).toBe(232);
+  });
+
+  test('every unit4 quiz word is visible in its map (incl 法律-group words)', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const missing = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const words = JSON.parse(document.getElementById('data-all-words').textContent).filter(w => w.unit === 4);
+      const bad = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'u4-visible';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      for (const w of words) {
+        wrap.innerHTML = window.groupMapSVG({ id: 'x', word: w.word, unit: 4, lesson: w.lesson, seq: w.seq, group_id: w.group_id, group_name: w.group_name });
+        let ctext = null;
+        for (const t of wrap.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+        const center = ctext ? ctext.textContent : '';
+        const inNodes = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0].toLowerCase() === w.word.toLowerCase());
+        if (!inNodes && center.toLowerCase() !== w.word.toLowerCase()) bad.push(w.word);
+      }
+      wrap.remove();
+      return bad;
+    });
+    expect(missing).toEqual([]);
+  });
+
+  test('unit4 layout safe: center in circle, node text not touching, no truncation', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const out = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const data = window.__UNIT_MAPS_DATA__[4];
+      const badCenter = [], badGap = [], badTrunc = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'u4-layout';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      const scan = () => {
+        const svg = wrap.querySelector('svg');
+        if (!svg) return;
+        const circle = svg.querySelector('circle');
+        const cx = +circle.getAttribute('cx'), cy = +circle.getAttribute('cy'), r = +circle.getAttribute('r');
+        let ctext = null;
+        for (const t of svg.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+        if (ctext) {
+          const corners = [...ctext.querySelectorAll('tspan')].flatMap(t => {
+            const b = t.getBBox();
+            return [Math.hypot(b.x - cx, b.y - cy), Math.hypot(b.x + b.width - cx, b.y - cy), Math.hypot(b.x - cx, b.y + b.height - cy), Math.hypot(b.x + b.width - cx, b.y + b.height - cy)];
+          });
+          if (Math.max(...corners) - r > 1) badCenter.push(ctext.textContent);
+        }
+        const circles = [...svg.querySelectorAll('g[onclick*="groupMapDrill"] circle')].map(c => {
+          const title = c.parentElement.querySelector('title');
+          return { cx: +c.getAttribute('cx'), cy: +c.getAttribute('cy'), r: +c.getAttribute('r'), word: title ? title.textContent.split(' ')[0] : '?' };
+        });
+        const circleWords = circles.map(c => c.word);
+        for (const t of svg.querySelectorAll('text')) {
+          const fs = t.getAttribute('font-size');
+          if (fs !== '10.5' && fs !== '9') continue;
+          const wrd = t.textContent;
+          if (wrd === '▾') continue;
+          if (wrd.includes('…')) { badTrunc.push(wrd); continue; }
+          if (!circleWords.includes(wrd)) { badTrunc.push(wrd + '(未匹配)'); continue; }
+          const b = t.getBBox();
+          const pair = circles.find(c => c.word === wrd);
+          if (!pair) continue;
+          const nx = Math.max(b.x, Math.min(pair.cx, b.x + b.width));
+          const ny = Math.max(b.y, Math.min(pair.cy, b.y + b.height));
+          if (Math.hypot(nx - pair.cx, ny - pair.cy) - pair.r < 6) badGap.push(wrd);
+        }
+      };
+      for (const gid of Object.keys(data)) {
+        const lv1 = data[gid].level1Nodes || [];
+        const lv1word = lv1[0] ? lv1[0].word : 'x';
+        const probe = { id: 'x', word: lv1word, unit: 4, lesson: 1, seq: 1, group_id: Number(gid), group_name: data[gid].group_name };
+        wrap.innerHTML = window.groupMapSVG({ ...probe });
+        scan();
+        const drillWords = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"]')].map(g => g.querySelector('title')?.textContent.split(' ')[0]).filter(Boolean);
+        for (const wrd of drillWords.slice(0, 12)) {
+          wrap.innerHTML = window.groupMapSVG({ ...probe });
+          for (const g of wrap.querySelectorAll('g[onclick*="groupMapDrill"]')) {
+            const title = g.querySelector('title');
+            if (title && title.textContent.split(' ')[0] === wrd) { g.dispatchEvent(new MouseEvent('click', { bubbles: true })); break; }
+          }
+          scan();
+        }
+      }
+      wrap.remove();
+      return { badCenter: [...new Set(badCenter)], badGap: [...new Set(badGap)], badTrunc: [...new Set(badTrunc)] };
+    });
+    expect(out.badCenter).toEqual([]);
+    expect(out.badGap).toEqual([]);
+    expect(out.badTrunc).toEqual([]);
+  });
+
+  test('browse tab: unit4 word shows its group map', async ({ page }) => {
+    await page.click('button[data-tab="browse"]');
+    await page.waitForSelector('#browseSearch');
+    await page.fill('#browseSearch', 'seminar');
+    await page.waitForFunction(() => {
+      const list = document.getElementById('browseList');
+      return list && list.innerHTML.indexOf('seminar') !== -1 && list.innerHTML.indexOf('导图') !== -1;
+    });
+    await page.evaluate(() => {
+      const list = document.getElementById('browseList');
+      for (const d of list.querySelectorAll(':scope > div')) {
+        if (d.textContent.indexOf('seminar') !== -1) {
+          const btn = [...d.querySelectorAll('button')].find(b => b.textContent.indexOf('导图') !== -1);
+          if (btn) { btn.click(); return true; }
+        }
+      }
+      return false;
+    });
+    await page.waitForFunction(() => !!document.querySelector('.gmap-wrap svg'));
+    const has = await page.evaluate(() => {
+      const wrap = document.querySelector('.gmap-wrap');
+      if (!wrap) return false;
+      return [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0] === 'seminar');
+    });
+    expect(has).toBe(true);
+  });
+});
+
+// ============ unit5 词群导图 ============
+test.describe('group map (new: unit-maps.js data · unit5)', () => {
+  test('unit5 has 16 groups and covers all 78 core words', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const stats = await page.evaluate(() => {
+      const d = window.__UNIT_MAPS_DATA__[5];
+      if (!d) return null;
+      const ids = Object.keys(d).map(Number).sort((a, b) => a - b);
+      const words = JSON.parse(document.getElementById('data-all-words').textContent).filter(w => w.unit === 5);
+      const set = new Set();
+      const walk = ns => ns.forEach(n => { set.add(n.word.toLowerCase()); if (n.children) walk(n.children); });
+      Object.keys(d).forEach(g => walk(d[g].level1Nodes || []));
+      return { ids, missing: words.filter(w => !set.has(w.word.toLowerCase())).map(w => w.word), total: words.length };
+    });
+    expect(stats).not.toBeNull();
+    expect(stats.ids).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+    expect(stats.missing).toEqual([]);
+    expect(stats.total).toBe(78);
+  });
+
+  test('every unit5 quiz word is visible in its map', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const missing = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const words = JSON.parse(document.getElementById('data-all-words').textContent).filter(w => w.unit === 5);
+      const bad = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'u5-visible';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      for (const w of words) {
+        wrap.innerHTML = window.groupMapSVG({ id: 'x', word: w.word, unit: 5, lesson: w.lesson, seq: w.seq, group_id: w.group_id, group_name: w.group_name });
+        let ctext = null;
+        for (const t of wrap.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+        const center = ctext ? ctext.textContent : '';
+        const inNodes = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0].toLowerCase() === w.word.toLowerCase());
+        if (!inNodes && center.toLowerCase() !== w.word.toLowerCase()) bad.push(w.word);
+      }
+      wrap.remove();
+      return bad;
+    });
+    expect(missing).toEqual([]);
+  });
+
+  test('unit5 layout safe: center in circle, node text not touching, no truncation', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const out = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const data = window.__UNIT_MAPS_DATA__[5];
+      const badCenter = [], badGap = [], badTrunc = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'u5-layout';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      const scan = () => {
+        const svg = wrap.querySelector('svg');
+        if (!svg) return;
+        const circle = svg.querySelector('circle');
+        const cx = +circle.getAttribute('cx'), cy = +circle.getAttribute('cy'), r = +circle.getAttribute('r');
+        let ctext = null;
+        for (const t of svg.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+        if (ctext) {
+          const corners = [...ctext.querySelectorAll('tspan')].flatMap(t => {
+            const b = t.getBBox();
+            return [Math.hypot(b.x - cx, b.y - cy), Math.hypot(b.x + b.width - cx, b.y - cy), Math.hypot(b.x - cx, b.y + b.height - cy), Math.hypot(b.x + b.width - cx, b.y + b.height - cy)];
+          });
+          if (Math.max(...corners) - r > 1) badCenter.push(ctext.textContent);
+        }
+        const circles = [...svg.querySelectorAll('g[onclick*="groupMapDrill"] circle')].map(c => {
+          const title = c.parentElement.querySelector('title');
+          return { cx: +c.getAttribute('cx'), cy: +c.getAttribute('cy'), r: +c.getAttribute('r'), word: title ? title.textContent.split(' ')[0] : '?' };
+        });
+        const circleWords = circles.map(c => c.word);
+        for (const t of svg.querySelectorAll('text')) {
+          const fs = t.getAttribute('font-size');
+          if (fs !== '10.5' && fs !== '9') continue;
+          const wrd = t.textContent;
+          if (wrd === '▾') continue;
+          if (wrd.includes('…')) { badTrunc.push(wrd); continue; }
+          if (!circleWords.includes(wrd)) { badTrunc.push(wrd + '(未匹配)'); continue; }
+          const b = t.getBBox();
+          const pair = circles.find(c => c.word === wrd);
+          if (!pair) continue;
+          const nx = Math.max(b.x, Math.min(pair.cx, b.x + b.width));
+          const ny = Math.max(b.y, Math.min(pair.cy, b.y + b.height));
+          if (Math.hypot(nx - pair.cx, ny - pair.cy) - pair.r < 6) badGap.push(wrd);
+        }
+      };
+      for (const gid of Object.keys(data)) {
+        const lv1 = data[gid].level1Nodes || [];
+        const lv1word = lv1[0] ? lv1[0].word : 'x';
+        const probe = { id: 'x', word: lv1word, unit: 5, lesson: 1, seq: 1, group_id: Number(gid), group_name: data[gid].group_name };
+        wrap.innerHTML = window.groupMapSVG({ ...probe });
+        scan();
+        const drillWords = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"]')].map(g => g.querySelector('title')?.textContent.split(' ')[0]).filter(Boolean);
+        for (const wrd of drillWords.slice(0, 12)) {
+          wrap.innerHTML = window.groupMapSVG({ ...probe });
+          for (const g of wrap.querySelectorAll('g[onclick*="groupMapDrill"]')) {
+            const title = g.querySelector('title');
+            if (title && title.textContent.split(' ')[0] === wrd) { g.dispatchEvent(new MouseEvent('click', { bubbles: true })); break; }
+          }
+          scan();
+        }
+      }
+      wrap.remove();
+      return { badCenter: [...new Set(badCenter)], badGap: [...new Set(badGap)], badTrunc: [...new Set(badTrunc)] };
+    });
+    expect(out.badCenter).toEqual([]);
+    expect(out.badGap).toEqual([]);
+    expect(out.badTrunc).toEqual([]);
+  });
+
+  test('browse tab: unit5 word shows its group map', async ({ page }) => {
+    await page.click('button[data-tab="browse"]');
+    await page.waitForSelector('#browseSearch');
+    await page.fill('#browseSearch', 'certify');
+    await page.waitForFunction(() => {
+      const list = document.getElementById('browseList');
+      return list && list.innerHTML.indexOf('certify') !== -1 && list.innerHTML.indexOf('导图') !== -1;
+    });
+    await page.evaluate(() => {
+      const list = document.getElementById('browseList');
+      for (const d of list.querySelectorAll(':scope > div')) {
+        if (d.textContent.indexOf('certify') !== -1) {
+          const btn = [...d.querySelectorAll('button')].find(b => b.textContent.indexOf('导图') !== -1);
+          if (btn) { btn.click(); return true; }
+        }
+      }
+      return false;
+    });
+    await page.waitForFunction(() => !!document.querySelector('.gmap-wrap svg'));
+    const has = await page.evaluate(() => {
+      const wrap = document.querySelector('.gmap-wrap');
+      if (!wrap) return false;
+      return [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0] === 'certify');
+    });
+    expect(has).toBe(true);
+  });
+});
+// ============ unit6 词群导图 ============
+test.describe('group map (new: unit-maps.js data · unit6)', () => {
+  test('unit6 has 18 groups and covers all 214 core words', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const stats = await page.evaluate(() => {
+      const d = window.__UNIT_MAPS_DATA__[6];
+      if (!d) return null;
+      const ids = Object.keys(d).map(Number).sort((a, b) => a - b);
+      const words = JSON.parse(document.getElementById('data-all-words').textContent).filter(w => w.unit === 6);
+      const set = new Set();
+      const walk = ns => ns.forEach(n => { set.add(n.word.toLowerCase()); if (n.children) walk(n.children); });
+      Object.keys(d).forEach(g => walk(d[g].level1Nodes || []));
+      return { ids, missing: words.filter(w => !set.has(w.word.toLowerCase())).map(w => w.word), total: words.length };
+    });
+    expect(stats).not.toBeNull();
+    expect(stats.ids).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]);
+    expect(stats.missing).toEqual([]);
+    expect(stats.total).toBe(214);
+  });
+
+  test('every unit6 quiz word is visible in its map', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const missing = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const words = JSON.parse(document.getElementById('data-all-words').textContent).filter(w => w.unit === 6);
+      const bad = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'u6-visible';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      for (const w of words) {
+        wrap.innerHTML = window.groupMapSVG({ id: 'x', word: w.word, unit: 6, lesson: w.lesson, seq: w.seq, group_id: w.group_id, group_name: w.group_name });
+        let ctext = null;
+        for (const t of wrap.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+        const center = ctext ? ctext.textContent : '';
+        const inNodes = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0].toLowerCase() === w.word.toLowerCase());
+        if (!inNodes && center.toLowerCase() !== w.word.toLowerCase()) bad.push(w.word);
+      }
+      wrap.remove();
+      return bad;
+    });
+    expect(missing).toEqual([]);
+  });
+
+  test('unit6 layout safe: center in circle, node text not touching, no truncation', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const out = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const data = window.__UNIT_MAPS_DATA__[6];
+      const badCenter = [], badGap = [], badTrunc = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'u6-layout';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      const scan = () => {
+        const svg = wrap.querySelector('svg');
+        if (!svg) return;
+        const circle = svg.querySelector('circle');
+        const cx = +circle.getAttribute('cx'), cy = +circle.getAttribute('cy'), r = +circle.getAttribute('r');
+        let ctext = null;
+        for (const t of svg.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+        if (ctext) {
+          const corners = [...ctext.querySelectorAll('tspan')].flatMap(t => {
+            const b = t.getBBox();
+            return [Math.hypot(b.x - cx, b.y - cy), Math.hypot(b.x + b.width - cx, b.y - cy), Math.hypot(b.x - cx, b.y + b.height - cy), Math.hypot(b.x + b.width - cx, b.y + b.height - cy)];
+          });
+          if (Math.max(...corners) - r > 1) badCenter.push(ctext.textContent);
+        }
+        const circles = [...svg.querySelectorAll('g[onclick*="groupMapDrill"] circle')].map(c => {
+          const title = c.parentElement.querySelector('title');
+          return { cx: +c.getAttribute('cx'), cy: +c.getAttribute('cy'), r: +c.getAttribute('r'), word: title ? title.textContent.split(' ')[0] : '?' };
+        });
+        const circleWords = circles.map(c => c.word);
+        for (const t of svg.querySelectorAll('text')) {
+          const fs = t.getAttribute('font-size');
+          if (fs !== '10.5' && fs !== '9') continue;
+          const wrd = t.textContent;
+          if (wrd === '▾') continue;
+          if (wrd.includes('…')) { badTrunc.push(wrd); continue; }
+          if (!circleWords.includes(wrd)) { badTrunc.push(wrd + '(未匹配)'); continue; }
+          const b = t.getBBox();
+          const pair = circles.find(c => c.word === wrd);
+          if (!pair) continue;
+          const nx = Math.max(b.x, Math.min(pair.cx, b.x + b.width));
+          const ny = Math.max(b.y, Math.min(pair.cy, b.y + b.height));
+          if (Math.hypot(nx - pair.cx, ny - pair.cy) - pair.r < 6) badGap.push(wrd);
+        }
+      };
+      for (const gid of Object.keys(data)) {
+        const lv1 = data[gid].level1Nodes || [];
+        const lv1word = lv1[0] ? lv1[0].word : 'x';
+        const probe = { id: 'x', word: lv1word, unit: 6, lesson: 1, seq: 1, group_id: Number(gid), group_name: data[gid].group_name };
+        wrap.innerHTML = window.groupMapSVG({ ...probe });
+        scan();
+        const drillWords = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"]')].map(g => g.querySelector('title')?.textContent.split(' ')[0]).filter(Boolean);
+        for (const wrd of drillWords.slice(0, 12)) {
+          wrap.innerHTML = window.groupMapSVG({ ...probe });
+          for (const g of wrap.querySelectorAll('g[onclick*="groupMapDrill"]')) {
+            const title = g.querySelector('title');
+            if (title && title.textContent.split(' ')[0] === wrd) { g.dispatchEvent(new MouseEvent('click', { bubbles: true })); break; }
+          }
+          scan();
+        }
+      }
+      wrap.remove();
+      return { badCenter: [...new Set(badCenter)], badGap: [...new Set(badGap)], badTrunc: [...new Set(badTrunc)] };
+    });
+    expect(out.badCenter).toEqual([]);
+    expect(out.badGap).toEqual([]);
+    expect(out.badTrunc).toEqual([]);
+  });
+
+  test('browse tab: unit6 word shows its group map', async ({ page }) => {
+    await page.click('button[data-tab="browse"]');
+    await page.waitForSelector('#browseSearch');
+    await page.fill('#browseSearch', 'recipe');
+    await page.waitForFunction(() => {
+      const list = document.getElementById('browseList');
+      return list && list.innerHTML.indexOf('recipe') !== -1 && list.innerHTML.indexOf('导图') !== -1;
+    });
+    await page.evaluate(() => {
+      const list = document.getElementById('browseList');
+      for (const d of list.querySelectorAll(':scope > div')) {
+        if (d.textContent.indexOf('recipe') !== -1) {
+          const btn = [...d.querySelectorAll('button')].find(b => b.textContent.indexOf('导图') !== -1);
+          if (btn) { btn.click(); return true; }
+        }
+      }
+      return false;
+    });
+    await page.waitForFunction(() => !!document.querySelector('.gmap-wrap svg'));
+    const has = await page.evaluate(() => {
+      const wrap = document.querySelector('.gmap-wrap');
+      if (!wrap) return false;
+      return [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0] === 'recipe');
+    });
+    expect(has).toBe(true);
+  });
+});
+
+// ============ unit7 词群导图 ============
+test.describe('group map (new: unit-maps.js data · unit7)', () => {
+  test('unit7 has 16 groups and covers all 251 core words', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const stats = await page.evaluate(() => {
+      const d = window.__UNIT_MAPS_DATA__[7];
+      if (!d) return null;
+      const ids = Object.keys(d).map(Number).sort((a, b) => a - b);
+      const words = JSON.parse(document.getElementById('data-all-words').textContent).filter(w => w.unit === 7);
+      const set = new Set();
+      const walk = ns => ns.forEach(n => { set.add(n.word.toLowerCase()); if (n.children) walk(n.children); });
+      Object.keys(d).forEach(g => walk(d[g].level1Nodes || []));
+      return { ids, missing: words.filter(w => !set.has(w.word.toLowerCase())).map(w => w.word), total: words.length };
+    });
+    expect(stats).not.toBeNull();
+    expect(stats.ids).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+    expect(stats.missing).toEqual([]);
+    expect(stats.total).toBe(251);
+  });
+
+  test('every unit7 quiz word is visible in its map', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const missing = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const words = JSON.parse(document.getElementById('data-all-words').textContent).filter(w => w.unit === 7);
+      const bad = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'u7-visible';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      for (const w of words) {
+        wrap.innerHTML = window.groupMapSVG({ id: 'x', word: w.word, unit: 7, lesson: w.lesson, seq: w.seq, group_id: w.group_id, group_name: w.group_name });
+        let ctext = null;
+        for (const t of wrap.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+        const center = ctext ? ctext.textContent : '';
+        const inNodes = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0].toLowerCase() === w.word.toLowerCase());
+        if (!inNodes && center.toLowerCase() !== w.word.toLowerCase()) bad.push(w.word);
+      }
+      wrap.remove();
+      return bad;
+    });
+    expect(missing).toEqual([]);
+  });
+
+  test('unit7 layout safe: center in circle, node text not touching, no truncation', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const out = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const data = window.__UNIT_MAPS_DATA__[7];
+      const badCenter = [], badGap = [], badTrunc = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'u7-layout';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      const scan = () => {
+        const svg = wrap.querySelector('svg');
+        if (!svg) return;
+        const circle = svg.querySelector('circle');
+        const cx = +circle.getAttribute('cx'), cy = +circle.getAttribute('cy'), r = +circle.getAttribute('r');
+        let ctext = null;
+        for (const t of svg.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+        if (ctext) {
+          const corners = [...ctext.querySelectorAll('tspan')].flatMap(t => {
+            const b = t.getBBox();
+            return [Math.hypot(b.x - cx, b.y - cy), Math.hypot(b.x + b.width - cx, b.y - cy), Math.hypot(b.x - cx, b.y + b.height - cy), Math.hypot(b.x + b.width - cx, b.y + b.height - cy)];
+          });
+          if (Math.max(...corners) - r > 1) badCenter.push(ctext.textContent);
+        }
+        const circles = [...svg.querySelectorAll('g[onclick*="groupMapDrill"] circle')].map(c => {
+          const title = c.parentElement.querySelector('title');
+          return { cx: +c.getAttribute('cx'), cy: +c.getAttribute('cy'), r: +c.getAttribute('r'), word: title ? title.textContent.split(' ')[0] : '?' };
+        });
+        const circleWords = circles.map(c => c.word);
+        for (const t of svg.querySelectorAll('text')) {
+          const fs = t.getAttribute('font-size');
+          if (fs !== '10.5' && fs !== '9') continue;
+          const wrd = t.textContent;
+          if (wrd === '▾') continue;
+          if (wrd.includes('…')) { badTrunc.push(wrd); continue; }
+          if (!circleWords.includes(wrd)) { badTrunc.push(wrd + '(未匹配)'); continue; }
+          const b = t.getBBox();
+          const pair = circles.find(c => c.word === wrd);
+          if (!pair) continue;
+          const nx = Math.max(b.x, Math.min(pair.cx, b.x + b.width));
+          const ny = Math.max(b.y, Math.min(pair.cy, b.y + b.height));
+          if (Math.hypot(nx - pair.cx, ny - pair.cy) - pair.r < 6) badGap.push(wrd);
+        }
+      };
+      for (const gid of Object.keys(data)) {
+        const lv1 = data[gid].level1Nodes || [];
+        const lv1word = lv1[0] ? lv1[0].word : 'x';
+        const probe = { id: 'x', word: lv1word, unit: 7, lesson: 1, seq: 1, group_id: Number(gid), group_name: data[gid].group_name };
+        wrap.innerHTML = window.groupMapSVG({ ...probe });
+        scan();
+        const drillWords = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"]')].map(g => g.querySelector('title')?.textContent.split(' ')[0]).filter(Boolean);
+        for (const wrd of drillWords.slice(0, 12)) {
+          wrap.innerHTML = window.groupMapSVG({ ...probe });
+          for (const g of wrap.querySelectorAll('g[onclick*="groupMapDrill"]')) {
+            const title = g.querySelector('title');
+            if (title && title.textContent.split(' ')[0] === wrd) { g.dispatchEvent(new MouseEvent('click', { bubbles: true })); break; }
+          }
+          scan();
+        }
+      }
+      wrap.remove();
+      return { badCenter: [...new Set(badCenter)], badGap: [...new Set(badGap)], badTrunc: [...new Set(badTrunc)] };
+    });
+    expect(out.badCenter).toEqual([]);
+    expect(out.badGap).toEqual([]);
+    expect(out.badTrunc).toEqual([]);
+  });
+
+  test('browse tab: unit7 word shows its group map', async ({ page }) => {
+    await page.click('button[data-tab="browse"]');
+    await page.waitForSelector('#browseSearch');
+    await page.fill('#browseSearch', 'accommodate');
+    await page.waitForFunction(() => {
+      const list = document.getElementById('browseList');
+      return list && list.innerHTML.indexOf('accommodate') !== -1 && list.innerHTML.indexOf('导图') !== -1;
+    });
+    await page.evaluate(() => {
+      const list = document.getElementById('browseList');
+      for (const d of list.querySelectorAll(':scope > div')) {
+        if (d.textContent.indexOf('accommodate') !== -1) {
+          const btn = [...d.querySelectorAll('button')].find(b => b.textContent.indexOf('导图') !== -1);
+          if (btn) { btn.click(); return true; }
+        }
+      }
+      return false;
+    });
+    await page.waitForFunction(() => !!document.querySelector('.gmap-wrap svg'));
+    const has = await page.evaluate(() => {
+      const wrap = document.querySelector('.gmap-wrap');
+      if (!wrap) return false;
+      return [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0] === 'accommodate');
+    });
+    expect(has).toBe(true);
+  });
+});
+
+// ============ unit8 词群导图 ============
+test.describe('group map (new: unit-maps.js data · unit8)', () => {
+  test('unit8 has 19 groups and covers all 214 core words', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const stats = await page.evaluate(() => {
+      const d = window.__UNIT_MAPS_DATA__[8];
+      if (!d) return null;
+      const ids = Object.keys(d).map(Number).sort((a, b) => a - b);
+      const words = JSON.parse(document.getElementById('data-all-words').textContent).filter(w => w.unit === 8);
+      const set = new Set();
+      const walk = ns => ns.forEach(n => { set.add(n.word.toLowerCase()); if (n.children) walk(n.children); });
+      Object.keys(d).forEach(g => walk(d[g].level1Nodes || []));
+      return { ids, missing: words.filter(w => !set.has(w.word.toLowerCase())).map(w => w.word), total: words.length };
+    });
+    expect(stats).not.toBeNull();
+    expect(stats.ids).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
+    expect(stats.missing).toEqual([]);
+    expect(stats.total).toBe(214);
+  });
+
+  test('every unit8 quiz word is visible in its map', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const missing = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const words = JSON.parse(document.getElementById('data-all-words').textContent).filter(w => w.unit === 8);
+      const bad = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'u8-visible';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      for (const w of words) {
+        wrap.innerHTML = window.groupMapSVG({ id: 'x', word: w.word, unit: 8, lesson: w.lesson, seq: w.seq, group_id: w.group_id, group_name: w.group_name });
+        let ctext = null;
+        for (const t of wrap.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+        const center = ctext ? ctext.textContent : '';
+        const inNodes = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0].toLowerCase() === w.word.toLowerCase());
+        if (!inNodes && center.toLowerCase() !== w.word.toLowerCase()) bad.push(w.word);
+      }
+      wrap.remove();
+      return bad;
+    });
+    expect(missing).toEqual([]);
+  });
+
+  test('unit8 layout safe: center in circle, node text not touching, no truncation', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const out = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const data = window.__UNIT_MAPS_DATA__[8];
+      const badCenter = [], badGap = [], badTrunc = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'u8-layout';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      const scan = () => {
+        const svg = wrap.querySelector('svg');
+        if (!svg) return;
+        const circle = svg.querySelector('circle');
+        const cx = +circle.getAttribute('cx'), cy = +circle.getAttribute('cy'), r = +circle.getAttribute('r');
+        let ctext = null;
+        for (const t of svg.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+        if (ctext) {
+          const corners = [...ctext.querySelectorAll('tspan')].flatMap(t => {
+            const b = t.getBBox();
+            return [Math.hypot(b.x - cx, b.y - cy), Math.hypot(b.x + b.width - cx, b.y - cy), Math.hypot(b.x - cx, b.y + b.height - cy), Math.hypot(b.x + b.width - cx, b.y + b.height - cy)];
+          });
+          if (Math.max(...corners) - r > 1) badCenter.push(ctext.textContent);
+        }
+        const circles = [...svg.querySelectorAll('g[onclick*="groupMapDrill"] circle')].map(c => {
+          const title = c.parentElement.querySelector('title');
+          return { cx: +c.getAttribute('cx'), cy: +c.getAttribute('cy'), r: +c.getAttribute('r'), word: title ? title.textContent.split(' ')[0] : '?' };
+        });
+        const circleWords = circles.map(c => c.word);
+        for (const t of svg.querySelectorAll('text')) {
+          const fs = t.getAttribute('font-size');
+          if (fs !== '10.5' && fs !== '9') continue;
+          const wrd = t.textContent;
+          if (wrd === '▾') continue;
+          if (wrd.includes('…')) { badTrunc.push(wrd); continue; }
+          if (!circleWords.includes(wrd)) { badTrunc.push(wrd + '(未匹配)'); continue; }
+          const b = t.getBBox();
+          const pair = circles.find(c => c.word === wrd);
+          if (!pair) continue;
+          const nx = Math.max(b.x, Math.min(pair.cx, b.x + b.width));
+          const ny = Math.max(b.y, Math.min(pair.cy, b.y + b.height));
+          if (Math.hypot(nx - pair.cx, ny - pair.cy) - pair.r < 6) badGap.push(wrd);
+        }
+      };
+      for (const gid of Object.keys(data)) {
+        const lv1 = data[gid].level1Nodes || [];
+        const lv1word = lv1[0] ? lv1[0].word : 'x';
+        const probe = { id: 'x', word: lv1word, unit: 8, lesson: 1, seq: 1, group_id: Number(gid), group_name: data[gid].group_name };
+        wrap.innerHTML = window.groupMapSVG({ ...probe });
+        scan();
+        const drillWords = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"]')].map(g => g.querySelector('title')?.textContent.split(' ')[0]).filter(Boolean);
+        for (const wrd of drillWords.slice(0, 12)) {
+          wrap.innerHTML = window.groupMapSVG({ ...probe });
+          for (const g of wrap.querySelectorAll('g[onclick*="groupMapDrill"]')) {
+            const title = g.querySelector('title');
+            if (title && title.textContent.split(' ')[0] === wrd) { g.dispatchEvent(new MouseEvent('click', { bubbles: true })); break; }
+          }
+          scan();
+        }
+      }
+      wrap.remove();
+      return { badCenter: [...new Set(badCenter)], badGap: [...new Set(badGap)], badTrunc: [...new Set(badTrunc)] };
+    });
+    expect(out.badCenter).toEqual([]);
+    expect(out.badGap).toEqual([]);
+    expect(out.badTrunc).toEqual([]);
+  });
+
+  test('browse tab: unit8 word shows its group map', async ({ page }) => {
+    await page.click('button[data-tab="browse"]');
+    await page.waitForSelector('#browseSearch');
+    await page.fill('#browseSearch', 'outline');
+    await page.waitForFunction(() => {
+      const list = document.getElementById('browseList');
+      return list && list.innerHTML.indexOf('outline') !== -1 && list.innerHTML.indexOf('导图') !== -1;
+    });
+    await page.evaluate(() => {
+      const list = document.getElementById('browseList');
+      for (const d of list.querySelectorAll(':scope > div')) {
+        if (d.textContent.indexOf('outline') !== -1) {
+          const btn = [...d.querySelectorAll('button')].find(b => b.textContent.indexOf('导图') !== -1);
+          if (btn) { btn.click(); return true; }
+        }
+      }
+      return false;
+    });
+    await page.waitForFunction(() => !!document.querySelector('.gmap-wrap svg'));
+    const has = await page.evaluate(() => {
+      const wrap = document.querySelector('.gmap-wrap');
+      if (!wrap) return false;
+      return [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0] === 'outline');
+    });
+    expect(has).toBe(true);
+  });
+});
+
+// ============ unit9 词群导图 ============
+test.describe('group map (new: unit-maps.js data · unit9)', () => {
+  test('unit9 has 19 groups and covers all 122 core words', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const stats = await page.evaluate(() => {
+      const d = window.__UNIT_MAPS_DATA__[9];
+      if (!d) return null;
+      const ids = Object.keys(d).map(Number).sort((a, b) => a - b);
+      const words = JSON.parse(document.getElementById('data-all-words').textContent).filter(w => w.unit === 9);
+      const set = new Set();
+      const walk = ns => ns.forEach(n => { set.add(n.word.toLowerCase()); if (n.children) walk(n.children); });
+      Object.keys(d).forEach(g => walk(d[g].level1Nodes || []));
+      return { ids, missing: words.filter(w => !set.has(w.word.toLowerCase())).map(w => w.word), total: words.length };
+    });
+    expect(stats).not.toBeNull();
+    expect(stats.ids).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
+    expect(stats.missing).toEqual([]);
+    expect(stats.total).toBe(175);
+  });
+
+  test('every unit9 quiz word is visible in its map', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const missing = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const words = JSON.parse(document.getElementById('data-all-words').textContent).filter(w => w.unit === 9);
+      const bad = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'u9-visible';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      for (const w of words) {
+        wrap.innerHTML = window.groupMapSVG({ id: 'x', word: w.word, unit: 9, lesson: w.lesson, seq: w.seq, group_id: w.group_id, group_name: w.group_name });
+        let ctext = null;
+        for (const t of wrap.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+        const center = ctext ? ctext.textContent : '';
+        const inNodes = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0].toLowerCase() === w.word.toLowerCase());
+        if (!inNodes && center.toLowerCase() !== w.word.toLowerCase()) bad.push(w.word);
+      }
+      wrap.remove();
+      return bad;
+    });
+    expect(missing).toEqual([]);
+  });
+
+  test('unit9 layout safe: center in circle, node text not touching, no truncation', async ({ page }) => {
+    await page.waitForFunction(() => !!window.__UNIT_MAPS_DATA__);
+    const out = await page.evaluate(() => {
+      window.currentPool = 'core';
+      const data = window.__UNIT_MAPS_DATA__[9];
+      const badCenter = [], badGap = [], badTrunc = [];
+      const wrap = document.createElement('div');
+      wrap.id = 'u9-layout';
+      wrap.style.position = 'fixed';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      document.body.appendChild(wrap);
+      const scan = () => {
+        const svg = wrap.querySelector('svg');
+        if (!svg) return;
+        const circle = svg.querySelector('circle');
+        const cx = +circle.getAttribute('cx'), cy = +circle.getAttribute('cy'), r = +circle.getAttribute('r');
+        let ctext = null;
+        for (const t of svg.querySelectorAll('text')) { if (t.querySelector('tspan')) { ctext = t; break; } }
+        if (ctext) {
+          const corners = [...ctext.querySelectorAll('tspan')].flatMap(t => {
+            const b = t.getBBox();
+            return [Math.hypot(b.x - cx, b.y - cy), Math.hypot(b.x + b.width - cx, b.y - cy), Math.hypot(b.x - cx, b.y + b.height - cy), Math.hypot(b.x + b.width - cx, b.y + b.height - cy)];
+          });
+          if (Math.max(...corners) - r > 1) badCenter.push(ctext.textContent);
+        }
+        const circles = [...svg.querySelectorAll('g[onclick*="groupMapDrill"] circle')].map(c => {
+          const title = c.parentElement.querySelector('title');
+          return { cx: +c.getAttribute('cx'), cy: +c.getAttribute('cy'), r: +c.getAttribute('r'), word: title ? title.textContent.split(' ')[0] : '?' };
+        });
+        const circleWords = circles.map(c => c.word);
+        for (const t of svg.querySelectorAll('text')) {
+          const fs = t.getAttribute('font-size');
+          if (fs !== '10.5' && fs !== '9') continue;
+          const wrd = t.textContent;
+          if (wrd === '▾') continue;
+          if (wrd.includes('…')) { badTrunc.push(wrd); continue; }
+          if (!circleWords.includes(wrd)) { badTrunc.push(wrd + '(未匹配)'); continue; }
+          const b = t.getBBox();
+          const pair = circles.find(c => c.word === wrd);
+          if (!pair) continue;
+          const nx = Math.max(b.x, Math.min(pair.cx, b.x + b.width));
+          const ny = Math.max(b.y, Math.min(pair.cy, b.y + b.height));
+          if (Math.hypot(nx - pair.cx, ny - pair.cy) - pair.r < 6) badGap.push(wrd);
+        }
+      };
+      for (const gid of Object.keys(data)) {
+        const lv1 = data[gid].level1Nodes || [];
+        const lv1word = lv1[0] ? lv1[0].word : 'x';
+        const probe = { id: 'x', word: lv1word, unit: 9, lesson: 1, seq: 1, group_id: Number(gid), group_name: data[gid].group_name };
+        wrap.innerHTML = window.groupMapSVG({ ...probe });
+        scan();
+        const drillWords = [...wrap.querySelectorAll('g[onclick*="groupMapDrill"]')].map(g => g.querySelector('title')?.textContent.split(' ')[0]).filter(Boolean);
+        for (const wrd of drillWords.slice(0, 12)) {
+          wrap.innerHTML = window.groupMapSVG({ ...probe });
+          for (const g of wrap.querySelectorAll('g[onclick*="groupMapDrill"]')) {
+            const title = g.querySelector('title');
+            if (title && title.textContent.split(' ')[0] === wrd) { g.dispatchEvent(new MouseEvent('click', { bubbles: true })); break; }
+          }
+          scan();
+        }
+      }
+      wrap.remove();
+      return { badCenter: [...new Set(badCenter)], badGap: [...new Set(badGap)], badTrunc: [...new Set(badTrunc)] };
+    });
+    expect(out.badCenter).toEqual([]);
+    expect(out.badGap).toEqual([]);
+    expect(out.badTrunc).toEqual([]);
+  });
+
+  test('browse tab: unit9 word shows its group map', async ({ page }) => {
+    await page.click('button[data-tab="browse"]');
+    await page.waitForSelector('#browseSearch');
+    await page.fill('#browseSearch', 'vulgar');
+    await page.waitForFunction(() => {
+      const list = document.getElementById('browseList');
+      return list && list.innerHTML.indexOf('vulgar') !== -1 && list.innerHTML.indexOf('导图') !== -1;
+    });
+    await page.evaluate(() => {
+      const list = document.getElementById('browseList');
+      for (const d of list.querySelectorAll(':scope > div')) {
+        if (d.textContent.indexOf('vulgar') !== -1) {
+          const btn = [...d.querySelectorAll('button')].find(b => b.textContent.indexOf('导图') !== -1);
+          if (btn) { btn.click(); return true; }
+        }
+      }
+      return false;
+    });
+    await page.waitForFunction(() => !!document.querySelector('.gmap-wrap svg'));
+    const has = await page.evaluate(() => {
+      const wrap = document.querySelector('.gmap-wrap');
+      if (!wrap) return false;
+      return [...wrap.querySelectorAll('g[onclick*="groupMapDrill"] title')].some(t => t.textContent.split(' ')[0] === 'vulgar');
+    });
+    expect(has).toBe(true);
+  });
+});
+
+test.describe('重点词与智能练习', () => {
+  test('can favorite a word and show it in the favorites tab', async ({ page }) => {
+    const result = await page.evaluate(() => {
+      currentPool = 'core';
+      const added = toggleFavorite(1, 'core');
+      return { added, saved: !!state.favorites['core:1'] };
+    });
+    expect(result).toEqual({ added: true, saved: true });
+
+    await page.click('button[data-tab="favorites"]');
+    await expect(page.locator('#favoriteList')).toContainText('ambition');
+    await expect(page.locator('#favoriteCount')).toContainText('1');
+  });
+
+  test('smart queue prioritizes favorites and weak words', async ({ page }) => {
+    const ids = await page.evaluate(() => {
+      currentPool = 'core';
+      selectedUnits = [0];
+      state.favorites = { 'core:3': true };
+      state.stats.wordAttempts = {
+        'core:1': { attempts: 4, correct: 0, wrong: 4 },
+        'core:2': { attempts: 4, correct: 4, wrong: 0 }
+      };
+      return getSmartQueueIds('core', 3, [1, 2, 3]);
+    });
+    expect(ids[0]).toBe(3);
+    expect(ids.indexOf(1)).toBeLessThan(ids.indexOf(2));
+  });
+});
