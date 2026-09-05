@@ -1,6 +1,6 @@
 // CET-6 Quiz Service Worker — offline support (PWA)
 // v5: 安装阶段只缓存轻量资源；大词库和页面改为访问时按需缓存，避免微信内置浏览器首次打开长时间转圈
-var CACHE_NAME = 'cet6-cihui-shuati-v5';
+var CACHE_NAME = 'cet6-cihui-shuati-v6';
 var ASSETS = [
   './manifest.json',
   './icons/icon-192.png',
