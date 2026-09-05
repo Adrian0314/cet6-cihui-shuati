@@ -3981,6 +3981,16 @@ function scrollQuestionProgressToCurrent(progressEl) {
   progressEl.scrollLeft = Math.max(0, Math.min(maxScroll, Math.round(target)));
 }
 
+// 将非全屏题卡滚到吸顶导航栏下方，避免手机端导航栏盖住题卡首行和全屏按钮。
+function scrollQuizCardBelowTabs(card) {
+  if (!card) return;
+  var tabs = document.querySelector('.tabs');
+  var tabsHeight = tabs ? Math.ceil(tabs.getBoundingClientRect().height) : 0;
+  var topGap = tabsHeight + 12;
+  var pageTop = card.getBoundingClientRect().top + (window.scrollY || window.pageYOffset || 0);
+  window.scrollTo(0, Math.max(0, pageTop - topGap));
+}
+
 function renderQuizCard() {
   // 新题开始后允许该题正常使用“不会，跳过”。
   _resumeOptionHandledQuestionId = null;
@@ -4083,7 +4093,7 @@ function renderQuizCard() {
     try {
       var scrollEl = card.querySelector('.quiz-scroll');
       if (card.classList.contains('fullscreen') && scrollEl) scrollEl.scrollTop = 0;
-      else window.scrollTo(0, Math.max(0, card.offsetTop - 12));
+      else scrollQuizCardBelowTabs(card);
     } catch (e) {}
     scrollQuestionProgressToCurrent(card.querySelector('.question-progress'));
     if (card.classList.contains('fullscreen')) {
@@ -4243,7 +4253,7 @@ function renderQuizCard() {
     if (card.classList.contains('fullscreen') && scrollEl) {
       scrollEl.scrollTop = 0;
     } else {
-      window.scrollTo(0, Math.max(0, card.offsetTop - 12));
+      scrollQuizCardBelowTabs(card);
     }
   } catch (e) {}
   scrollQuestionProgressToCurrent(card.querySelector('.question-progress'));
