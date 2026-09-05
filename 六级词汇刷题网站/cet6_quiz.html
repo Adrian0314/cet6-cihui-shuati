@@ -3217,6 +3217,13 @@ function markResumeUserInput(e) {
   if (document.hidden || !resumeInputGuardActive()) return;
   var target = e && e.target;
   var skip = target && target.closest ? target.closest('#skipBtn,.skip-btn') : null;
+  var option = target && target.closest ? target.closest('.opt-btn') : null;
+  // 在 pointer/touch 起始阶段就锁定本题，而不是等 click 才锁定。
+  // Android Chrome 在全屏 WebView/PWA 恢复后可能先补发旧 skip click，
+  // 此时选项的 click 还没有到达；提前锁定可以覆盖这个事件顺序。
+  if (option && !option.disabled && quizState && quizState.current) {
+    _resumeOptionHandledQuestionId = quizState.current.word && quizState.current.word.id;
+  }
   if (skip) {
     _resumeSkipPointer = {
       target: skip,
@@ -3241,6 +3248,8 @@ document.addEventListener('visibilitychange', function() {
 });
 document.addEventListener('pointerdown', markResumeUserInput, true);
 document.addEventListener('touchstart', markResumeUserInput, true);
+// 少数 Android Chrome 版本只保留鼠标兼容事件，补充 mousedown 作为兜底。
+document.addEventListener('mousedown', markResumeUserInput, true);
 document.addEventListener('click', function(e) {
   if (!resumeInputGuardActive()) return;
   var target = e.target;
