@@ -3192,6 +3192,8 @@ var _resumeLifecycleSeenHidden = false;
 var _resumeSkipPointer = null;
 var _resumeSkipGestureApproved = false;
 var _resumeSkipBarrier = false;
+// 记录恢复后本题是否已经由真实选项处理过；防止旧 skip 事件在选项点击之后补发。
+var _resumeOptionHandledQuestionId = null;
 function armResumeInputGuard() {
   // Keep the guard until a fresh foreground input explicitly disarms it.
   // A queued mobile click can arrive well after the app switch.
@@ -3925,6 +3927,8 @@ function scrollQuestionProgressToCurrent(progressEl) {
 }
 
 function renderQuizCard() {
+  // 新题开始后允许该题正常使用“不会，跳过”。
+  _resumeOptionHandledQuestionId = null;
   var card = document.getElementById('quizCard');
   if (!quizActive || !quizState.current) {
     card.innerHTML = '<div class="empty"><div class="ei">🎯</div><p>点击下方按钮开始刷题</p></div>';
@@ -4458,6 +4462,9 @@ function handleGate1(know) {
 function handleAnswer(chosenIndex) {
   if (!quizActive || !quizState.current) return;
   if (isAnswered(quizState.pos)) return; // 已答题不可重复作答
+  // 手机切后台期间可能留下一个尚未派发的 skip click。选项一旦被真实
+  // 处理，本题就不再接受任何 skip，避免旧事件紧跟在答案后面跳题。
+  _resumeOptionHandledQuestionId = quizState.current.word && quizState.current.word.id;
   var _skipBtn0 = document.getElementById('skipBtn');
   if (_skipBtn0) _skipBtn0.style.display = 'none'; // 答题后隐藏"不会，跳过"
 
@@ -6054,6 +6061,10 @@ function checkDailyGoal() {
 
 // ============ SKIP & KEYBOARD ============
 function handleSkip(e) {
+  // 选项点击已经完成本题后，旧的 detached/queued skip 事件即使绕过了
+  // document 捕获监听，也不能再改变本题结果。
+  if (quizState && quizState.current &&
+      _resumeOptionHandledQuestionId === quizState.current.word.id) return;
   // Detached inline handlers can bypass document-level capture listeners.
   // During the post-resume barrier, only a click explicitly approved by a
   // matching foreground skip gesture may reach the skip implementation.
