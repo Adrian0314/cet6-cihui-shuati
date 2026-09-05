@@ -32,24 +32,28 @@ body{
 }
 header{
   background:var(--surface);border-bottom:1px solid var(--border);
-  padding:10px 14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;
+  padding:10px 14px;display:flex;flex-direction:column;align-items:stretch;gap:8px;
   box-shadow:var(--shadow);position:sticky;top:0;z-index:20;
 }
-header h1{font-size:1.05em;color:var(--accent);white-space:nowrap}
+header h1{font-size:1.05em;color:var(--accent);white-space:nowrap;text-align:center;line-height:1.35}
 header h1 .tag{
   font-size:.68em;font-weight:600;color:var(--text2);
   border:1px solid var(--border);border-radius:10px;padding:1px 8px;margin-left:6px;vertical-align:2px;
 }
-.controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;flex:1;min-width:0}
+.controls{display:flex;flex-direction:column;align-items:stretch;gap:8px;width:100%;min-width:0}
+.control-row{display:flex;flex-wrap:nowrap;align-items:center;justify-content:center;gap:8px;min-width:0;overflow-x:auto;overflow-y:hidden;padding:1px 1px 4px;scrollbar-width:thin}
+.control-row>*{flex:0 0 auto}
+.group-nav{display:flex;align-items:center;justify-content:center;gap:8px}
+.group-nav button{min-width:112px}
 .controls select,.controls input{
   font:inherit;font-size:.88em;color:var(--text);
   background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;outline:none;
 }
 .controls select:focus,.controls input:focus{border-color:var(--accent)}
 #unitSel{max-width:110px}
-#groupSel{flex:1;min-width:180px;max-width:420px}
+#groupSel{flex:1 1 220px;min-width:150px;max-width:420px}
 .search-wrap{position:relative}
-#search{width:190px;max-width:46vw}
+#search{width:190px;max-width:42vw}
 #searchResults{
   position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:30;
   background:var(--surface);border:1px solid var(--border);border-radius:10px;
@@ -128,6 +132,8 @@ svg text{user-select:none}
 @media(max-width:760px){
   header{padding:8px 10px}
   header h1{font-size:.95em}
+  .control-row{justify-content:flex-start}
+  .group-nav{padding-top:1px}
   #stats{display:none}
   #legend{left:8px;bottom:8px;padding:6px 10px;font-size:.7em}
   .hint{display:none}
@@ -139,20 +145,24 @@ svg text{user-select:none}
 <header>
   <h1>🗺️ 词群导图查看器<span class="tag" id="modeTag">在线版</span></h1>
   <div class="controls">
-    <select id="unitSel" title="选择单元"></select>
-    <select id="groupSel" title="选择词群"></select>
-    <button id="btnPrevGroup" title="上一个词群（←）">◀ 上一个</button>
-    <button id="btnNextGroup" title="下一个词群（→）">下一个 ▶</button>
-    <div class="search-wrap">
-      <input id="search" type="search" placeholder="🔍 搜索单词…" autocomplete="off">
-      <div id="searchResults"></div>
+    <div class="control-row" aria-label="导图工具栏">
+      <select id="unitSel" title="选择单元"></select>
+      <select id="groupSel" title="选择词群"></select>
+      <div class="search-wrap">
+        <input id="search" type="search" placeholder="🔍 搜索单词…" autocomplete="off">
+        <div id="searchResults"></div>
+      </div>
+      <button id="btnZoomIn" title="放大">➕</button>
+      <button id="btnZoomOut" title="缩小">➖</button>
+      <button id="btnReset" title="重置视图">⟲ 复位</button>
+      <button id="btnSvg" title="导出矢量图">⬇ SVG</button>
+      <button id="btnPng" title="导出图片">⬇ PNG</button>
+      <span id="stats"></span>
     </div>
-    <button id="btnZoomIn" title="放大">➕</button>
-    <button id="btnZoomOut" title="缩小">➖</button>
-    <button id="btnReset" title="重置视图">⟲ 复位</button>
-    <button id="btnSvg" title="导出矢量图">⬇ SVG</button>
-    <button id="btnPng" title="导出图片">⬇ PNG</button>
-    <span id="stats"></span>
+    <div class="group-nav" aria-label="词群导航">
+      <button id="btnPrevGroup" title="上一个词群（←）">◀ 上一个</button>
+      <button id="btnNextGroup" title="下一个词群（→）">下一个 ▶</button>
+    </div>
   </div>
 </header>
 
