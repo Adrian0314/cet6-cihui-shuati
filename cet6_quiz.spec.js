@@ -69,6 +69,34 @@ test('start quiz shows options', async ({ page }) => {
   expect(count).toBe(4);
 });
 
+test('auto speak reads each new English-to-Chinese question once', async ({ page }) => {
+  await page.evaluate(() => {
+    window.__autoSpoken = [];
+    window.speakWord = word => window.__autoSpoken.push(word);
+  });
+  await page.click('#autoSpeakBtn');
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+  await expect.poll(() => page.evaluate(() => window.__autoSpoken.length)).toBe(1);
+
+  await page.click('.opt-btn');
+  await page.click('#nextBtn');
+  await page.waitForSelector('.opt-btn');
+  await expect.poll(() => page.evaluate(() => window.__autoSpoken.length)).toBe(2);
+});
+
+test('auto speak stays silent in Chinese-to-English mode', async ({ page }) => {
+  await page.evaluate(() => {
+    window.__autoSpoken = [];
+    window.speakWord = word => window.__autoSpoken.push(word);
+  });
+  await page.selectOption('#modeSelect', 'cn2en');
+  await page.click('#autoSpeakBtn');
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+  await expect.poll(() => page.evaluate(() => window.__autoSpoken.length)).toBe(0);
+});
+
 test('answering a question updates progress', async ({ page }) => {
   await page.click('button:has-text("开始做题")');
   await page.waitForSelector('.opt-btn');

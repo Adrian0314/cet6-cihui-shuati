@@ -407,6 +407,10 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
 .memory-setting label{margin-right:2px}
 .memory-toggle{min-height:38px;padding:8px 16px;border-radius:7px!important;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-weight:700}
 .memory-toggle.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.auto-speak-setting{grid-column:1 / -1;grid-template-columns:auto minmax(150px,220px) 1fr!important;align-items:center!important;gap:12px!important;padding-top:4px}
+.auto-speak-setting label{margin-right:2px}
+.auto-speak-toggle{min-height:38px;padding:8px 16px;border-radius:7px!important;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-weight:700}
+.auto-speak-toggle.active{background:var(--accent);border-color:var(--accent);color:#fff}
 .rules-card{margin-bottom:18px;padding:16px 20px;border-radius:10px;box-shadow:none}
 .rules-card h3{margin:0;color:var(--text);font-size:.92rem}
 .rules-card h3:first-letter{color:var(--accent)}
@@ -553,6 +557,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>🎯 每日目标：</strong>统计页可自选每日目标（做题+复习总数），达标后做题页会弹出庆祝提示；学习热力图的深绿色格子即代表"当日达标"。大纲词汇的艾宾浩斯打卡表则以当天计划的全部 Unit 完成为准，完成后计划栏显示“当天目标已完成”。</div>
       <div class="rb"><strong>🧠 记忆模式：</strong>做完一题即从队列移除，答错的词按当前词库的书中记忆规律自动排期回来复习。打开网页时若有到期单词，做题页顶部会显示复习横幅，点击"开始复习"一键清债；复习采用四选一快刷，复习中跳过视同答错。复习只从首次作答开始计，历史数据不迁移。</div>
       <div class="rb"><strong>🔊 朗读发音：</strong>点击喇叭按钮时优先使用普通媒体音频，以便跟随视频/音乐的蓝牙输出；网络音频无法播放时自动回退到系统 TTS。离线使用时仍可使用系统 TTS。</div>
+      <div class="rb"><strong>🔊 自动朗读：</strong>开始做题前可在“练习设置”中开启“自动朗读：开”。开启后仅在“看英文 → 选中文”模式下，每显示一道新题自动朗读一次；切换到“看中文 → 选英文”或关闭开关后不会自动朗读。手机浏览器若限制后台/非用户操作播放，仍可点击题面旁的“🔊 朗读”按钮。</div>
       <div class="rb"><strong>💾 中途退出：</strong>做题过程中会即时保存当前题位、已答数量和已选答案；手机切到后台、刷新页面或关闭网页时还会通过页面生命周期事件再保存一次，因此重新打开后点击顶部“继续做题”即可接着完成同一队列。手机从其他应用返回后的短暂恢复保护会持续忽略浏览器补发的旧“不会，跳过”点击；第一次真实点击选项不会被旧事件污染，只有前台真实按下跳过按钮后对应的点击才会执行跳过。4 周 25 天计划会同时保存当日进度，复习提醒也会显示实际的已完成题数和待完成题数；当天新 Unit 的全部单词学完后会记录为已完成，不会再次生成同一 Unit 的整组复习；进入新的一天后，旧日未完成队列会按新的每日计划重置，已完成的旧快照会在重进时自动清除。</div>
       <div class="rb"><strong>🧠 智能练习：</strong>这不是生成式 AI，而是按规则自动安排优先级：先练重点词和已经到期的复习词，再练从未做过、错误率较高或答错次数较多的词。系统从当前词库和 Unit 筛选范围中取词，数量按“每次学习”设置的 20/40/60 词决定，并沿用当前的做题方向、题目类型和闯关模式。智能练习不是只练错题；只练错题请使用“重做当前模式错题”，智能练习答错的单词仍会进入错题本。</div>
       <div class="rb" style="text-align:center;margin-top:8px;"><span style="color:var(--accent2);cursor:pointer;text-decoration:underline;" onclick="document.getElementById('rulesCard').classList.toggle('collapsed')">点击收起 ▲</span></div>
@@ -630,6 +635,11 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
         <label>学习方式</label>
         <button class="mode-btn memory-toggle" id="memoryBtn" onclick="toggleMemoryMode()">记忆模式</button>
         <span class="setting-note">做完即删，错词按记忆规律回来</span>
+      </div>
+      <div class="mode-row setting-item auto-speak-setting">
+        <label for="autoSpeakBtn">自动朗读</label>
+        <button type="button" class="mode-btn auto-speak-toggle" id="autoSpeakBtn" onclick="toggleAutoSpeak()">自动朗读：关</button>
+        <span class="setting-note">仅“看英文 → 选中文”有效；每显示一道新题自动朗读一次</span>
       </div>
     </div>
   </section>
@@ -1347,7 +1357,7 @@ function getDefaultState() {
       totalSkip: 0
     },
     suspendedQuiz: null,
-    prefs: { pool: 'full', units: [0], size: 20, gate: 2, mode: 'en2cn', type: 'choice', memory: false },
+    prefs: { pool: 'full', units: [0], size: 20, gate: 2, mode: 'en2cn', type: 'choice', memory: false, autoSpeak: false },
     dailyGoal: 30,
     ebbingActive: false,     // 刘晓艳词库 4周25天打卡表是否已手动开启（纯刷题模式为 false）
     ebbingStart: null,       // 刘晓艳词库 4周25天打卡起始日（UTC 日期字符串）
@@ -1541,7 +1551,8 @@ function normalizeState(input) {
     gate: finiteInt(p.gate, def.prefs.gate, 1, 3),
     mode: p.mode === 'en2cn' ? 'en2cn' : 'cn2en',
     type: p.type === 'dictation' ? 'dictation' : 'choice',
-    memory: !!p.memory
+    memory: !!p.memory,
+    autoSpeak: !!p.autoSpeak
   };
   if (s.prefs.units.length === 0) s.prefs.units = [0];
   return s;
@@ -2260,6 +2271,7 @@ var quizState = {
 
 var currentMode = 'en2cn';
 var currentQuizType = 'choice';
+var autoSpeakEnabled = false;
 var quizActive = false;
 
 function buildQuiz(mode, wordPool) {
@@ -2392,6 +2404,22 @@ function goToQuestion(pos) {
   // browsers may terminate a backgrounded page without firing unload reliably.
   saveActiveQuizProgress();
   renderQuizCard();
+  speakQuestionAutomatically();
+}
+
+// 自动朗读只在“看英文 → 选中文”模式生效，并且以题目切换为边界，避免
+// 答题反馈、统计刷新或其他局部重绘导致同一道题重复朗读。
+var _autoSpeakLastQuizState = null;
+var _autoSpeakLastPos = -1;
+var _autoSpeakLastWordId = null;
+function speakQuestionAutomatically() {
+  if (!autoSpeakEnabled || !quizState || quizState.mode !== 'en2cn' || !quizState.current || !quizState.current.word) return;
+  var word = quizState.current.word;
+  if (_autoSpeakLastQuizState === quizState && _autoSpeakLastPos === quizState.pos && _autoSpeakLastWordId === word.id) return;
+  _autoSpeakLastQuizState = quizState;
+  _autoSpeakLastPos = quizState.pos;
+  _autoSpeakLastWordId = word.id;
+  speakWord(word.word);
 }
 
 function prevQuestion() {
@@ -3093,7 +3121,7 @@ function discardSaved() {
   document.getElementById('savedBar').classList.remove('show');
 }
 
-// ============ PREFS (做题模式持久化：词库/单元/闯关/模式/题型/记忆/学习量) ============
+// ============ PREFS (做题模式持久化：词库/单元/闯关/模式/题型/记忆/自动朗读/学习量) ============
 function savePrefs() {
   state.prefs = {
     pool: currentPool,
@@ -3102,9 +3130,29 @@ function savePrefs() {
     gate: gateLevel,
     mode: currentMode,
     type: currentQuizType,
-    memory: memoryModeOn()
+    memory: memoryModeOn(),
+    autoSpeak: !!autoSpeakEnabled
   };
   saveState();
+}
+function updateAutoSpeakUI() {
+  var btn = document.getElementById('autoSpeakBtn');
+  if (!btn) return;
+  btn.classList.toggle('active', !!autoSpeakEnabled);
+  btn.textContent = '自动朗读：' + (autoSpeakEnabled ? '开' : '关');
+  btn.setAttribute('aria-pressed', autoSpeakEnabled ? 'true' : 'false');
+  btn.title = autoSpeakEnabled
+    ? '已开启：仅在看英文选中文模式下自动朗读每道新题'
+    : '已关闭：点击开启看英文选中文自动朗读';
+}
+function toggleAutoSpeak() {
+  autoSpeakEnabled = !autoSpeakEnabled;
+  updateAutoSpeakUI();
+  savePrefs();
+  showImportMsg(autoSpeakEnabled
+    ? '🔊 自动朗读已开启（仅看英文选中文）'
+    : '已关闭自动朗读', 'ok');
+  return autoSpeakEnabled;
 }
 function applyPrefs() {
   var p = state.prefs || {};
@@ -3114,6 +3162,7 @@ function applyPrefs() {
   if (p.gate) gateLevel = p.gate;
   if (p.mode) currentMode = p.mode;
   if (p.type) currentQuizType = p.type;
+  autoSpeakEnabled = !!p.autoSpeak;
   var modeSelect = document.getElementById('modeSelect');
   var typeSelect = document.getElementById('typeSelect');
   var gateSelect = document.getElementById('gateSelect');
@@ -3124,6 +3173,7 @@ function applyPrefs() {
   if (sizeSelect) sizeSelect.value = String(learnSize);
   var mBtn = document.getElementById('memoryBtn');
   if (mBtn) mBtn.classList.toggle('active', !!p.memory);
+  updateAutoSpeakUI();
   if (p.pool) updatePoolUI();
 }
 
@@ -3136,6 +3186,7 @@ function prefsDiffer(a, b) {
   a = a || {}; b = b || {};
   return a.pool !== b.pool || a.size !== b.size || a.gate !== b.gate ||
     a.mode !== b.mode || a.type !== b.type || !!a.memory !== !!b.memory ||
+    !!a.autoSpeak !== !!b.autoSpeak ||
     (a.units && b.units ? a.units.join(',') !== b.units.join(',') : a.units !== b.units);
 }
 function updatePrefsSnapshot() {
@@ -3151,6 +3202,7 @@ function revertPrefsToSnapshot() {
   gateLevel = state.prefs.gate || gateLevel;
   currentMode = state.prefs.mode || currentMode;
   currentQuizType = state.prefs.type || currentQuizType;
+  autoSpeakEnabled = !!state.prefs.autoSpeak;
   applyPrefs();
   saveState();
 }
