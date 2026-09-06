@@ -3306,27 +3306,61 @@ function autoSaveProgress() {
 var _resumeInputGuardUntil = 0;
 var _resumeInputGuardArmed = false;
 var _resumeLifecycleSeenHidden = false;
-// 最近一次在跳过按钮上的“真实起手”（pointerdown/touchstart/pointerup/touchend）时间。
-// 跳过 click 只有落在这 1.5 秒窗口内才会生效：手机切后台恢复后，浏览器会把切走前
-// 旧触点的兼容鼠标序列（mousedown/mouseup/click）随用户下一次点击一起补发出来，
-// 这类补发事件没有对应的新起手输入，一律拒绝。
+// 最近一次在跳过按钮上的“真实起手”时间。跳过 click 只有落在这 1.5 秒窗口内
+// 才会生效。手机切后台恢复后，浏览器会把切走前旧触点的事件随用户下一次点击
+// 一起补发出来——补发可能是纯兼容鼠标序列（无 pointer/touch 起手），也可能
+// 是完整的指针/触摸重放，后者需要下面两条硬件特征才能识别。
 var _skipArmAt = 0;
-// 最近一次落在选项上的真实 pointer/touch 输入时间。恢复后补发的旧触点若以完整
-// 指针/触摸序列重放，仅凭起手时间无法与真实点击区分；但同一输入批次里不可能
-// 既点选项又点跳过——以“刚发生过选项交互”否决紧随其后的跳过。
+// 最近一次落在选项上的真实 pointer/touch 输入时间。同一输入批次里不可能既点
+// 选项又点跳过——以“刚发生过选项交互”否决紧随其后的跳过。
 var _optionActivityAt = 0;
-// 延迟一拍执行的跳过：给同一输入批次里的选项 click 留出否决窗口。
+// 延迟执行的跳过：给同一输入批次里的选项 click 留出否决窗口。
 var _pendingSkipTimer = null;
 // 记录恢复后本题是否已经由真实选项处理过；防止旧 skip 事件在选项点击之后补发。
 var _resumeOptionHandledQuestionId = null;
+// 最近一次切后台时刻（performance.now() 时基）。补发重放的旧输入事件会保留
+// 切后台前的原始时间戳，可与真实的新触摸区分。
+var _pageHiddenAt = 0;
+// 跳过按钮上最近一次按下（pointerdown/touchstart）的事件时间戳与时刻，
+// 用于识别被压缩冲刷的重放序列（按下→抬起间隔接近 0ms）。
+var _skipDownTs = null;
+var _skipDownOk = false;
+function pageNow() {
+  return (typeof performance !== 'undefined' && performance.now && performance.now()) || 0;
+}
+function preBackgroundEvent(e) {
+  // 事件时间戳早于最近一次切后台：这条输入属于切走前的旧触摸，不能作为跳过起手。
+  var ts = e && typeof e.timeStamp === 'number' && isFinite(e.timeStamp) ? e.timeStamp : 0;
+  if (ts <= 0 || _pageHiddenAt <= 0) return false; // 时间戳不可用时放行，交给其他防线
+  return ts < _pageHiddenAt - 5;
+}
 function noteSkipPointer(e) {
   var t = e && e.target;
   if (!t || !t.closest) return;
-  if (t.closest('#skipBtn,.skip-btn')) {
-    _skipArmAt = Date.now();
-  } else if (t.closest('.opt-btn')) {
-    _optionActivityAt = Date.now();
+  if (!t.closest('#skipBtn,.skip-btn')) {
+    if (t.closest('.opt-btn')) _optionActivityAt = Date.now();
+    return;
   }
+  var type = e.type;
+  if (type === 'pointerdown' || type === 'touchstart') {
+    if (preBackgroundEvent(e)) { _skipDownOk = false; _skipDownTs = null; return; }
+    var ts = (typeof e.timeStamp === 'number' && isFinite(e.timeStamp)) ? e.timeStamp : 0;
+    _skipDownTs = ts > 0 ? ts : null;
+    _skipDownOk = true;
+    return;
+  }
+  // pointerup / touchend
+  if (preBackgroundEvent(e)) { _skipDownOk = false; _skipDownTs = null; return; }
+  if (!_skipDownOk) { _skipDownTs = null; return; } // 没有合法的按下配对，不认这次抬起
+  var upTs = (typeof e.timeStamp === 'number' && isFinite(e.timeStamp)) ? e.timeStamp : 0;
+  if (_skipDownTs !== null && upTs > 0 && upTs >= _skipDownTs && upTs - _skipDownTs < 25) {
+    // 按下→抬起被压缩在 25ms 内不是人手点按：补发队列会把整套事件压在同一
+    // 瞬间一起冲刷，真实触摸的按下到抬起至少几十毫秒。
+    _skipDownOk = false; _skipDownTs = null; return;
+  }
+  _skipDownOk = false;
+  _skipDownTs = null;
+  _skipArmAt = Date.now();
 }
 function skipGestureFresh() {
   return _skipArmAt && Date.now() - _skipArmAt <= 1500;
@@ -3366,6 +3400,7 @@ function markResumeUserInput(e) {
 document.addEventListener('visibilitychange', function() {
   if (document.hidden) {
     _resumeLifecycleSeenHidden = true;
+    _pageHiddenAt = pageNow() || _pageHiddenAt;
     armResumeInputGuard();
     autoSaveProgress();
   } else if (_resumeLifecycleSeenHidden) {
@@ -3420,6 +3455,7 @@ window.addEventListener('pageshow', function(e) {
 window.addEventListener('blur', function() {
   // Fallback for embedded/mobile browsers that expose focus/blur but omit
   // visibilitychange when the app is backgrounded.
+  _pageHiddenAt = pageNow() || _pageHiddenAt;
   if (!quizActive) return;
   _resumeLifecycleSeenHidden = true;
   armResumeInputGuard();
