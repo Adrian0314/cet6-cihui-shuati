@@ -194,13 +194,13 @@ body.dragging-node, body.dragging-node *{cursor:grabbing !important;-webkit-user
         <textarea id="paste-aw"></textarea>
       </div>
       <div class="imp-item">
-        <label>data/unit-maps.js（现有导图）</label>
+        <label>unit-maps.js（现有导图）</label>
         <input type="file" id="f-maps" accept=".js">
         <div><span class="paste-toggle" data-tgt="paste-maps">▸ 粘贴文本</span></div>
         <textarea id="paste-maps"></textarea>
       </div>
       <div class="imp-item">
-        <label>data/full-words.js（可选·扩展词库）</label>
+        <label>full-words.js（可选·扩展词库）</label>
         <input type="file" id="f-fullwords" accept=".js">
         <div><span class="paste-toggle" data-tgt="paste-fw">▸ 粘贴文本</span></div>
         <textarea id="paste-fw"></textarea>
@@ -278,7 +278,7 @@ body.dragging-node, body.dragging-node *{cursor:grabbing !important;-webkit-user
     <div id="export-btns">
       <button onclick="exportGroupJSON()">导出当前词群 JSON</button>
       <button onclick="exportUnitBlock()">导出整个 unit 数据块</button>
-      <button class="primary" onclick="exportFullFile()" title="下载 unit-maps.js 并自动保存到本项目 data/unit-maps.js，做题网站刷新即生效">下载 unit-maps.js（整体替换）</button>
+      <button class="primary" onclick="exportFullFile()" title="下载 unit-maps.js 并自动保存到本项目 unit-maps.js，做题网站刷新即生效">下载 unit-maps.js（整体替换）</button>
     </div>
     <div id="save-project-msg" style="font-size:0.8em;color:var(--text2);margin-top:6px"></div>
     <div id="export-area">
@@ -2787,7 +2787,7 @@ function exportFullFile() {
   setExport(text);
   download('unit-maps.js', text);
   // 自动用新导图替换做题网站的数据文件（unit-maps.js 规格要求 LF 行尾）
-  saveToProject('data/unit-maps.js', text.replace(/\r\n/g, '\n'));
+  saveToProject('unit-maps.js', text.replace(/\r\n/g, '\n'));
 }
 
 /* 通过本地词典服务 /save 把导出内容写回本项目文件（做题网站 cet6_quiz.html 刷新即加载新导图） */
@@ -2979,7 +2979,7 @@ function bindImport() {
       updateStatus();
     } catch(e) { showImportMsg('导入打卡词库失败：' + e.message, false); }
   });
-  // 一键自动导入本项目文件（cet6_quiz.html + data/unit-maps.js + data/full-words.js）
+  // 一键自动导入本项目文件（cet6_quiz.html + unit-maps.js + full-words.js）
   document.getElementById('btn-autoimport').addEventListener('click', autoImport);
   // 粘贴兜底
   document.querySelectorAll('.paste-toggle').forEach(function(t) {
@@ -3008,7 +3008,7 @@ function autoImport() {
       fillDatalist();
       updateStatus();
       showImportMsg('✅ 主词库已导入：' + state.allWords.length + ' 词', true);
-      return get('data/unit-maps.js');
+      return get('unit-maps.js');
     })
     .then(function(text) {
       var r = parseUnitMaps(text);
@@ -3018,7 +3018,7 @@ function autoImport() {
       state.currentGid = Object.keys(state.unitMaps[state.currentUnit] || {})[0] || '1';
       renderToolbar(); loadSelectedGroup(); updateStatus();
       showImportMsg('✅ 导图数据已导入：' + Object.keys(state.unitMaps).length + ' 个 unit', true);
-      return get('data/full-words.js');
+      return get('full-words.js');
     })
     .then(function(text) {
       state.fullWords = parseFullWords(text);

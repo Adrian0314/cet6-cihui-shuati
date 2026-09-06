@@ -9,13 +9,13 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 // 锚定到本文件所在目录（网站目录），无论从哪个目录运行都指向同一份站点文件
 const REPO_DIR = dirname(fileURLToPath(import.meta.url));
 const QUIZ_URL = pathToFileURL(resolve(REPO_DIR, 'cet6_quiz.html')).href;
-const FULL_WORDS_PATH = resolve(REPO_DIR, 'data', 'full-words.js');
+const FULL_WORDS_PATH = resolve(REPO_DIR, 'full-words.js');
 const FULL_WORDS_INTEGRITY_SHA256 = '424764dce6317971ebe815c6e8bcc22fde76f427d18c608c77c05c3090ce0cb5';
 
 function readExternalFullWords() {
   const script = readFileSync(FULL_WORDS_PATH, 'utf8');
   const match = script.match(/window\.__FULL_WORDS_DATA__\s*=\s*(\[[\s\S]*\])\s*;*\s*$/);
-  if (!match) throw new Error('Unable to parse window.__FULL_WORDS_DATA__ from data/full-words.js');
+  if (!match) throw new Error('Unable to parse window.__FULL_WORDS_DATA__ from full-words.js');
   return JSON.parse(match[1]);
 }
 
@@ -1458,7 +1458,7 @@ test('page load with saved full pool does not crash before async words ready', a
   });
   let pageError = null;
   page.on('pageerror', e => { pageError = e.message; });
-  await page.goto('file:///C:/Users/zheng/Desktop/%E5%AD%A6%E4%B9%A0%E4%B8%8E%E8%80%83%E8%AF%95/Study/%E8%8B%B1%E8%AF%AD%E5%9B%9B%E5%85%AD%E7%BA%A7/cet6_quiz.html');
+  await page.goto(QUIZ_URL);
   await page.waitForLoadState('domcontentloaded');
   // 页面加载瞬间(外部词库数据未到达)applyPrefs→updatePoolUI→updateFreqCount 不应崩溃
   expect(pageError).toBeNull();
@@ -1531,7 +1531,7 @@ test.describe('mode-specific other-option feedback', () => {
         order: (() => {
           const html = wrongOptionsHTML({
             correctIndex: 1,
-            options: [{ word: 'aggressive', pronunciation: '/ə\\'gresv/', meaning: 'adj.好斗的,侵略的' }, { word: 'answer', meaning: 'n.答案' }]
+            options: [{ word: 'aggressive', pronunciation: '/ə\'gresv/', meaning: 'adj.好斗的,侵略的' }, { word: 'answer', meaning: 'n.答案' }]
           }, 'en2cn', -1);
           return {
             wordBeforePos: html.indexOf('<strong>aggressive</strong>') < html.indexOf('class="option-pos"'),

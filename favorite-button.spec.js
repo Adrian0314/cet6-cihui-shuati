@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const quizUrl = 'file:///C:/Users/zheng/Desktop/%E5%AD%A6%E4%B9%A0%E4%B8%8E%E8%80%83%E8%AF%95/Study/%E8%8B%B1%E8%AF%AD%E5%9B%9B%E5%85%AD%E7%BA%A7/%E5%85%AD%E7%BA%A7%E8%AF%8D%E6%B1%87%E5%88%B7%E9%A2%98%E7%BD%91%E7%AB%99/cet6_quiz.html';
+const quizUrl = pathToFileURL(resolve(dirname(fileURLToPath(import.meta.url)), 'cet6_quiz.html')).href;
 
 test('favorite button is beside the word information and toggles with the current question', async ({ browser }) => {
   const context = await browser.newContext();

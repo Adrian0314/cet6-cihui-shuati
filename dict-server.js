@@ -159,7 +159,7 @@ var server = http.createServer(function(req, res) {
   /* 静态文件读取（供 word-map-editor.html 一键导入本项目文件，file:// 下无法直接 fetch 本地文件） */
   if (url.pathname === '/file') {
     var p = (url.searchParams.get('p') || '').trim();
-    if (!p) { sendJSON(res, { error: '缺少 p 参数，用法：/file?p=data/unit-maps.js' }, 400); return; }
+    if (!p) { sendJSON(res, { error: '缺少 p 参数，用法：/file?p=unit-maps.js' }, 400); return; }
     var root = path.resolve(__dirname);
     var target = path.resolve(root, p);
     var rel = path.relative(root, target);
@@ -183,7 +183,7 @@ var server = http.createServer(function(req, res) {
 
   /* 保存文本到本项目文件（供 word-map-editor.html「下载 unit-maps.js」后自动替换做题网站导图） */
   if (url.pathname === '/save') {
-    var sp = (url.searchParams.get('p') || 'data/unit-maps.js').trim();
+    var sp = (url.searchParams.get('p') || 'unit-maps.js').trim();
     var sroot = path.resolve(__dirname);
     var starget = path.resolve(sroot, sp);
     var srel = path.relative(sroot, starget);

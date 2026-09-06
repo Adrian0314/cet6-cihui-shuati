@@ -2,27 +2,27 @@
 /* ============================================================
  * 从刷题网站词表生成核心词库索引（发音/释义/词性）：
  *   输入：cet6_quiz.html 内嵌词表 data-all-words（核心词库 6526 词）
- *         + data/full-words.js（打卡词库 2920 词）
- *   输出：data/core-words.js（window.__CORE_WORDS__）
+ *         + full-words.js（打卡词库 2920 词）
+ *   输出：core-words.js（window.__CORE_WORDS__）
  *
  * 词群导图查看器用它把节点音标/释义统一为刷题网站词库的权威值：
  *   - 两库合并，核心词库优先（与刷题网站默认词库一致）
  *   - 核心词库发音残缺（如 "/-ize/"）时回退打卡词库
  *   - 两库都没有的词保留导图识别值（查看器端自动回退）
  *
- * 用法：node tools/build-core-words.js
+ * 用法：node build-core-words.js
  * 说明：词库数据更新后重新运行本脚本，再运行 build-offline-viewer.js 同步离线版。
  * ============================================================ */
 'use strict';
 const fs = require('fs');
 const path = require('path');
 
-const root = path.join(__dirname, '..');
-// 网站文件统一位于「六级词汇刷题网站/」子目录（根目录不再保留主程序副本）
-const siteDir = path.join(root, '六级词汇刷题网站');
+const root = __dirname;
+// 网站文件全部位于仓库根目录（扁平结构，无子目录）
+const siteDir = root;
 const htmlPath = path.join(siteDir, 'cet6_quiz.html');
-const fullPath = path.join(siteDir, 'data', 'full-words.js');
-const outPath = path.join(siteDir, 'data', 'core-words.js');
+const fullPath = path.join(siteDir, 'full-words.js');
+const outPath = path.join(siteDir, 'core-words.js');
 
 const html = fs.readFileSync(htmlPath, 'utf8');
 const m = html.match(/<script type="application\/json" id="data-all-words">([\s\S]*?)<\/script>/);
@@ -35,7 +35,7 @@ const bank = JSON.parse(m[1]);
 const fullRaw = fs.readFileSync(fullPath, 'utf8');
 const fm = fullRaw.match(/window\.__FULL_WORDS_DATA__\s*=\s*(\[[\s\S]*\])/);
 if (!fm) {
-  console.error('[build-core-words] 未在 data/full-words.js 中找到词表');
+  console.error('[build-core-words] 未在 full-words.js 中找到词表');
   process.exit(1);
 }
 const fullWords = JSON.parse(fm[1].replace(/;\s*$/, ''));
@@ -100,6 +100,6 @@ for (const k of Object.keys(dict)) {
   if (nk !== k.toLowerCase() && !(nk in dict) && !(nk in normMap)) normMap[nk] = k;
 }
 
-const out = '// 词库发音/释义/词性索引（自动生成：核心词库 ' + bank.length + ' 词 + 打卡词库补充 ' + added + ' 词，共 ' + Object.keys(dict).length + ' 词；发音择优：打卡更完整采用 ' + upgraded + ' 处、核心残缺回退 ' + fixed + ' 处；括号变体映射 ' + Object.keys(normMap).length + ' 条）\n// 重新生成：node tools/build-core-words.js\nwindow.__CORE_WORDS__=' + JSON.stringify(dict) + ';\nwindow.__CORE_WORDS_NORM__=' + JSON.stringify(normMap) + ';\n';
+const out = '// 词库发音/释义/词性索引（自动生成：核心词库 ' + bank.length + ' 词 + 打卡词库补充 ' + added + ' 词，共 ' + Object.keys(dict).length + ' 词；发音择优：打卡更完整采用 ' + upgraded + ' 处、核心残缺回退 ' + fixed + ' 处；括号变体映射 ' + Object.keys(normMap).length + ' 条）\n// 重新生成：node build-core-words.js\nwindow.__CORE_WORDS__=' + JSON.stringify(dict) + ';\nwindow.__CORE_WORDS_NORM__=' + JSON.stringify(normMap) + ';\n';
 fs.writeFileSync(outPath, out);
-console.log('[build-core-words] 已生成：data/core-words.js（' + (out.length / 1024).toFixed(0) + ' KB，共 ' + Object.keys(dict).length + ' 词，打卡库补充 ' + added + ' 词，发音择优 ' + upgraded + ' 处，残缺回退 ' + fixed + ' 处，括号变体映射 ' + Object.keys(normMap).length + ' 条）');
+console.log('[build-core-words] 已生成：core-words.js（' + (out.length / 1024).toFixed(0) + ' KB，共 ' + Object.keys(dict).length + ' 词，打卡库补充 ' + added + ' 词，发音择优 ' + upgraded + ' 处，残缺回退 ' + fixed + ' 处，括号变体映射 ' + Object.keys(normMap).length + ' 条）');

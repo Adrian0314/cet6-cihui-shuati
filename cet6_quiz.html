@@ -9,8 +9,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="六级刷题">
-<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:rgba(0,0,0,0)}
 :root{
@@ -841,7 +841,7 @@ function loadDataScript(src, cb) {
   attempt();
 }
 
-var FULL_WORDS = null; // 核心词汇，外置 data/full-words.js 动态加载（详解已随数据合并）
+var FULL_WORDS = null; // 核心词汇，外置 full-words.js 动态加载（详解已随数据合并）
 var _fullWordsLoaded = false;
 var _fullWordsLoading = false;
 var _fullWordsFailed = false;
@@ -862,7 +862,7 @@ function ensureFullWords(cb) {
   if (typeof cb === 'function') _fullWordsWaiters.push(cb);
   if (_fullWordsLoading) return;
   _fullWordsLoading = true;
-  loadDataScript('data/full-words.js', function() {
+  loadDataScript('full-words.js', function() {
     _fullWordsLoading = false;
     if (window.__FULL_WORDS_DATA__) indexFullWords();
     else _fullWordsFailed = true;
@@ -3729,7 +3729,7 @@ function getWordDetailHTML(word, poolName, options) {
   return (includeGroupInfo ? getWordGroupInfoHTML(word, poolName) : '') + html;
 }
 
-// ============ 词群导图（新版）：书页真实导图数据（data/unit-maps.js），放射状 + 点击下钻 ============
+// ============ 词群导图（新版）：书页真实导图数据（unit-maps.js），放射状 + 点击下钻 ============
 // 数据来源：《你还在背单词吗（刘晓艳）》Unit1 书页导图识别（词以群记1-14），音标/释义以词库权威数据为准
 var _gmapSeq = 0;
 var _gmapState = {}; // id -> { unit, gid, stack:[点击过的节点词], active:当前做题词 }
@@ -3774,7 +3774,7 @@ function normalizeUnitMapCoverage() {
 
 function ensureUnitMaps(cb) {
   if (window.__UNIT_MAPS_DATA__) { normalizeUnitMapCoverage(); if (cb) cb(); return; }
-  loadDataScript('data/unit-maps.js', function() { normalizeUnitMapCoverage(); if (cb) cb(); });
+  loadDataScript('unit-maps.js', function() { normalizeUnitMapCoverage(); if (cb) cb(); });
 }
 
 // 当前词是否可用新版导图：核心词库，或与核心词库重叠的打卡词

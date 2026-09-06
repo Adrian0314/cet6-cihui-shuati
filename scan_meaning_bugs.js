@@ -2,8 +2,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const dataDir = path.join(__dirname, '..', 'data');
-const htmlPath = path.join(__dirname, '..', 'cet6_quiz.html');
+const dataDir = __dirname;
+const htmlPath = path.join(__dirname, 'cet6_quiz.html');
 
 const html = fs.readFileSync(htmlPath, 'utf8');
 const m = html.match(/<script type="application\/json" id="data-all-words">([\s\S]*?)<\/script>/);

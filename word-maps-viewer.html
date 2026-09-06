@@ -188,8 +188,8 @@ svg text{user-select:none}
 <div id="tooltip"></div>
 <div id="toast"></div>
 
-<script src="data/unit-maps.js"></script>
-<script src="data/core-words.js"></script>
+<script src="unit-maps.js"></script>
+<script src="core-words.js"></script>
 <script>
 (function(){
 'use strict';
@@ -200,7 +200,7 @@ var DATA_ERR = null;
 if (!DATA) {
   DATA_ERR = '未找到词群导图数据';
 }
-// 核心词库索引（发音/释义/词性以刷题网站词库为准，data/core-words.js 由 cet6_quiz.html 词表生成）
+// 核心词库索引（发音/释义/词性以刷题网站词库为准，core-words.js 由 cet6_quiz.html 词表生成）
 var CORE = window.__CORE_WORDS__ || null;
 var CORENORM = window.__CORE_WORDS_NORM__ || null;
 function normKeyOf(s){
@@ -877,7 +877,7 @@ function init(){
   if (DATA_ERR) {
     var e = $('err');
     e.style.display = 'block';
-    e.innerHTML = '<b>加载失败：</b>未找到词群导图数据。<br>请确认 <code>data/unit-maps.js</code> 与本页面在同一目录（<code>data</code> 文件夹与页面同级）。<br>若使用的是离线单文件版，请重新生成或使用在线版：<br><a href="https://adrian0314.github.io/cet6-cihui-shuati/word-maps-viewer.html" style="color:var(--accent)">在线版链接</a>';
+    e.innerHTML = '<b>加载失败：</b>未找到词群导图数据。<br>请确认 <code>unit-maps.js</code> 与本页面在同一目录。<br>若使用的是离线单文件版，请重新生成或使用在线版：<br><a href="https://adrian0314.github.io/cet6-cihui-shuati/word-maps-viewer.html" style="color:var(--accent)">在线版链接</a>';
     $('stage').style.display = 'none';
     return;
   }
