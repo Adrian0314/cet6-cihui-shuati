@@ -532,7 +532,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
     <div class="rules-body">
       <div class="rb"><strong>📗 《你还在背单词吗》刘晓艳：</strong>词库内容严格取自刘晓艳主编的《英语六级你还在背单词吗》（东北师范大学出版社）。第一部分「词以群记·抓核心」（Unit 1-10）：核心词按词群分类排序，每个词含记忆方法（联想/构词/对照/谐音）、经典例句及扩展词；第二部分「词以序记·刷基础」（Unit 11-14）：按字母序排列的大纲基础词。按书中 Unit 顺序学习，可手动切换 Unit 与学习页数。</div>
       <div class="rb"><strong>📚 《六级英语核心词·艾宾浩斯抗遗忘打卡》：</strong>词库严格取自刘晓艳主编的《六级英语核心词 艾宾浩斯抗遗忘打卡》（开明出版社）。全书 10 个 Unit、40 个 Lesson，每个单词带 8 格打卡（首次学习 + 5分/30分/12时 + 1天/2天/4天/7天），带 * 号为书中派生词。</div>
-      <div class="rb"><strong>📅 记忆规律：</strong>大纲词汇按《你还在背单词吗》书末「艾宾浩斯抗遗忘复习打卡表」（4周25天）调度——每天学习一个新 Unit，按 +1天/+3天/+6天/+12天 的间隔复习之前学过的 Unit；当天的新 Unit 全部学完并完成到期复习 Unit 后，计划栏会显示“当天目标已完成”，当天新 Unit 不会再次生成整组复习。跨日仍未完成时，计划会重置为当天的完整目标，不沿用前一天的部分完成进度。核心词汇按书内每词 8 格记忆周期（5分/30分/12时/1天/2天/4天/7天）调度复习。短周期（5分/30分）在学习会话内提醒，12小时及以后到期的词在打开网页时提醒。</div>
+      <div class="rb"><strong>📅 记忆规律：</strong>大纲词汇按《你还在背单词吗》书末「艾宾浩斯抗遗忘复习打卡表」（4周25天）调度——每天学习一个新 Unit，按 +1天/+3天/+6天/+12天 的间隔复习之前学过的 Unit（例如第9天学 Unit 9 并复习 Unit 3、6、8；Unit 14 的末次复习按书表超出25天，并入第25天）。完成判定以当天实际作答为准：只要当天计划的每个 Unit 的全部单词都在今天答过一遍——无论是通过“开始复习”队列、记忆模式、普通“开始做题”还是智能练习完成——计划栏都会显示“当天目标已完成”，不会要求重做已练过的题；复习队列中途退出后重新开始时，也只推送今天还没答过的词。跨日仍未完成时，计划会重置为当天的完整目标，不沿用前一天的部分完成进度。核心词汇按书内每词 8 格记忆周期（5分/30分/12时/1天/2天/4天/7天）调度复习。短周期（5分/30分）在学习会话内提醒，12小时及以后到期的词在打开网页时提醒。</div>
       <div class="rb"><strong>🏰 闯关模式：</strong>严格对应书中使用指南——闯关1「词群速记」：结合词群导图快速检测，认识/不认识直接判断；闯关2「选择检测」：对应书中学完一个 Lesson 后的检测（选择题/默写题）；闯关3「Unit综合测」：学完一个 Unit 后的综合检测（覆盖整个 Unit）。词群导图怎么看，见下方「🗺️ 词群导图」。</div>
       <div class="rb"><strong>📖 答题后信息顺序：</strong>提交答案或跳过后，题目与正确答案下方紧接默认展开的“单词详解”（巧记、例句、派生词）；随后显示“⚠️ 易混淆词”辨析和词群归属信息，最后显示“🗺️ 词群导图”。点击“📖 单词详解”标题可收起或重新展开，导图可继续点击圆圈下钻查看关联词。</div>
       <div class="rb"><strong>🧹 选择题释义显示：</strong>系统会自动清理词库中误混入释义末尾的孤立词性标记，并修复已知词条错误（<code>animal</code> 补全释义、<code>their</code> 去除多余“们”、<code>hear</code> 清理尾部残缺标点、<code>manoeuvre</code> 校正音标与释义字段），避免选项出现多余的 <code>v.</code>、<code>adj.</code> 或只有词性没有中文释义的文本。在线入口二维码指向 GitHub Pages 最新做题页。</div>
@@ -554,12 +554,12 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb">　<code>空格</code> — 选择题模式：跳过当前题目（等同于点"不会，跳过"）</div>
       <div class="rb">　<code>Esc</code> — 取消输入框焦点，回到按钮导航</div>
       <div class="rb"><strong>📡 离线说明：</strong>所有功能（含统计图表）均已内置，无需网络即可使用。用手机浏览器打开本页后，选择「添加到主屏幕」，即可像 App 一样全屏使用（需通过 https 地址访问，本地双击打开不支持安装）。</div>
-      <div class="rb"><strong>🎯 每日目标：</strong>统计页可自选每日目标（做题+复习总数），达标后做题页会弹出庆祝提示；学习热力图的深绿色格子即代表"当日达标"。大纲词汇的艾宾浩斯打卡表则以当天计划的全部 Unit 完成为准，完成后计划栏显示“当天目标已完成”。</div>
+      <div class="rb"><strong>🎯 每日目标：</strong>统计页可自选每日目标（做题+复习总数），达标后做题页会弹出庆祝提示；学习热力图的深绿色格子即代表"当日达标"。大纲词汇的艾宾浩斯打卡表则以当天计划的全部 Unit 完成为准（以当天实际作答结算，不限做题入口），完成后计划栏显示“当天目标已完成”。</div>
       <div class="rb"><strong>🧠 记忆模式：</strong>做完一题即从队列移除，答错的词按当前词库的书中记忆规律自动排期回来复习。打开网页时若有到期单词，做题页顶部会显示复习横幅，点击"开始复习"一键清债；复习采用四选一快刷，复习中跳过视同答错。复习只从首次作答开始计，历史数据不迁移。</div>
       <div class="rb"><strong>🔊 朗读发音：</strong>点击喇叭按钮时优先使用普通媒体音频，以便跟随视频/音乐的蓝牙输出；网络音频无法播放时自动回退到系统 TTS。离线使用时仍可使用系统 TTS。</div>
       <div class="rb"><strong>🔊 自动朗读：</strong>开始做题前可在“练习设置”中切换“自动朗读：开/关”，开关会保存到本机。开启后仅在“看英文 → 选中文”模式下，每显示一道新题自动朗读一次；答题反馈或局部刷新不会让同一道题重复朗读。切换到“看中文 → 选英文”或关闭开关后不会自动朗读。手机浏览器若限制后台/非用户操作播放，仍可点击题面旁的“🔊 朗读”按钮。</div>
-      <div class="rb"><strong>💾 中途退出：</strong>做题过程中会即时保存当前题位、已答数量和已选答案；手机切到后台、刷新页面或关闭网页时还会通过页面生命周期事件再保存一次，因此重新打开后点击顶部“继续做题”即可接着完成同一队列。手机从其他应用返回后，恢复保护会持续忽略浏览器补发的旧“不会，跳过”事件：首次真实点击选项可正常作答，只有重新回到前台后实际按下跳过按钮才会执行跳过。4 周 25 天计划会同时保存当日进度，复习提醒也会显示实际的已完成题数和待完成题数；当天新 Unit 的全部单词学完后会记录为已完成，不会再次生成同一 Unit 的整组复习；进入新的一天后，旧日未完成队列会按新的每日计划重置，已完成的旧快照会在重进时自动清除。</div>
-      <div class="rb"><strong>🧠 智能练习：</strong>这不是生成式 AI，而是按规则自动安排优先级：先练重点词和已经到期的复习词，再练从未做过、错误率较高或答错次数较多的词。系统从当前词库和 Unit 筛选范围中取词，数量按“每次学习”设置的 20/40/60 词决定，并沿用当前的做题方向、题目类型和闯关模式。智能练习不是只练错题；只练错题请使用“重做当前模式错题”，智能练习答错的单词仍会进入错题本。</div>
+      <div class="rb"><strong>💾 中途退出：</strong>做题过程中会即时保存当前题位、已答数量和已选答案；手机切到后台、刷新页面或关闭网页时还会通过页面生命周期事件再保存一次，因此重新打开后点击顶部“继续做题”即可接着完成同一队列。手机从其他应用返回后，恢复保护会持续忽略浏览器补发的旧“不会，跳过”事件：首次真实点击选项可正常作答，只有重新回到前台后实际按下跳过按钮才会执行跳过。4 周 25 天计划会同时保存当日进度，复习提醒也会显示实际的已完成题数和待完成题数；当天新 Unit 的全部单词学完后会记录为已完成，不会再次生成同一 Unit 的整组复习；复习队列中断后重新开始时只推送当天尚未答过的词，已练过的题不会重复出现；进入新的一天后，旧日未完成队列会按新的每日计划重置（若前一天的任务实际已全部答完，会按作答记录补判并正常进入下一天），已完成的旧快照会在重进时自动清除。</div>
+      <div class="rb"><strong>🧠 智能练习：</strong>这不是生成式 AI，而是按规则自动安排优先级：先练重点词和已经到期的复习词，再练从未做过、错误率较高或答错次数较多的词。系统从当前词库和 Unit 筛选范围中取词，数量按“每次学习”设置的 20/40/60 词决定，并沿用当前的做题方向、题目类型和闯关模式。通过智能练习或普通“开始做题”完成的 4 周 25 天计划 Unit，只要当天全部单词都答过一遍，同样会计入打卡进度。智能练习不是只练错题；只练错题请使用“重做当前模式错题”，智能练习答错的单词仍会进入错题本。</div>
       <div class="rb" style="text-align:center;margin-top:8px;"><span style="color:var(--accent2);cursor:pointer;text-decoration:underline;" onclick="document.getElementById('rulesCard').classList.toggle('collapsed')">点击收起 ▲</span></div>
     </div>
   </div>
@@ -1572,12 +1572,15 @@ var POOL_META = {
 };
 
 // 刘晓艳书末「艾宾浩斯抗遗忘复习打卡表」（4周25天）：每天学一个新Unit，复习间隔 +1/+3/+6/+12 天
-// 第N天学 Unit min(N,14)；Unit U 的复习日为 第 U+1、U+3、U+6、U+12 天
+// 第N天学 Unit min(N,14)；Unit U 的复习日为 第 U+1、U+3、U+6、U+12 天。
+// 旧表第12天起把 +12 间隔错排成了 +11（例如 Unit 1 的末次复习被排到第12天、
+// 第25天只复习 Unit 14），导致第12天起每天到期 Unit 与书表不一致，此处按规则重排。
+// Unit 14 按 +12 应在第26天复习，超出25天表，末次复习并入第25天。
 var EBBING_25_DAY_PLAN = [
   [1], [2, 1], [3, 2], [4, 1, 3], [5, 2, 4], [6, 3, 5], [7, 1, 4, 6],
-  [8, 2, 5, 7], [9, 3, 6, 8], [10, 4, 7, 9], [11, 5, 8, 10], [12, 1, 6, 9, 11],
-  [13, 2, 7, 10, 12], [14, 3, 8, 11, 13], [4, 9, 12, 14], [5, 10, 13], [6, 11, 14],
-  [7, 12], [8, 13], [9, 14], [10], [11], [12], [13], [14]
+  [8, 2, 5, 7], [9, 3, 6, 8], [10, 4, 7, 9], [11, 5, 8, 10], [12, 6, 9, 11],
+  [13, 1, 7, 10, 12], [14, 2, 8, 11, 13], [3, 9, 12, 14], [4, 10, 13], [5, 11, 14],
+  [6, 12], [7, 13], [8, 14], [9], [10], [11], [12], [13, 14]
 ];
 var EBING_UNITS = 14;
 
@@ -2555,6 +2558,12 @@ function syncEbbingPlan(now) {
   var todayKey = dayKeyStr(now);
   if (plan.dayKey !== todayKey) {
     var completed = isEbbingPlanComplete(plan);
+    if (!completed) {
+      // 兼容旧版漏记：旧逻辑只在复习队列/记忆模式里累计 Unit 完成数，通过
+      // 普通做题、智能练习等路径完成的当天任务可能一个 Unit 都没记上。
+      // 跨天结算时按前一天的实际作答记录补判，避免已完成的任务被整段清零重做。
+      completed = isEbbingPlanFullyAnsweredBetween(plan, startOfTodayMs(now) - REVIEW_DAY, startOfTodayMs(now));
+    }
     plan.dayKey = todayKey;
     if (completed) {
       // A completed plan becomes eligible to advance only on the next natural day.
@@ -2567,13 +2576,21 @@ function syncEbbingPlan(now) {
       plan.completedUnits = [];
     }
   }
-  // A previously learned Unit may already have all its attempts when a new
-  // day starts (for example after a refresh). Reconcile that fact into the
-  // current plan so it cannot reappear as a duplicate full-unit review.
+  // Reconcile today's actual practice into the plan no matter which quiz path
+  // produced it (复习队列 / 记忆模式 / 普通开始做题 / 智能练习 / 默写)：
+  // - 当天新 Unit：每个词都有过作答即视为学完（沿用旧规则）；
+  // - 到期复习 Unit：每个词在今天 0 点后都答过才算复习完成，防止只靠旧记录混过。
+  var changed = false;
   var todayUnit = plan.day <= EBING_UNITS ? Math.min(plan.day, EBING_UNITS) : 0;
-  if (todayUnit && isEbbingUnitLearned(todayUnit) && addEbbingPlanUnitCompletion(plan, todayUnit, now)) {
-    saveState();
+  if (todayUnit && isEbbingUnitLearned(todayUnit)) {
+    changed = addEbbingPlanUnitCompletion(plan, todayUnit, now) || changed;
   }
+  ebbingPlanUnits(plan.day).forEach(function(unit) {
+    if (isEbbingUnitReviewedToday(unit, now)) {
+      changed = addEbbingPlanUnitCompletion(plan, unit, now) || changed;
+    }
+  });
+  if (changed) saveState();
   return plan;
 }
 
@@ -2584,18 +2601,58 @@ function isEbbingPlanComplete(plan) {
   });
 }
 
+function startOfTodayMs(now) {
+  now = now || new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+}
+
+// 每个 Unit 的词列表按需缓存（ALL_WORDS 静态，Unit 划分不变）
+function ebbingUnitWords(unit) {
+  var cache = window._ebbingUnitWordsCache || (window._ebbingUnitWordsCache = {});
+  unit = Number(unit);
+  if (!cache[unit]) {
+    cache[unit] = ALL_WORDS.filter(function(word) { return Number(word.unit) === unit; });
+  }
+  return cache[unit];
+}
+
 // A new Unit is considered learned once every word in that Unit has at least
 // one recorded attempt in the outline pool. This keeps the day's new Unit
 // from being offered again as a full review queue after the learning session.
 function isEbbingUnitLearned(unit) {
   unit = Number(unit);
   if (!isFinite(unit) || unit <= 0) return false;
-  var words = ALL_WORDS.filter(function(word) { return Number(word.unit) === unit; });
+  var words = ebbingUnitWords(unit);
   if (words.length === 0) return false;
   var attempts = (state.stats && state.stats.wordAttempts) || {};
   return words.every(function(word) {
     var wa = attempts[wordStateKey(word.id, 'core')];
     return !!(wa && Number(wa.attempts) > 0);
+  });
+}
+
+// 「今天已复习」判定：该 Unit 每个词在今天 0 点之后都答过至少一次。
+// 以 lastTime 实际作答时间为准，而不是打卡队列自己的计数，
+// 这样普通做题、智能练习、默写里完成的复习同样计入打卡。
+function isEbbingUnitReviewedToday(unit, now) {
+  return isEbbingUnitFullyAnsweredBetween(unit, startOfTodayMs(now), Infinity);
+}
+
+function isEbbingPlanFullyAnsweredBetween(plan, fromMs, toMs) {
+  return ebbingPlanUnits(plan.day).every(function(unit) {
+    return isEbbingUnitFullyAnsweredBetween(unit, fromMs, toMs);
+  });
+}
+
+function isEbbingUnitFullyAnsweredBetween(unit, fromMs, toMs) {
+  unit = Number(unit);
+  if (!isFinite(unit) || unit <= 0) return false;
+  var words = ebbingUnitWords(unit);
+  if (words.length === 0) return false;
+  var attempts = (state.stats && state.stats.wordAttempts) || {};
+  return words.every(function(word) {
+    var wa = attempts[wordStateKey(word.id, 'core')];
+    return !!(wa && Number(wa.lastTime) >= fromMs && Number(wa.lastTime) < toMs);
   });
 }
 
@@ -2690,15 +2747,21 @@ function advanceFullGridReview(wa, isCorrect, now) {
   delete wa.retryAt;
 }
 
-// 大纲词汇：到期 Unit 展开为该 Unit 内「已做过」的词 id（复习只推送做过的题；
-// 不能用 Unit 编号直接当词 id——此前会导致复习队列变成 id=Unit编号 的那几个词）
+// 大纲词汇：到期 Unit 展开为词 id（不能用 Unit 编号直接当词 id——此前会导致
+// 复习队列变成 id=Unit编号 的那几个词）。今天 0 点后已答过的词不再重复推送，
+// 这样同一 Unit 的复习分几次做、或中途退出后重建队列时，不会把当天已练过的
+// 题再整段重做一遍；Unit 是否完成改由「全部词今天已作答」的结算统一判定。
 function dueUnitWordIds() {
   var units = dueUnitsByEbbing();
   if (units.length === 0) return [];
+  var floor = startOfTodayMs(new Date());
+  var attempts = state.stats.wordAttempts || {};
   var ids = [];
   units.forEach(function(unit) {
-    ALL_WORDS.forEach(function(word) {
-      if (word.unit === unit) ids.push(word.id);
+    ebbingUnitWords(unit).forEach(function(word) {
+      var wa = attempts[wordStateKey(word.id, 'core')];
+      if (wa && Number(wa.lastTime) >= floor) return;
+      ids.push(word.id);
     });
   });
   return ids;
