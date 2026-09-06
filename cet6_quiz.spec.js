@@ -486,14 +486,15 @@ test('unit filter restricts pool and count', async ({ page }) => {
   expect(count).toMatch(/共 \d+ 词/);
 });
 
-test('learn size buttons exist and quiz uses 20-word default', async ({ page }) => {
-  const sizes = await page.evaluate(() => [...document.querySelectorAll('#sizeRow .mode-btn')].map(b => b.textContent.trim()));
-  expect(sizes.length).toBe(3);
+test('quiz queue covers the whole selected range and page nav is gone', async ({ page }) => {
   await page.click('button:has-text("开始做题")');
   await page.waitForSelector('.opt-btn');
   await page.waitForTimeout(400);
+  const total = await page.evaluate(() => quizState.ids.length);
   const label = await page.locator('.q-label').textContent();
-  expect(label).toContain('/ 20 题');
+  expect(label).toContain('/ ' + total + ' ');
+  expect(await page.locator('#sizeRow').count()).toBe(0);
+  await expect(page.locator('.page-nav')).toHaveCount(0);
 });
 
 test('switch to Ebbinghaus pool shows Unit 1-10 chips', async ({ page }) => {
@@ -707,8 +708,6 @@ test('8-grid review: grid progress shows after learning in Ebbinghaus pool', asy
   const detail = await page.locator('.word-detail').textContent();
   expect(detail).toContain('打卡');
 });
-
-// ============ PAGE NAV (页导航：单 Unit 独立编页 20词/页) ============
 
 test('8-grid review is chained from the previous completed grid instead of first learning time', async ({ page }) => {
   const result = await page.evaluate(() => {
@@ -1089,101 +1088,38 @@ test('restarting the core 25-day plan discards prior plan position while preserv
   expect(result.attempt).toMatchObject({ attempts: 2, correct: 1, wrong: 1 });
 });
 
-test('page nav: single unit shows page number and controls', async ({ page }) => {
-  // 选 Unit 1（核心库，154词 → 8页），再开始做题
+// ============ 做题进度（页导航已移除：整轮队列 + 当前进度条居中） ============
+
+test('unit quiz queue covers the whole unit and shows question progress', async ({ page }) => {
   await page.evaluate(() => document.querySelector('#unitFilterRow .freq-chip[data-unit="1"]').click());
   await page.waitForTimeout(300);
   await page.click('button:has-text("开始做题")');
-  await page.waitForSelector('.page-nav');
-  const nav = await page.locator('.page-nav').textContent();
-  expect(nav).toContain('Unit 1 · 第 1/8 页');
-  // 首页：上一页禁用，下一页可用
-  await expect(page.locator('.page-nav button:has-text("上一页")')).toBeDisabled();
-  await expect(page.locator('.page-nav button:has-text("下一页")')).toBeEnabled();
-});
-
-test('page nav: resume continues from saved page', async ({ page }) => {
-  await page.evaluate(() => document.querySelector('#unitFilterRow .freq-chip[data-unit="1"]').click());
-  await page.waitForTimeout(300);
-  // 预置续刷进度：core_u1 第3页
-  await page.evaluate(() => {
-    localStorage.setItem('cet6_page_progress_v1', JSON.stringify({ k: 'core_u1', page: 3 }));
-  });
-  await page.click('button:has-text("开始做题")');
-  await page.waitForSelector('.page-nav');
-  const nav = await page.locator('.page-nav').textContent();
-  expect(nav).toContain('Unit 1 · 第 3/8 页');
-});
-
-test('page nav: next-page button jumps and saves progress', async ({ page }) => {
-  await page.evaluate(() => document.querySelector('#unitFilterRow .freq-chip[data-unit="1"]').click());
-  await page.waitForTimeout(300);
-  await page.click('button:has-text("开始做题")');
-  await page.waitForSelector('.page-nav');
-  expect(await page.locator('.page-nav').textContent()).toContain('第 1/8 页');
-  // 点下一页 → 跳到第2页，并写入 localStorage
-  await page.locator('.page-nav button:has-text("下一页")').click();
-  await page.waitForSelector('.page-nav');
-  expect(await page.locator('.page-nav').textContent()).toContain('Unit 1 · 第 2/8 页');
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('cet6_page_progress_v1') || 'null'));
-  expect(saved).toEqual({ k: 'core_u1', page: 2 });
-});
-
-test('page nav: finishing a round advances resume page', async ({ page }) => {
-  await page.evaluate(() => document.querySelector('#unitFilterRow .freq-chip[data-unit="1"]').click());
-  await page.waitForTimeout(300);
-  await page.click('button:has-text("开始做题")');
-  await page.waitForSelector('.page-nav');
-  expect(await page.locator('.page-nav').textContent()).toContain('第 1/8 页');
-  // 连答 20 题（learnSize 默认 20）完成本轮 → 续刷应推进到第2页
-  for (let i = 0; i < 20; i++) {
-    await page.locator('.opt-btn').first().click();
-    await page.waitForSelector('.next-btn.show', { timeout: 3000 });
-    await page.locator('.next-btn').click();
-    await page.waitForTimeout(120);
-  }
-  await expect(page.locator('#startBtn')).toContainText('再来一轮');
-  await page.click('#startBtn');
-  await page.waitForSelector('.page-nav');
-  const nav2 = await page.locator('.page-nav').textContent();
-  expect(nav2).toContain('Unit 1 · 第 2/8 页');
-});
-
-test('page nav: all-range shows position only without controls', async ({ page }) => {
-  // 默认「全部」范围：只显示位置参考，无跳页按钮
-  await page.click('button:has-text("开始做题")');
-  await page.waitForSelector('.page-nav');
-  const nav = await page.locator('.page-nav').textContent();
-  expect(nav).toContain('第');
-  await expect(page.locator('.page-nav button')).toHaveCount(0);
-});
-
-test('page nav: memory mode shows position only without controls', async ({ page }) => {
-  await page.evaluate(() => document.querySelector('#unitFilterRow .freq-chip[data-unit="1"]').click());
-  await page.waitForTimeout(300);
-  await page.evaluate(() => document.getElementById('memoryBtn').click());
-  await page.waitForTimeout(100);
-  await page.click('button:has-text("开始做题")');
-  await page.waitForSelector('.page-nav');
-  const nav = await page.locator('.page-nav').textContent();
-  expect(nav).toContain('Unit 1 · 第');
-  await expect(page.locator('.page-nav button')).toHaveCount(0);
-});
-
-test('page nav: retry mode hides page info', async ({ page }) => {
-  // 注入 4 个错题后重做，重做不显示页码
-  await page.evaluate(() => {
-    const st = JSON.parse(localStorage.getItem('cet6_quiz_app_v2') || '{}');
-    st.wrongWordIds = st.wrongWordIds || {};
-    st.wrongWordIds['cn2en_core'] = { 1: {}, 2: {}, 3: {}, 4: {} };
-    localStorage.setItem('cet6_quiz_app_v2', JSON.stringify(st));
-  });
-  await page.reload();
-  await page.waitForTimeout(800);
-  await page.click('#retryQuizBtn');
   await page.waitForSelector('.opt-btn');
-  await page.waitForTimeout(300);
   await expect(page.locator('.page-nav')).toHaveCount(0);
+  const total = await page.evaluate(() => quizState.ids.length);
+  expect(total).toBe(154);
+  const dots = await page.locator('.question-progress .progress-dot').count();
+  expect(dots).toBe(154);
+  await expect(page.locator('.question-progress .progress-dot.current')).toHaveCount(1);
+});
+
+test('progress bar keeps the current question centered including first and last', async ({ page }) => {
+  await page.evaluate(() => document.querySelector('#unitFilterRow .freq-chip[data-unit="1"]').click());
+  await page.waitForTimeout(300);
+  await page.click('button:has-text("开始做题")');
+  await page.waitForSelector('.opt-btn');
+  const centerOffset = () => page.evaluate(() => {
+    const bar = document.querySelector('.question-progress');
+    const dot = bar.querySelector('.progress-dot.current');
+    const barRect = bar.getBoundingClientRect();
+    const dotRect = dot.getBoundingClientRect();
+    return Math.abs((dotRect.left + dotRect.width / 2) - (barRect.left + barRect.width / 2));
+  });
+  expect(await centerOffset()).toBeLessThanOrEqual(16);
+  // 跳到最后一题：末题同样居中
+  await page.evaluate(() => jumpToQuestion(154));
+  await page.waitForTimeout(250);
+  expect(await centerOffset()).toBeLessThanOrEqual(16);
 });
 
 test.describe('back-to-top', () => {

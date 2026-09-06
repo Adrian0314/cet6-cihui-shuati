@@ -66,7 +66,7 @@ SEED_JS = """
             reviewCorrect: 0, questionSnapshots: [], memoryResults: [],
             isEbbingPlan: true, ebbingPlanDayKey: keyFor(seed.dayKeyOffset || 0),
             ebbingPlanUnits: ebbingPlanUnits(seed.day), ebbingPlanRemaining: {}, ebbingPlanAnswered: {},
-            poolType: 'core', currentId: null, memWrong: 0, memTotal: ids.length, pageStart: 0
+            poolType: 'core', currentId: null, memWrong: 0, memTotal: ids.length
         };
     }
     saveState();

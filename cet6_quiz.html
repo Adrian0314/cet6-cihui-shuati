@@ -439,7 +439,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
 .question-progress{margin:0 auto 16px;max-width:900px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);overflow-x:auto}
 .progress-meta{display:flex;justify-content:space-between;gap:12px;margin-bottom:8px;color:var(--text2);font-size:.75rem;white-space:nowrap}
 .progress-meta strong{color:var(--accent)}
-.progress-track{display:flex;gap:5px;min-width:max-content}
+.progress-track{display:flex;gap:5px;min-width:max-content;padding:0 calc(50% - 12px)}
 .progress-dot{display:inline-flex;align-items:center;justify-content:center;width:24px;height:7px;border-radius:4px;background:var(--border);color:transparent;font-size:0;transition:background 180ms,transform 180ms}
 .progress-dot.current{background:var(--accent);transform:scaleY(1.35)}
 .progress-dot.correct{background:var(--green)}
@@ -553,7 +553,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>⭐ 重点词：</strong>在单词标题与音标右侧/旁边点击「☆ 标记重点」或「★ 已标记」即可标记或取消当前单词；状态会同步到「重点词」列表，并影响「智能练习」的优先级。</div>
       <div class="rb"><strong>🗺️ 词群导图：</strong>答完题后自动显示当前词的词群关系图（单词浏览器中点「🗺️ 导图」按钮也可查看）——中心=词群主题或当前词，四周圆圈=关联词。圆圈外侧的 <span class="gl-badge">2</span> 绿色数字徽标表示该词下面还有几个分支：点击带徽标的圆圈逐层展开，没有徽标的圆圈=末端词（无分支），点击会朗读发音。点击单词文字同样朗读，点「← 返回上级」退回上一层。连线颜色区分关系：绿=派生（扩/合成）、蓝=同根、橙=近义、红=反义、粉=形近、灰=相关，虚线=形近/反义。</div>
       <div class="rb"><strong>📱 导图查看器手机布局：</strong>打开独立「词群导图查看器」时，标题、工具栏分层显示；工具栏控件在同一行，可左右滑动查看全部工具；「◀ 上一个」和「下一个 ▶」导航条固定在底部、独立成行位于关系色图例上方，与图例互不挤占；每次加载新的词群导图（切换 Unit/词群、上一个/下一个）时，初始视野自动以根节点为中心（缩放复位并居中定位）。</div>
-      <div class="rb"><strong>📖 单元筛选与学习量：</strong>可手动切换要学习的 Unit（大纲词汇 Unit 1-14 / 核心词汇 Unit 1-10）；每次学习量按书中页数设定（1页≈20词，可选 1/2/3 页）。</div>
+<div class="rb"><strong>📖 单元筛选：</strong>可手动切换要学习的 Unit（大纲词汇 Unit 1-14 / 核心词汇 Unit 1-10）或全部单元；做题队列为当前筛选范围内的全部单词。</div>
       <div class="rb"><strong>⌨️ 电脑端快捷键：</strong></div>
       <div class="rb">　<code>1</code> <code>2</code> <code>3</code> <code>4</code> — 选择题模式：直接选择对应选项</div>
       <div class="rb">　<code>←</code> <code>→</code> — 做题时随时切换上一题 / 下一题；顶部导航框可输入题号直接跳转</div>
@@ -567,7 +567,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>🔊 朗读发音：</strong>点击喇叭按钮时优先使用普通媒体音频，以便跟随视频/音乐的蓝牙输出；网络音频无法播放时自动回退到系统 TTS。离线使用时仍可使用系统 TTS。</div>
       <div class="rb"><strong>🔊 自动朗读：</strong>开始做题前可在“练习设置”中切换“自动朗读：开/关”，开关会保存到本机。开启后仅在“看英文 → 选中文”模式下，每显示一道新题自动朗读一次；答题反馈或局部刷新不会让同一道题重复朗读。切换到“看中文 → 选英文”或关闭开关后不会自动朗读。手机浏览器若限制后台/非用户操作播放，仍可点击题面旁的“🔊 朗读”按钮。</div>
       <div class="rb"><strong>💾 中途退出：</strong>做题过程中会即时保存当前题位、已答数量和已选答案；手机切到后台、刷新页面或关闭网页时还会通过页面生命周期事件再保存一次，因此重新打开后点击顶部“继续做题”即可接着完成同一队列。手机从其他应用返回后，恢复保护会持续忽略浏览器补发的旧“不会，跳过”事件：首次真实点击选项可正常作答，只有实际按下跳过按钮才会执行跳过。跳过点击还必须落在真实起手之后 1.5 秒内（pointer/touch 按下或抬起落在跳过按钮上），且起手必须发生在切回前台之后——浏览器补发的旧触摸（含完整指针/触摸序列重放）会被整事件取消，无论是否命中恢复保护窗口都会被拒绝，切后台很久再回来，点击选项不会被误判为跳过，跳过按钮也不会再无故闪动。4 周 25 天计划会同时保存当日进度，复习提醒也会显示实际的已完成题数和待完成题数；当天新 Unit 的全部单词学完后会记录为已完成，不会再次生成同一 Unit 的整组复习；复习队列中断后重新开始时只推送当天尚未答过的词，已练过的题不会重复出现；进入新的一天后，旧日未完成队列会按新的每日计划重置（若前一天的任务实际已全部答完，会按作答记录补判并正常进入下一天），已完成的旧快照会在重进时自动清除。</div>
-      <div class="rb"><strong>🧠 智能练习：</strong>这不是生成式 AI，而是按规则自动安排优先级：先练重点词和已经到期的复习词，再练从未做过、错误率较高或答错次数较多的词。系统从当前词库和 Unit 筛选范围中取词，数量按“每次学习”设置的 20/40/60 词决定，并沿用当前的做题方向、题目类型和闯关模式。通过智能练习或普通“开始做题”完成的 4 周 25 天计划 Unit，只要当天全部单词都答过一遍，同样会计入打卡进度。智能练习不是只练错题；只练错题请使用“重做当前模式错题”，智能练习答错的单词仍会进入错题本。</div>
+      <div class="rb"><strong>🧠 智能练习：</strong>这不是生成式 AI，而是按规则自动安排优先级：先练重点词和已经到期的复习词，再练从未做过、错误率较高或答错次数较多的词。系统从当前词库和 Unit 筛选范围中取词，覆盖当前筛选范围内的全部单词（按优先级排序），并沿用当前的做题方向、题目类型和闯关模式。通过智能练习或普通“开始做题”完成的 4 周 25 天计划 Unit，只要当天全部单词都答过一遍，同样会计入打卡进度。智能练习不是只练错题；只练错题请使用“重做当前模式错题”，智能练习答错的单词仍会进入错题本。</div>
       <div class="rb" style="text-align:center;margin-top:8px;"><span style="color:var(--accent2);cursor:pointer;text-decoration:underline;" onclick="document.getElementById('rulesCard').classList.toggle('collapsed')">点击收起 ▲</span></div>
     </div>
   </div>
@@ -629,15 +629,6 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
           <option value="0">全部单元</option>
         </select>
         <span class="freq-count" id="freqCount"></span>
-      </div>
-      <div class="mode-row setting-item" id="sizeRow">
-        <label for="sizeSelect">每次学习</label>
-        <select class="setting-select" id="sizeSelect">
-          <option value="20">1 页 · 20 词</option>
-          <option value="40">2 页 · 40 词</option>
-          <option value="60">3 页 · 60 词</option>
-        </select>
-        <span class="setting-note">每页约 20 词</span>
       </div>
       <div class="mode-row setting-item memory-setting">
         <label>学习方式</label>
@@ -1595,7 +1586,6 @@ function normalizeState(input) {
 // ============ POOL & UNIT FILTER ============
 var currentPool = 'full';       // 'core' | 'full'
 var selectedUnits = [0];        // [0]=全部; 其他为选中的Unit编号
-var learnSize = 20;             // 每次学习量（1页≈20词）
 var gateLevel = 2;              // 闯关模式：1速记 / 2选择 / 3 Unit综合测
 
 // 词库元信息：pool → {name, units:[...]}
@@ -1680,96 +1670,6 @@ function getActivePool() {
   var unitSet = {};
   for (var ui = 0; ui < selectedUnits.length; ui++) unitSet[selectedUnits[ui]] = true;
   return pool.filter(function(w) { return unitSet[w.unit]; });
-}
-
-// ============ PAGE NAV (页导航：每个 Unit 内独立编页，20词/页) ============
-var PAGE_SIZE = 20;
-var PAGE_KEY = 'cet6_page_progress_v1';
-
-// 当前范围是否为单一 Unit（完整页导航启用条件；「全部」/多选时仅作位置参考）
-function isSingleUnitRange() {
-  return selectedUnits.length === 1 && selectedUnits[0] !== 0;
-}
-
-// 当前词库某 Unit 的全部词（保持数据数组顺序，Unit 分组在数组内连续）
-function getUnitWordList(unit) {
-  var pool = (currentPool === 'core') ? ALL_WORDS : (ensureFullWords(), (FULL_WORDS || []));
-  return pool.filter(function(w) { return w.unit === unit; });
-}
-
-// 词 → 所属 Unit 内的页信息（page/inPage 从 1 起）；unit 缺失时返回 null
-function pageOfWord(word) {
-  if (!word || typeof word.id === 'undefined' || typeof word.unit === 'undefined') return null;
-  var words = getUnitWordList(word.unit);
-  for (var i = 0; i < words.length; i++) {
-    if (words[i].id === word.id) {
-      return {
-        unit: word.unit,
-        page: Math.floor(i / PAGE_SIZE) + 1,
-        totalPages: Math.ceil(words.length / PAGE_SIZE),
-        inPage: (i % PAGE_SIZE) + 1,
-        totalWords: words.length
-      };
-    }
-  }
-  return null;
-}
-
-// 续刷起始页：按「词库+范围」存（单 Unit 用该 Unit；其余用 all）
-function pageProgressKey() {
-  return currentPool + '_u' + (isSingleUnitRange() ? selectedUnits[0] : 'all');
-}
-function getSavedPageStart() {
-  try {
-    var d = JSON.parse(localStorage.getItem(PAGE_KEY) || 'null');
-    if (d && d.k === pageProgressKey() && d.page >= 1) return Math.floor(d.page);
-  } catch (e) {}
-  return 1;
-}
-function savePageStart(page) {
-  try {
-    localStorage.setItem(PAGE_KEY, JSON.stringify({ k: pageProgressKey(), page: page }));
-  } catch (e) {}
-}
-
-// 本轮从 startPage 起实际覆盖的页数（finishQuiz 推进续刷用）
-function roundPagesCovered(startPage, roundWords) {
-  var words = getUnitWordList(selectedUnits[0]);
-  var startIndex = (startPage - 1) * PAGE_SIZE;
-  var covered = Math.min(roundWords, words.length - startIndex);
-  return Math.max(1, Math.ceil(covered / PAGE_SIZE));
-}
-
-// 页码导航条 HTML（showControls=false 时只显示位置与进度，用于记忆模式）
-function pageNavHTML(pageInfo, showControls) {
-  if (!pageInfo) return '';
-  var unitLabel = (pageInfo.unit === 0) ? '补充词' : ('Unit ' + pageInfo.unit);
-  var pct = Math.round(pageInfo.inPage / PAGE_SIZE * 100);
-  var html =
-    '<div class="page-nav" style="display:flex;align-items:center;justify-content:center;gap:10px;margin:0 0 12px;flex-wrap:wrap;">' +
-    '<span style="color:var(--accent2);font-size:0.85em;font-weight:600;white-space:nowrap;">\u{1F4D6} ' + unitLabel + ' · 第 ' + pageInfo.page + '/' + pageInfo.totalPages + ' 页</span>' +
-    '<div title="本页第 ' + pageInfo.inPage + ' / ' + pageInfo.totalWords + ' 词" style="width:96px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;">' +
-    '<div style="transform:scaleX(' + (pct/100) + ');height:100%;background:var(--accent2);border-radius:3px;transform-origin:left;transition:transform 200ms;"></div></div>';
-  if (showControls) {
-    html +=
-      '<button class="ctrl-btn" onclick="pageGo(-1)" ' + (pageInfo.page <= 1 ? 'disabled' : '') + ' style="padding:3px 14px;font-size:0.8em;">◀ 上一页</button>' +
-      '<button class="ctrl-btn" onclick="pageGo(1)" ' + (pageInfo.page >= pageInfo.totalPages ? 'disabled' : '') + ' style="padding:3px 14px;font-size:0.8em;">下一页 ▶</button>';
-  }
-  html += '</div>';
-  return html;
-}
-
-// 跳页：保存目标起始页后重新开始本轮（放弃当前轮）
-function pageGo(delta) {
-  if (!quizActive || !quizState.current) return;
-  var pi = pageOfWord(quizState.current.word);
-  if (!pi) return;
-  var target = pi.page + delta;
-  if (target < 1) target = 1;
-  if (target > pi.totalPages) target = pi.totalPages;
-  if (target === pi.page) return;
-  savePageStart(target);
-  startNewQuiz(currentMode);
 }
 
 function getFullWordById(id) {
@@ -1894,12 +1794,12 @@ function getSmartQueueIds(poolName, limit, sourceIds) {
     return { id: word.id, score: score, index: index };
   });
   ranked.sort(function(a, b) { return b.score - a.score || a.index - b.index; });
-  var count = finiteInt(limit, learnSize || 20, 1, 1000);
+  var count = finiteInt(limit, ranked.length, 1, ranked.length);
   return ranked.slice(0, count).map(function(item) { return item.id; });
 }
 
 function startSmartQuiz(mode, sourceIds) {
-  var ids = getSmartQueueIds(currentPool, learnSize || 20, sourceIds);
+  var ids = getSmartQueueIds(currentPool, 0, sourceIds);
   if (ids.length === 0) { alert('当前筛选范围没有可练习的单词。'); return; }
   var words = ids.map(function(id) { return getWord(id, currentPool); }).filter(Boolean);
   buildQuiz(mode || currentMode, words);
@@ -2334,19 +2234,8 @@ function buildQuiz(mode, wordPool) {
   var ids = pool.map(function(w) { return w.id; });
   // 过滤无效 id（数据异常保护）
   ids = ids.filter(function(id) { return getWord(id, currentPool) !== null; });
-  // 学习量：闯关3=测整个选中范围；重做=全部错题乱序；新学=按书序取前 learnSize 词（1页≈20词）
-  var limit = (gateLevel === 3) ? ids.length : learnSize;
-  var ordered;
-  var pageStart = 0;
-  // 页导航：单一 Unit 且非重做时，从续刷起始页取词（每页20词，起始页与学习量正交）
-  if (!wordPool && isSingleUnitRange()) {
-    pageStart = getSavedPageStart();
-    var startIndex = (pageStart - 1) * PAGE_SIZE;
-    if (startIndex >= ids.length) { startIndex = 0; pageStart = 1; } // 防御：续刷页越界回第1页
-    ordered = ids.slice(startIndex, startIndex + limit);
-  } else {
-    ordered = ids.slice(0, limit);
-  }
+  // 队列：当前筛选范围的全部单词（按书中顺序）；重做模式为全部错题乱序
+  var ordered = ids;
   var finalIds = (!!wordPool) ? shuffle(ordered) : ordered;
   quizState = {
     mode: mode,
@@ -2362,8 +2251,7 @@ function buildQuiz(mode, wordPool) {
     done: 0,
     current: null,
     poolType: currentPool,
-    gate: gateLevel,
-    pageStart: pageStart
+    gate: gateLevel
   };
   quizActive = true;
   document.getElementById('retryInfo').classList.toggle('show', quizState.isRetry);
@@ -2565,14 +2453,6 @@ function finishQuiz() {
       '<p style="font-size:0.85em;color:var(--text2);margin-top:6px;">答错 ' + mw + ' 词已加入记忆调度：错词按当前词库的书中记忆规律（4周25天打卡表 / 8格周期）自动排期回来</p></div>';
   } else {
     card.innerHTML = '<div class="empty"><div class="ei">\u{1F389}</div><p>本轮题目全部完成！共 ' + total + ' 题，已答 ' + done + ' 题</p></div>' + quizCompletionControlsHTML();
-    // 页导航：本轮完成后推进续刷起始页（学完该 Unit 最后一页自动回第 1 页）
-    if (quizState.pageStart && isSingleUnitRange()) {
-      var pgWords = getUnitWordList(selectedUnits[0]);
-      var pgTotal = Math.ceil(pgWords.length / PAGE_SIZE);
-      var pgNext = quizState.pageStart + roundPagesCovered(quizState.pageStart, quizState.ids.length);
-      if (pgNext > pgTotal) pgNext = 1;
-      savePageStart(pgNext);
-    }
   }
   document.getElementById('startBtn').style.display = 'inline-block';
   document.getElementById('startBtn').textContent = '▶ 再来一轮';
@@ -3065,8 +2945,7 @@ function suspendedQuizSnapshot(q) {
     poolType: q.poolType || currentPool,
     currentId: q.current ? q.current.word.id : null,
     memWrong: q.memWrong || 0,
-    memTotal: q.memTotal || q.ids.length,
-    pageStart: q.pageStart || 0
+    memTotal: q.memTotal || q.ids.length
   };
 }
 
@@ -3222,8 +3101,7 @@ function resumeQuiz() {
     isEbbingPlan: !!sq.isEbbingPlan,
     ebbingPlanUnits: Array.isArray(sq.ebbingPlanUnits) ? sq.ebbingPlanUnits.slice() : [],
     ebbingPlanRemaining: Object.assign({}, sq.ebbingPlanRemaining || {}),
-    ebbingPlanAnswered: Object.assign({}, sq.ebbingPlanAnswered || {}),
-    pageStart: sq.pageStart || 0
+    ebbingPlanAnswered: Object.assign({}, sq.ebbingPlanAnswered || {})
   };
   quizActive = true;
   state.suspendedQuiz = null;
@@ -3246,12 +3124,11 @@ function discardSaved() {
   document.getElementById('savedBar').classList.remove('show');
 }
 
-// ============ PREFS (做题模式持久化：词库/单元/闯关/模式/题型/记忆/自动朗读/学习量) ============
+// ============ PREFS (做题模式持久化：词库/单元/闯关/模式/题型/记忆/自动朗读) ============
 function savePrefs() {
   state.prefs = {
     pool: currentPool,
     units: selectedUnits.slice(),
-    size: learnSize,
     gate: gateLevel,
     mode: currentMode,
     type: currentQuizType,
@@ -3283,7 +3160,6 @@ function applyPrefs() {
   var p = state.prefs || {};
   if (p.pool) currentPool = p.pool;
   if (p.units && p.units.length) selectedUnits = p.units.indexOf(0) !== -1 ? [0] : [p.units[0]];
-  if (p.size) learnSize = p.size;
   if (p.gate) gateLevel = p.gate;
   if (p.mode) currentMode = p.mode;
   if (p.type) currentQuizType = p.type;
@@ -3291,11 +3167,9 @@ function applyPrefs() {
   var modeSelect = document.getElementById('modeSelect');
   var typeSelect = document.getElementById('typeSelect');
   var gateSelect = document.getElementById('gateSelect');
-  var sizeSelect = document.getElementById('sizeSelect');
   if (modeSelect) modeSelect.value = currentMode;
   if (typeSelect) typeSelect.value = currentQuizType;
   if (gateSelect) gateSelect.value = String(gateLevel);
-  if (sizeSelect) sizeSelect.value = String(learnSize);
   var mBtn = document.getElementById('memoryBtn');
   if (mBtn) mBtn.classList.toggle('active', !!p.memory);
   updateAutoSpeakUI();
@@ -3323,7 +3197,6 @@ function revertPrefsToSnapshot() {
   state.prefs = prefsCopy(_sessionPrefsSnapshot);
   currentPool = state.prefs.pool || currentPool;
   selectedUnits = state.prefs.units ? state.prefs.units.slice() : selectedUnits;
-  learnSize = state.prefs.size || learnSize;
   gateLevel = state.prefs.gate || gateLevel;
   currentMode = state.prefs.mode || currentMode;
   currentQuizType = state.prefs.type || currentQuizType;
@@ -4200,13 +4073,26 @@ function refreshQuestionProgress() {
   var wrapper = document.createElement('div');
   wrapper.innerHTML = questionProgressHTML();
   var next = wrapper.firstElementChild;
-  if (next) {
-    current.replaceWith(next);
-    scrollQuestionProgressToCurrent(next);
+  if (!next) return;
+  // 整轮队列可能长达数千题，每答一题整段重建进度点有卡顿风险：
+  // 点数一致时仅同步各点状态与文案，点数变化（新一轮队列）才整体替换。
+  var curDots = current.querySelectorAll('.progress-dot');
+  var nextDots = next.querySelectorAll('.progress-dot');
+  if (curDots.length === nextDots.length) {
+    for (var di = 0; di < nextDots.length; di++) {
+      if (curDots[di].className !== nextDots[di].className) curDots[di].className = nextDots[di].className;
+    }
+    var curMeta = current.querySelector('.progress-meta');
+    var nextMeta = next.querySelector('.progress-meta');
+    if (curMeta && nextMeta) curMeta.replaceWith(nextMeta);
+    scrollQuestionProgressToCurrent(current);
+    return;
   }
+  current.replaceWith(next);
+  scrollQuestionProgressToCurrent(next);
 }
 
-// 横向进度条重建后，将当前题尽量保持在可视区域中央；首尾题按边界显示。
+// 横向进度条重建后，将当前题保持在可视区域中央；配合 .progress-track 的对称留白，首尾题也能居中。
 function scrollQuestionProgressToCurrent(progressEl) {
   if (!progressEl) return;
   var currentDot = progressEl.querySelector('.progress-dot.current');
@@ -4253,9 +4139,6 @@ function renderQuizCard() {
   var fsText = isFS ? '⛶ 退出全屏' : '⛶ 全屏';
   var quizFavoriteHTML = favoriteButtonHTML(word, quizState.poolType || currentPool);
 
-  // 页导航：位置信息（重做/错题不显示页码）；单 Unit 才可跳页，记忆/全部/多选只显示位置
-  var pageInfo = quizState.isRetry ? null : pageOfWord(word);
-  var pageNav = pageInfo ? pageNavHTML(pageInfo, !quizState.isMemory && isSingleUnitRange()) : '';
 
   // 题目：多词性单词的每个词性统一用 badge 渲染（如 [n.]股份 [v.]分享）
   var qText = word.word;
@@ -4310,7 +4193,6 @@ function renderQuizCard() {
       '</div>' +
       navBar +
       questionProgressHTML() +
-      pageNav +
       (gGroupName ? '<div style="font-size:0.82em;color:var(--accent2);margin-bottom:10px;text-align:center;">📁 ' + gGroupName + '</div>' : '') +
       '<div class="word-info-row"><div class="word-info-main">' +
       '<div class="q-word" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + word.word + '</div>' +
@@ -4380,7 +4262,6 @@ function renderQuizCard() {
       '</div>' +
       navBar +
       questionProgressHTML() +
-      pageNav +
       '<div class="word-info-row"><div class="word-info-main">' +
       '<div class="q-word" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qText + '</div>' +
       (qPron ? '<div class="q-pron" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qPron + ' <span onclick="speakWord(\'' + word.word.replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:1.2em;" title="朗读发音">\u{1F50A}</span></div>' : '') +
@@ -4447,7 +4328,6 @@ function renderQuizCard() {
       '</div>' +
       navBar +
       questionProgressHTML() +
-      pageNav +
       '<div class="word-info-row"><div class="word-info-main">' +
       '<div class="q-word" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qText + '</div>' +
       (qPron ? '<div class="q-pron" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qPron + '</div>' : '') +
@@ -5778,7 +5658,6 @@ function exportAllData() {
     state: state,
     currentPool: currentPool,
     selectedUnits: selectedUnits,
-    learnSize: learnSize,
     gateLevel: gateLevel,
     currentMode: currentMode,
     currentQuizType: currentQuizType,
@@ -5856,7 +5735,6 @@ function handleImport(file) {
       // Restore pool/mode settings
       if (data.currentPool === 'full' || data.currentPool === 'core') currentPool = data.currentPool;
       if (Array.isArray(data.selectedUnits) && data.selectedUnits.length) selectedUnits = data.selectedUnits.indexOf(0) !== -1 ? [0] : [data.selectedUnits[0]];
-      if (isFinite(Number(data.learnSize)) && Number(data.learnSize) > 0) learnSize = finiteInt(data.learnSize, learnSize, 1, 1000);
       if (isFinite(Number(data.gateLevel))) gateLevel = finiteInt(data.gateLevel, gateLevel, 1, 3);
       if (data.currentMode === 'cn2en' || data.currentMode === 'en2cn') currentMode = data.currentMode;
       if (data.currentQuizType === 'choice' || data.currentQuizType === 'dictation') currentQuizType = data.currentQuizType;
@@ -6132,15 +6010,6 @@ if (unitSelect) {
     }
   });
 }
-
-// 学习量（每次学几页）
-var sizeSelect = document.getElementById('sizeSelect');
-if (sizeSelect) sizeSelect.addEventListener('change', function() {
-    var sz = parseInt(this.value, 10);
-    if (!sz) return;
-    learnSize = sz;
-    savePrefs();
-});
 
 // 闯关模式
 var gateSelect = document.getElementById('gateSelect');
