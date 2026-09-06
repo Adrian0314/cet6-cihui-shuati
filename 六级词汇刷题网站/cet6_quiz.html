@@ -53,10 +53,16 @@
    看起来像“卡顿一下才切换”。余量 + 较平缓的缓动保证整屏在动画中段就已
    被新主题覆盖，圆边在视口外收尾，不再有角落残留。 */
 ::view-transition-old(root){animation:none;mix-blend-mode:normal}
-::view-transition-new(root){mix-blend-mode:normal;clip-path:circle(var(--vt-r,200vmax) at var(--vt-x,50%) var(--vt-y,50%));animation:themeReveal 500ms cubic-bezier(0.33,1,0.68,1) both}
+::view-transition-new(root){mix-blend-mode:normal;clip-path:circle(var(--vt-r,200vmax) at var(--vt-x,50%) var(--vt-y,50%));animation:themeReveal 450ms cubic-bezier(0.33,1,0.68,1) both}
 @keyframes themeReveal{from{clip-path:circle(0 at var(--vt-x,50%) var(--vt-y,50%))}to{clip-path:circle(var(--vt-r,200vmax) at var(--vt-x,50%) var(--vt-y,50%))}}
 @media (prefers-reduced-motion: reduce){
   ::view-transition-old(root),::view-transition-new(root){animation:none}
+}
+/* 不支持 View Transitions 的浏览器回退：切换期间给颜色类属性一段短暂过渡，
+   避免无动画的生硬瞬切。仅在切换的 ~320ms 内挂到 <html> 上，平时不生效，
+   不给滚动等常规操作增加过渡开销。 */
+html.theme-fade, html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after{
+  transition: background-color .28s ease, color .28s ease, border-color .28s ease, fill .28s ease, stroke .28s ease !important;
 }
 body{
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans SC',sans-serif;
@@ -913,9 +919,22 @@ function applyTheme(t) {
   if (window.Chart) {
     try { Chart.defaults.color = isDark ? '#94a3b8' : '#737373'; } catch(e) {}
   }
-  // 图表重绘可能依赖尚未初始化的状态，失败不影响主题切换
-  if (typeof renderAllCharts === 'function') {
-    try { renderAllCharts(); } catch(e) {}
+  // 注意：这里不再同步重绘图表。统计页 5 张图（含热力图画布）销毁重建要几百
+  // 毫秒，若放在 View Transitions 的更新回调里，会把“新主题快照”的生成拖住，
+  // 动画首帧因此顿住——这就是切换生硬卡顿的根源。图表重绘由 switchTheme
+  // 推迟到扩散动画播放期间执行（VT 动画由合成器驱动，不受主线程重绘影响）。
+}
+function rerenderChartsAfterTheme() {
+  // 主题切换后的图表重绘：临时关闭 Chart.js 入场动画，避免柱状图重新生长、
+  // 雷达图旋转带来的二次视觉抖动，重绘完成后恢复原设置。
+  var hadAnim;
+  var animSaved = false;
+  if (window.Chart) {
+    try { hadAnim = Chart.defaults.animation; Chart.defaults.animation = false; animSaved = true; } catch(e) {}
+  }
+  try { if (typeof renderAllCharts === 'function') renderAllCharts(); } catch(e) {}
+  if (animSaved) {
+    try { Chart.defaults.animation = hadAnim; } catch(e) {}
   }
 }
 function switchTheme(t) {
@@ -933,9 +952,21 @@ function switchTheme(t) {
     // 余量：圆最终半径比最远视口角再大 15% + 30px，保证左右下角在动画中段即被覆盖，
     // 不会在动画最后一帧才“卡顿一下”切换到新主题（配合上面较平缓的缓动）
     root.style.setProperty('--vt-r', Math.round(r * 1.15 + 30) + 'px');
-    document.startViewTransition(function() { applyTheme(t); });
+    var vt = document.startViewTransition(function() { applyTheme(t); });
+    // 快照生成后立即在真实 DOM 上重绘图表：扩散动画由合成器驱动、展示的是
+    // 两份快照，主线程重绘不影响其流畅度；动画结束时图表已就位为新配色。
+    var rerender = function() { rerenderChartsAfterTheme(); };
+    if (vt && vt.updateCallbackDone) vt.updateCallbackDone.then(rerender, rerender);
+    else rerender();
   } else {
-    applyTheme(t); // 不支持 View Transitions 的浏览器直接切换
+    // 回退：短暂的全局颜色过渡代替无动画瞬切
+    var root = document.documentElement;
+    root.classList.add('theme-fade');
+    applyTheme(t);
+    setTimeout(function() {
+      root.classList.remove('theme-fade');
+      rerenderChartsAfterTheme();
+    }, 320);
   }
 }
 // —— 白天黑夜切换按钮 4.0 组件（原文件原文）——
