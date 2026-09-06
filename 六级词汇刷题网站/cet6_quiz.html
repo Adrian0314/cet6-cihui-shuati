@@ -3311,11 +3311,22 @@ var _resumeLifecycleSeenHidden = false;
 // 旧触点的兼容鼠标序列（mousedown/mouseup/click）随用户下一次点击一起补发出来，
 // 这类补发事件没有对应的新起手输入，一律拒绝。
 var _skipArmAt = 0;
+// 最近一次落在选项上的真实 pointer/touch 输入时间。恢复后补发的旧触点若以完整
+// 指针/触摸序列重放，仅凭起手时间无法与真实点击区分；但同一输入批次里不可能
+// 既点选项又点跳过——以“刚发生过选项交互”否决紧随其后的跳过。
+var _optionActivityAt = 0;
+// 延迟一拍执行的跳过：给同一输入批次里的选项 click 留出否决窗口。
+var _pendingSkipTimer = null;
 // 记录恢复后本题是否已经由真实选项处理过；防止旧 skip 事件在选项点击之后补发。
 var _resumeOptionHandledQuestionId = null;
 function noteSkipPointer(e) {
   var t = e && e.target;
-  if (t && t.closest && t.closest('#skipBtn,.skip-btn')) _skipArmAt = Date.now();
+  if (!t || !t.closest) return;
+  if (t.closest('#skipBtn,.skip-btn')) {
+    _skipArmAt = Date.now();
+  } else if (t.closest('.opt-btn')) {
+    _optionActivityAt = Date.now();
+  }
 }
 function skipGestureFresh() {
   return _skipArmAt && Date.now() - _skipArmAt <= 1500;
@@ -4598,6 +4609,7 @@ function handleGate1(know) {
 function handleAnswer(chosenIndex) {
   if (!quizActive || !quizState.current) return;
   if (isAnswered(quizState.pos)) return; // 已答题不可重复作答
+  _optionActivityAt = Date.now(); // 记录选项交互：否决同一补发批次里的 pending 跳过
   // 手机切后台期间可能留下一个尚未派发的 skip click。选项一旦被真实
   // 处理，本题就不再接受任何 skip，避免旧事件紧跟在答案后面跳题。
   _resumeOptionHandledQuestionId = quizState.current.word && quizState.current.word.id;
@@ -6211,9 +6223,28 @@ function handleSkip(e) {
   if (!keyboardGesture) {
     if (!skipGestureFresh()) return;
     _skipArmAt = 0;
+    // 用户刚碰过选项（350ms 内）却“点了跳过”：物理上不可能，这是随点选项
+    // 一起补发出来的旧事件（含以完整指针/触摸序列重放的情况），直接拒绝。
+    if (_optionActivityAt && Date.now() - _optionActivityAt <= 350) return;
   }
   if (!quizActive || !quizState.current) return;
   if (isAnswered(quizState.pos)) return; // 已跳过不可再操作
+  // 【延迟一拍】补发事件与用户的选项点击处在同一输入批次，且可能先于选项
+  // click 派发。把跳过推迟约 200ms 执行：若这一批次里选项把本题答掉（无论
+  // 先后顺序），这里都会否决——保证点选项永远不会被跳过取代。真实跳过仅
+  // 延迟 200ms 显示反馈，无感知。
+  var requestedAt = Date.now();
+  if (_pendingSkipTimer) clearTimeout(_pendingSkipTimer);
+  _pendingSkipTimer = setTimeout(function() {
+    _pendingSkipTimer = null;
+    if (!quizActive || !quizState.current) return;
+    if (isAnswered(quizState.pos)) return;
+    if (!keyboardGesture && _optionActivityAt && _optionActivityAt >= requestedAt - 350) return;
+    performSkip();
+  }, 200);
+}
+
+function performSkip() {
   var q = quizState.current;
   var word = q.word;
   var mode = quizState.mode;

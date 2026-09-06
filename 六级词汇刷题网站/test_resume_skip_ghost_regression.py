@@ -5,17 +5,21 @@ Run from this directory:
 
 Simulates the Android Chrome behaviour that skips a question the moment the
 user taps an option after returning from another app: the queued touch from
-BEFORE the app switch is replayed as a compat mouse sequence
-(mousedown/mouseup/click) on the skip button, flushed together with the
-user's next tap. The old guard recorded that replayed mousedown as a genuine
-fresh press, so the ghost click "approved itself" and skipped the question.
+BEFORE the app switch is replayed on the skip button, flushed together with
+the user's next tap. Replays may arrive as a bare compat mouse sequence
+(mousedown/mouseup/click — no new pointer start) or as a full pointer/touch
+replay (pointerdown/pointerup/touchstart/touchend + click).
 
-The fix requires a skip click to be preceded by a real pointer/touch start
-(or end) on the skip button within 1.5s; compat mousedown replays no longer
-qualify, and handleSkip enforces this unconditionally (also covering clicks
-on detached stale buttons).
+The fix stacks three defences:
+  1. a skip click must be preceded by a real pointer/touch start-or-end on
+     the skip button within 1.5s (bare compat replays fail here);
+  2. a skip click within 350ms of option activity is rejected outright
+     (one finger cannot press two buttons);
+  3. handleSkip is deferred by one macrotask, so an option click in the same
+     input burst always answers first and vetoes the pending skip.
 """
 
+import time
 from pathlib import Path
 import unittest
 
@@ -40,10 +44,29 @@ SIMULATE_RESUME_JS = """
 
 DISPATCH_JS = """
 (spec) => {
-    // spec: {sel: '#skipBtn', seq: ['mousedown','mouseup','click']}
+    // spec: {sel: '#skipBtn', seq: ['mousedown','pointerdown','click', ...]}
     const el = document.querySelector(spec.sel);
     if (!el) return 'missing: ' + spec.sel;
     spec.seq.forEach((kind) => {
+        let ev;
+        if (kind === 'pointerdown' || kind === 'pointerup') {
+            ev = new PointerEvent(kind, { bubbles: true, cancelable: true });
+        } else if (kind === 'touchstart' || kind === 'touchend') {
+            ev = new Event(kind, { bubbles: true, cancelable: true });
+        } else {
+            ev = new MouseEvent(kind, { bubbles: true, cancelable: true });
+        }
+        el.dispatchEvent(ev);
+    });
+    return 'ok';
+}
+"""
+
+DISPATCH_ON_FIRST_OPTION_JS = """
+(seq) => {
+    const el = document.querySelector('.quiz-card .opt-btn:not([disabled])');
+    if (!el) return 'missing option';
+    seq.forEach((kind) => {
         let ev;
         if (kind === 'pointerdown' || kind === 'pointerup') {
             ev = new PointerEvent(kind, { bubbles: true, cancelable: true });
@@ -67,6 +90,9 @@ QUIZ_STATE_JS = """
     feedback: (document.getElementById('feedback') || { textContent: '' }).textContent
 })
 """
+
+# 跳过现在延迟 200ms 执行（选项批次否决窗口），断言前留出执行窗口
+SKIP_SETTLE_MS = 400
 
 
 class ResumeSkipGhostRegressionTest(unittest.TestCase):
@@ -106,11 +132,15 @@ class ResumeSkipGhostRegressionTest(unittest.TestCase):
         result = self.page.evaluate(DISPATCH_JS, {"sel": sel, "seq": seq})
         self.assertEqual("ok", result)
 
+    def dispatch_on_first_option(self, seq: list) -> None:
+        result = self.page.evaluate(DISPATCH_ON_FIRST_OPTION_JS, seq)
+        self.assertEqual("ok", result)
+
+    def settle(self) -> None:
+        self.page.wait_for_timeout(SKIP_SETTLE_MS)
+
     def simulate_background_resume(self) -> None:
         self.page.evaluate(SIMULATE_RESUME_JS)
-
-    def option_selector(self) -> str:
-        return ".quiz-card .opt-btn:not([disabled])"
 
     # ---------- tests ----------
 
@@ -118,6 +148,7 @@ class ResumeSkipGhostRegressionTest(unittest.TestCase):
         """恢复后补发的兼容鼠标序列（mousedown/mouseup/click）不得跳过当前题。"""
         self.simulate_background_resume()
         self.dispatch("#skipBtn", ["mousedown", "mouseup", "click"])
+        self.settle()
         st = self.state()
         self.assertFalse(st["hasAnswer"], "补发的旧 skip click 不应生效")
         self.assertNotIn("已跳过", st["feedback"])
@@ -126,21 +157,12 @@ class ResumeSkipGhostRegressionTest(unittest.TestCase):
         """用户点击选项时夹在中间补发的 skip click：选项正常作答，不误跳过。"""
         self.simulate_background_resume()
         # 用户手指按下选项（真实输入开始）
-        self.page.evaluate(
-            """() => {
-                const opt = document.querySelector('.quiz-card .opt-btn:not([disabled])');
-                opt.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
-            }"""
-        )
+        self.dispatch_on_first_option(["pointerdown"])
         # 浏览器此刻补发切走前的旧触点序列到跳过按钮上
         self.dispatch("#skipBtn", ["mousedown", "mouseup", "click"])
         # 用户手指抬起，选项的 click 正常派发
-        self.page.evaluate(
-            """() => {
-                const opt = document.querySelector('.quiz-card .opt-btn');
-                opt.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-            }"""
-        )
+        self.dispatch_on_first_option(["click"])
+        self.settle()
         st = self.state()
         self.assertTrue(st["hasAnswer"], "选项点击应正常作答")
         self.assertNotEqual("skip", st["answer"], "不得被补发事件跳过")
@@ -159,6 +181,7 @@ class ResumeSkipGhostRegressionTest(unittest.TestCase):
             }"""
         )
         self.assertEqual("ok", result)
+        self.settle()
         st = self.state()
         self.assertFalse(st["hasAnswer"], "脱离文档树的旧 click 不应生效")
         self.assertNotIn("已跳过", st["feedback"])
@@ -167,6 +190,7 @@ class ResumeSkipGhostRegressionTest(unittest.TestCase):
         """恢复后真实点击跳过按钮（pointer 按下→抬起→click）应正常跳过。"""
         self.simulate_background_resume()
         self.dispatch("#skipBtn", ["pointerdown", "pointerup", "click"])
+        self.settle()
         st = self.state()
         self.assertEqual("skip", st["answer"], "真实跳过点击应生效")
         self.assertIn("已跳过", st["feedback"])
@@ -175,6 +199,7 @@ class ResumeSkipGhostRegressionTest(unittest.TestCase):
         """恢复后真实触摸跳过按钮（touchstart→touchend→click）应正常跳过。"""
         self.simulate_background_resume()
         self.dispatch("#skipBtn", ["touchstart", "touchend", "click"])
+        self.settle()
         st = self.state()
         self.assertEqual("skip", st["answer"], "真实触摸跳过应生效")
         self.assertIn("已跳过", st["feedback"])
@@ -182,6 +207,7 @@ class ResumeSkipGhostRegressionTest(unittest.TestCase):
     def test_06_ghost_click_without_resume_is_ignored(self) -> None:
         """未发生切后台时，无起手的裸 skip click 同样被拒（覆盖页面被回收后重载的场景）。"""
         self.dispatch("#skipBtn", ["mousedown", "mouseup", "click"])
+        self.settle()
         st = self.state()
         self.assertFalse(st["hasAnswer"], "无真实起手的 click 不应生效")
         self.assertNotIn("已跳过", st["feedback"])
@@ -196,6 +222,7 @@ class ResumeSkipGhostRegressionTest(unittest.TestCase):
         )
         self.page.wait_for_timeout(1800)
         self.dispatch("#skipBtn", ["pointerup", "click"])
+        self.settle()
         st = self.state()
         self.assertEqual("skip", st["answer"], "长按后松手的跳过应生效")
         self.assertIn("已跳过", st["feedback"])
@@ -209,6 +236,7 @@ class ResumeSkipGhostRegressionTest(unittest.TestCase):
                 }));
             }"""
         )
+        self.settle()
         st = self.state()
         self.assertEqual("skip", st["answer"], "空格跳过应生效")
         self.assertIn("已跳过", st["feedback"])
@@ -220,6 +248,43 @@ class ResumeSkipGhostRegressionTest(unittest.TestCase):
         st = self.state()
         self.assertTrue(st["hasAnswer"], "点击选项应正常作答")
         self.assertNotEqual("skip", st["answer"])
+
+    def test_10_full_pointer_replay_between_option_events_does_not_skip(self) -> None:
+        """补发为完整指针序列（pointerdown/up+click）且夹在选项按下与抬起之间：
+        选项必须正常作答，不得被跳过取代。"""
+        self.simulate_background_resume()
+        self.dispatch_on_first_option(["pointerdown"])
+        self.dispatch("#skipBtn", ["pointerdown", "pointerup", "click"])
+        self.dispatch_on_first_option(["click"])
+        self.settle()
+        st = self.state()
+        self.assertTrue(st["hasAnswer"], "选项点击应正常作答")
+        self.assertNotEqual("skip", st["answer"], "完整指针重放不得跳过本题")
+        self.assertNotIn("已跳过", st["feedback"])
+
+    def test_11_full_touch_replay_between_option_events_does_not_skip(self) -> None:
+        """补发为完整触摸序列（touchstart/end+click）且夹在选项按下与抬起之间。"""
+        self.simulate_background_resume()
+        self.dispatch_on_first_option(["touchstart"])
+        self.dispatch("#skipBtn", ["touchstart", "touchend", "click"])
+        self.dispatch_on_first_option(["click"])
+        self.settle()
+        st = self.state()
+        self.assertTrue(st["hasAnswer"], "选项点击应正常作答")
+        self.assertNotEqual("skip", st["answer"], "完整触摸重放不得跳过本题")
+        self.assertNotIn("已跳过", st["feedback"])
+
+    def test_12_full_pointer_replay_before_option_press_is_vetoed(self) -> None:
+        """补发的完整指针序列先于用户选项点击到达（先跳后答顺序）：
+        延迟一拍执行让选项作答否决跳过。"""
+        self.simulate_background_resume()
+        self.dispatch("#skipBtn", ["pointerdown", "pointerup", "click"])
+        self.dispatch_on_first_option(["click"])
+        self.settle()
+        st = self.state()
+        self.assertTrue(st["hasAnswer"], "用户的选项点击应正常作答")
+        self.assertNotEqual("skip", st["answer"], "补发跳过应被选项作答否决")
+        self.assertNotIn("已跳过", st["feedback"])
 
 
 if __name__ == "__main__":
