@@ -12,7 +12,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <style>
-*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:rgba(0,0,0,0)}
 :root{
   --bg:#fafafa;--surface:#ffffff;--surface2:#f5f5f5;
   --text:#1a1a1a;--text2:#737373;--accent:#7c3aed;
@@ -3349,6 +3349,18 @@ var _optionActivityAt = 0;
 var _pendingSkipTimer = null;
 // 记录恢复后本题是否已经由真实选项处理过；防止旧 skip 事件在选项点击之后补发。
 var _resumeOptionHandledQuestionId = null;
+// 最近一次落在选项上的控件目标（配合 _optionActivityAt 做“同批次双按钮否决”）。
+var _optionActivityTarget = null;
+// 最近一次任意按钮上的真实按下（目标+时刻）：恢复保护期间按钮 click 必须与
+// 之匹配，防止补发 click 落在“下一题”等按钮上造成误切题/误操作。
+var _buttonPressAt = 0;
+var _buttonPressTarget = null;
+function noteButtonPress(e) {
+  var t = e && e.target;
+  if (!t || !t.closest) return;
+  var btn = t.closest('button, a, #themeBtn');
+  if (btn && !btn.disabled) { _buttonPressTarget = btn; _buttonPressAt = Date.now(); }
+}
 // 最近一次切后台时刻（performance.now() 时基）。补发重放的旧输入事件会保留
 // 切后台前的原始时间戳，可与真实的新触摸区分。
 var _pageHiddenAt = 0;
@@ -3366,13 +3378,13 @@ function preBackgroundEvent(e) {
   return ts < _pageHiddenAt - 5;
 }
 // 【切后台恢复】把识别为“切走前旧触摸”的按下/抬起整事件取消：preventDefault
-// 消除跳过按钮的 ：active 高亮、聚焦与滚动联动等视觉闪烁，stopImmediatePropagation
-// 让同一源头的后续事件（含浏览器据此合成的 click）不再派发。误点击此前已拦截，
-// 这里处理的是残留的“按钮闪一下”问题。
-function cancelGhostSkipInput(e) {
+// 消除按钮的 ：active 高亮、点按高亮与聚焦滚动等视觉闪烁，stopImmediatePropagation
+// 让同一源头的后续事件（含浏览器据此合成的 click）不再派发。覆盖全部交互控件：
+// 补发落在“下一题”上会立刻切题、落在选项上会幻影作答，均需拦截。
+function cancelGhostInput(e) {
   if (!preBackgroundEvent(e)) return;
   var t = e.target;
-  if (!t || !t.closest || !t.closest('#skipBtn,.skip-btn')) return;
+  if (!t || !t.closest || !t.closest('button, a, input, textarea, select')) return;
   e.preventDefault();
   e.stopImmediatePropagation();
 }
@@ -3380,7 +3392,8 @@ function noteSkipPointer(e) {
   var t = e && e.target;
   if (!t || !t.closest) return;
   if (!t.closest('#skipBtn,.skip-btn')) {
-    if (t.closest('.opt-btn')) _optionActivityAt = Date.now();
+    var opt = t.closest('.opt-btn');
+    if (opt) { _optionActivityAt = Date.now(); _optionActivityTarget = opt; }
     return;
   }
   var type = e.type;
@@ -3452,15 +3465,18 @@ document.addEventListener('visibilitychange', function() {
   }
 });
 // 重放取消监听须注册在最前：被取消的事件不再派发给后续任何处理器。
-// touchstart/touchend 必须显式声明 passive:false —— Chrome 默认把 document 级
-// 触摸监听当作 passive，passive 监听器里的 preventDefault 会被静默忽略，
-// 取消逻辑将对触摸事件完全失效。
-document.addEventListener('pointerdown', cancelGhostSkipInput, true);
-document.addEventListener('touchstart', cancelGhostSkipInput, { capture: true, passive: false });
-document.addEventListener('mousedown', cancelGhostSkipInput, true);
-document.addEventListener('pointerup', cancelGhostSkipInput, true);
-document.addEventListener('touchend', cancelGhostSkipInput, { capture: true, passive: false });
-document.addEventListener('mouseup', cancelGhostSkipInput, true);
+// touchstart/touchend/touchmove 必须显式声明 passive:false —— Chrome 默认把
+// document 级触摸监听当作 passive，passive 监听器里的 preventDefault 会被
+// 静默忽略，取消逻辑将对触摸事件完全失效。
+document.addEventListener('pointerdown', cancelGhostInput, true);
+document.addEventListener('touchstart', cancelGhostInput, { capture: true, passive: false });
+document.addEventListener('mousedown', cancelGhostInput, true);
+document.addEventListener('pointerup', cancelGhostInput, true);
+document.addEventListener('touchend', cancelGhostInput, { capture: true, passive: false });
+document.addEventListener('mouseup', cancelGhostInput, true);
+document.addEventListener('touchmove', cancelGhostInput, { capture: true, passive: false });
+document.addEventListener('pointerdown', noteButtonPress, true);
+document.addEventListener('touchstart', noteButtonPress, true);
 document.addEventListener('pointerdown', noteSkipPointer, true);
 document.addEventListener('touchstart', noteSkipPointer, true);
 // pointerup/touchend 同样刷新起手时间：长按跳过按钮松手时 click 仍视为新鲜起手。
@@ -3471,6 +3487,29 @@ document.addEventListener('pointerdown', markResumeUserInput, true);
 document.addEventListener('touchstart', markResumeUserInput, true);
 // 少数 Android Chrome 版本只保留鼠标兼容事件，补充 mousedown 作为兜底。
 document.addEventListener('mousedown', markResumeUserInput, true);
+// 【恢复保护·通用按钮过滤】+【同批次双按钮否决】
+// 1) 点选项后 80ms 内到达的任何按钮 click 都是随选项点击一起补发的旧事件
+//    （人手不可能 80ms 内连点两个按钮）——这正是“点选项马上跳到下一题”的
+//    元凶（补发落在答案刚出现就显示的“下一题”按钮上），无论恢复保护是否
+//    激活，一律拦截；选项自身的 click 因目标相同而放行。
+// 2) 恢复保护期间，按钮 click 必须匹配 1.5 秒内同按钮上的真实按下，补发的
+//    click（无同按钮按下配对）被拦截。键盘激活（detail=0）不受影响。
+document.addEventListener('click', function(e) {
+  var target = e.target;
+  var btn = target && target.closest ? target.closest('button, a, #themeBtn') : null;
+  if (!btn || btn.disabled) return;
+  if (e.detail === 0) return; // 键盘激活（Enter/空格）不是指针来源
+  if (_optionActivityTarget !== btn && _optionActivityAt &&
+      Date.now() - _optionActivityAt <= 80) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    return;
+  }
+  if (!resumeInputGuardActive()) return;
+  if (_buttonPressTarget === btn && Date.now() - _buttonPressAt <= 1500) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+}, true);
 document.addEventListener('click', function(e) {
   if (!resumeInputGuardActive()) return;
   var target = e.target;
@@ -4447,6 +4486,8 @@ function bindQuizSwipe(card) {
   }
   card.addEventListener('touchstart', function(e) {
     if (!quizActive || !card.classList.contains('fullscreen') || e.touches.length !== 1) { start = null; return; }
+    // 切走前的旧触摸重放不作为滑动手势起点（防止恢复后瞬间被“滑动”切题）
+    if (preBackgroundEvent(e)) { start = null; return; }
     var target = e.target;
     if (isSwipeBlockedTarget(target)) {
       start = null;
@@ -4698,6 +4739,7 @@ function handleAnswer(chosenIndex) {
   if (!quizActive || !quizState.current) return;
   if (isAnswered(quizState.pos)) return; // 已答题不可重复作答
   _optionActivityAt = Date.now(); // 记录选项交互：否决同一补发批次里的 pending 跳过
+  _optionActivityTarget = null;   // 作答后 80ms 内的任何按钮点击都按补发处理
   // 手机切后台期间可能留下一个尚未派发的 skip click。选项一旦被真实
   // 处理，本题就不再接受任何 skip，避免旧事件紧跟在答案后面跳题。
   _resumeOptionHandledQuestionId = quizState.current.word && quizState.current.word.id;

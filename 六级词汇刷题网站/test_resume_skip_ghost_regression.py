@@ -23,6 +23,8 @@ The fix stacks four defences in handleSkip/noteSkipPointer:
      option can never be replaced by a skip, whatever the event order.
 """
 
+import json
+import time
 from pathlib import Path
 import unittest
 
@@ -50,7 +52,8 @@ SIMULATE_RESUME_JS = """
 
 DISPATCH_JS = """
 (spec) => {
-    // spec: {sel, seq}；seq 元素为字符串或 {kind, ts}（ts 用于伪造事件时间戳）。
+    // spec: {sel, seq}；seq 元素为字符串或 {kind, ts, detail}
+    //（ts 用于伪造事件时间戳，detail 用于模拟真实/键盘 click）。
     // 返回每个事件是否被 preventDefault（用于断言重放事件被整事件取消）。
     const el = document.querySelector(spec.sel);
     if (!el) return { result: 'missing: ' + spec.sel, prevented: [] };
@@ -63,7 +66,7 @@ DISPATCH_JS = """
         } else if (kind === 'touchstart' || kind === 'touchend') {
             ev = new Event(kind, { bubbles: true, cancelable: true });
         } else {
-            ev = new MouseEvent(kind, { bubbles: true, cancelable: true });
+            ev = new MouseEvent(kind, { bubbles: true, cancelable: true, detail: (item && item.detail !== undefined) ? item.detail : 0 });
         }
         if (typeof item === 'object' && item.ts !== undefined) {
             Object.defineProperty(ev, 'timeStamp', { value: item.ts });
@@ -131,7 +134,8 @@ class ResumeSkipGhostRegressionTest(unittest.TestCase):
         self.page.goto(QUIZ_HTML.as_uri(), wait_until="load")
         # 固定为「大纲词汇 + 选择题 + 关闭记忆模式」，避免默认记忆模式改变队列行为
         self.page.locator("#poolSelect").select_option("core")
-        self.page.locator("#memoryBtn").click()
+        if self.page.evaluate("memoryModeOn()"):
+            self.page.locator("#memoryBtn").click()
         self.page.locator("#startBtn").click()
         self.page.wait_for_selector(".opt-btn")
 
@@ -157,7 +161,8 @@ class ResumeSkipGhostRegressionTest(unittest.TestCase):
 
     def simulate_background_resume(self) -> int:
         """切后台再切回，返回切后台时刻（performance.now 时基）。"""
-        return self.page.evaluate(SIMULATE_RESUME_JS)
+        self._hidden_at = self.page.evaluate(SIMULATE_RESUME_JS)
+        return self._hidden_at
 
     def human_skip_tap(self, pre_hidden_ts: int = None) -> None:
         """以人手节奏点击跳过按钮（按下→70ms→抬起→click）。"""
@@ -381,6 +386,84 @@ class ResumeSkipGhostRegressionTest(unittest.TestCase):
         st = self.state()
         self.assertEqual("skip", st["answer"], "真实跳过应正常生效")
         self.assertIn("已跳过", st["feedback"])
+
+    def test_17_fresh_skip_tap_events_are_not_canceled(self):
+        """真实起手绝不允许被取消：按下事件不被 preventDefault，跳过正常生效。"""
+        res = self.dispatch("#skipBtn", [{"kind": "pointerdown"}])
+        self.assertFalse(res["prevented"][0], "真实按下不应被取消")
+        self.page.wait_for_timeout(HUMAN_TAP_GAP_MS)
+        self.dispatch("#skipBtn", [{"kind": "pointerup"}])
+        self.page.wait_for_timeout(30)
+        self.dispatch("#skipBtn", ["click"])
+        self.settle()
+        st = self.state()
+        self.assertEqual("skip", st["answer"], "真实跳过应正常生效")
+        self.assertIn("已跳过", st["feedback"])
+
+    def test_18_ghost_click_on_next_button_is_blocked(self):
+        """补发落在「下一题」按钮上（切走前旧触摸 + 其合成 click）：
+        按下被整事件取消、click 无同按钮按下配对被拦截，题目不得被切走。"""
+        self.simulate_background_resume()
+        pos_before = self.page.evaluate("quizState.pos")
+        res = self.dispatch("#nextBtn", [
+            {"kind": "pointerdown", "ts": max(5.0, self._hidden_at - 1000.0)},
+            {"kind": "click", "detail": 1},
+        ])
+        self.settle()
+        self.assertTrue(res["prevented"][0], "旧触摸按下应被取消")
+        pos_after = self.page.evaluate("quizState.pos")
+        self.assertEqual(pos_before, pos_after, "补发 click 不得切到下一题")
+
+    def test_19_same_burst_click_on_next_after_option_is_vetoed(self):
+        """点选项后 80ms 内到达的「下一题」click 是同一补发批次：必须被否决；
+        稍后的真实点击（按下+抬起+click）正常切题。"""
+        # 选项作答与补发的「下一题」click 在同一次 evaluate 内派发，保证 ≤80ms
+        res = self.page.evaluate(
+            """() => {
+                const opt = document.querySelector('.quiz-card .opt-btn:not([disabled])');
+                const nb = document.getElementById('nextBtn');
+                const down = new PointerEvent('pointerdown', { bubbles: true, cancelable: true });
+                opt.dispatchEvent(down);
+                const click = new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 });
+                opt.dispatchEvent(click);
+                const answered = Object.prototype.hasOwnProperty.call(quizState.answers, quizState.pos);
+                const ghost = new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 });
+                nb.dispatchEvent(ghost);
+                return {
+                    answered: answered,
+                    ghostPrevented: !!ghost.defaultPrevented,
+                    posAfterGhost: quizState.pos
+                };
+            }"""
+        )
+        self.assertTrue(res["answered"], "选项应正常作答")
+        self.assertTrue(res["ghostPrevented"], "同批次补发的下一题 click 应被否决")
+        pos_after_ghost = res["posAfterGhost"]
+        # 稍后真实地点「下一题」（按下+抬起+click）→ 正常切题
+        self.page.wait_for_timeout(150)
+        self.dispatch("#nextBtn", ["pointerdown"])
+        self.page.wait_for_timeout(40)
+        self.dispatch("#nextBtn", [{"kind": "click", "detail": 1}])
+        pos_after_real = self.page.evaluate("quizState.pos")
+        self.assertNotEqual(pos_after_ghost, pos_after_real, "真实的下一题点击应正常切题")
+
+    def test_20_keyboard_click_detail_zero_on_next_is_allowed(self):
+        """键盘激活（detail=0）不受恢复保护过滤影响：Enter 触发的下一题 click 正常切题。"""
+        self.simulate_background_resume()
+        # 先真实作答（键盘数字 1 → handleAnswer）
+        self.page.evaluate("handleAnswer(0)")
+        pos_before = self.page.evaluate("quizState.pos")
+        res = self.page.evaluate(
+            """() => {
+                const nb = document.getElementById('nextBtn');
+                const ev = new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 });
+                nb.dispatchEvent(ev);
+                return { prevented: !!ev.defaultPrevented };
+            }"""
+        )
+        self.assertFalse(res["prevented"], "键盘激活的 click 不应被过滤")
+        pos_after = self.page.evaluate("quizState.pos")
+        self.assertEqual(pos_before + 1, pos_after, "键盘触发的切题应正常执行")
 
 
 if __name__ == "__main__":
