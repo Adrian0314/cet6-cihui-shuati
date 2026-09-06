@@ -566,7 +566,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>🧠 记忆模式：</strong>做完一题即从队列移除，答错的词按当前词库的书中记忆规律自动排期回来复习。打开网页时若有到期单词，做题页顶部会显示复习横幅，点击"开始复习"一键清债；复习采用四选一快刷，复习中跳过视同答错。复习只从首次作答开始计，历史数据不迁移。</div>
       <div class="rb"><strong>🔊 朗读发音：</strong>点击喇叭按钮时优先使用普通媒体音频，以便跟随视频/音乐的蓝牙输出；网络音频无法播放时自动回退到系统 TTS。离线使用时仍可使用系统 TTS。</div>
       <div class="rb"><strong>🔊 自动朗读：</strong>开始做题前可在“练习设置”中切换“自动朗读：开/关”，开关会保存到本机。开启后仅在“看英文 → 选中文”模式下，每显示一道新题自动朗读一次；答题反馈或局部刷新不会让同一道题重复朗读。切换到“看中文 → 选英文”或关闭开关后不会自动朗读。手机浏览器若限制后台/非用户操作播放，仍可点击题面旁的“🔊 朗读”按钮。</div>
-      <div class="rb"><strong>💾 中途退出：</strong>做题过程中会即时保存当前题位、已答数量和已选答案；手机切到后台、刷新页面或关闭网页时还会通过页面生命周期事件再保存一次，因此重新打开后点击顶部“继续做题”即可接着完成同一队列。手机从其他应用返回后，恢复保护会持续忽略浏览器补发的旧“不会，跳过”事件：首次真实点击选项可正常作答，只有实际按下跳过按钮才会执行跳过。跳过点击还必须落在真实起手之后 1.5 秒内（pointer/touch 按下或抬起落在跳过按钮上），浏览器补发的兼容鼠标序列（mousedown/mouseup/click）无论是否命中恢复保护窗口都会被拒绝——切后台很久再回来，点击选项不会再被误判为跳过。4 周 25 天计划会同时保存当日进度，复习提醒也会显示实际的已完成题数和待完成题数；当天新 Unit 的全部单词学完后会记录为已完成，不会再次生成同一 Unit 的整组复习；复习队列中断后重新开始时只推送当天尚未答过的词，已练过的题不会重复出现；进入新的一天后，旧日未完成队列会按新的每日计划重置（若前一天的任务实际已全部答完，会按作答记录补判并正常进入下一天），已完成的旧快照会在重进时自动清除。</div>
+      <div class="rb"><strong>💾 中途退出：</strong>做题过程中会即时保存当前题位、已答数量和已选答案；手机切到后台、刷新页面或关闭网页时还会通过页面生命周期事件再保存一次，因此重新打开后点击顶部“继续做题”即可接着完成同一队列。手机从其他应用返回后，恢复保护会持续忽略浏览器补发的旧“不会，跳过”事件：首次真实点击选项可正常作答，只有实际按下跳过按钮才会执行跳过。跳过点击还必须落在真实起手之后 1.5 秒内（pointer/touch 按下或抬起落在跳过按钮上），且起手必须发生在切回前台之后——浏览器补发的旧触摸（含完整指针/触摸序列重放）会被整事件取消，无论是否命中恢复保护窗口都会被拒绝，切后台很久再回来，点击选项不会被误判为跳过，跳过按钮也不会再无故闪动。4 周 25 天计划会同时保存当日进度，复习提醒也会显示实际的已完成题数和待完成题数；当天新 Unit 的全部单词学完后会记录为已完成，不会再次生成同一 Unit 的整组复习；复习队列中断后重新开始时只推送当天尚未答过的词，已练过的题不会重复出现；进入新的一天后，旧日未完成队列会按新的每日计划重置（若前一天的任务实际已全部答完，会按作答记录补判并正常进入下一天），已完成的旧快照会在重进时自动清除。</div>
       <div class="rb"><strong>🧠 智能练习：</strong>这不是生成式 AI，而是按规则自动安排优先级：先练重点词和已经到期的复习词，再练从未做过、错误率较高或答错次数较多的词。系统从当前词库和 Unit 筛选范围中取词，数量按“每次学习”设置的 20/40/60 词决定，并沿用当前的做题方向、题目类型和闯关模式。通过智能练习或普通“开始做题”完成的 4 周 25 天计划 Unit，只要当天全部单词都答过一遍，同样会计入打卡进度。智能练习不是只练错题；只练错题请使用“重做当前模式错题”，智能练习答错的单词仍会进入错题本。</div>
       <div class="rb" style="text-align:center;margin-top:8px;"><span style="color:var(--accent2);cursor:pointer;text-decoration:underline;" onclick="document.getElementById('rulesCard').classList.toggle('collapsed')">点击收起 ▲</span></div>
     </div>
@@ -3365,6 +3365,17 @@ function preBackgroundEvent(e) {
   if (ts <= 0 || _pageHiddenAt <= 0) return false; // 时间戳不可用时放行，交给其他防线
   return ts < _pageHiddenAt - 5;
 }
+// 【切后台恢复】把识别为“切走前旧触摸”的按下/抬起整事件取消：preventDefault
+// 消除跳过按钮的 ：active 高亮、聚焦与滚动联动等视觉闪烁，stopImmediatePropagation
+// 让同一源头的后续事件（含浏览器据此合成的 click）不再派发。误点击此前已拦截，
+// 这里处理的是残留的“按钮闪一下”问题。
+function cancelGhostSkipInput(e) {
+  if (!preBackgroundEvent(e)) return;
+  var t = e.target;
+  if (!t || !t.closest || !t.closest('#skipBtn,.skip-btn')) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+}
 function noteSkipPointer(e) {
   var t = e && e.target;
   if (!t || !t.closest) return;
@@ -3440,6 +3451,16 @@ document.addEventListener('visibilitychange', function() {
     armResumeInputGuard();
   }
 });
+// 重放取消监听须注册在最前：被取消的事件不再派发给后续任何处理器。
+// touchstart/touchend 必须显式声明 passive:false —— Chrome 默认把 document 级
+// 触摸监听当作 passive，passive 监听器里的 preventDefault 会被静默忽略，
+// 取消逻辑将对触摸事件完全失效。
+document.addEventListener('pointerdown', cancelGhostSkipInput, true);
+document.addEventListener('touchstart', cancelGhostSkipInput, { capture: true, passive: false });
+document.addEventListener('mousedown', cancelGhostSkipInput, true);
+document.addEventListener('pointerup', cancelGhostSkipInput, true);
+document.addEventListener('touchend', cancelGhostSkipInput, { capture: true, passive: false });
+document.addEventListener('mouseup', cancelGhostSkipInput, true);
 document.addEventListener('pointerdown', noteSkipPointer, true);
 document.addEventListener('touchstart', noteSkipPointer, true);
 // pointerup/touchend 同样刷新起手时间：长按跳过按钮松手时 click 仍视为新鲜起手。

@@ -50,9 +50,11 @@ SIMULATE_RESUME_JS = """
 
 DISPATCH_JS = """
 (spec) => {
-    // spec: {sel, seq}；seq 元素为字符串或 {kind, ts}（ts 用于伪造事件时间戳）
+    // spec: {sel, seq}；seq 元素为字符串或 {kind, ts}（ts 用于伪造事件时间戳）。
+    // 返回每个事件是否被 preventDefault（用于断言重放事件被整事件取消）。
     const el = document.querySelector(spec.sel);
-    if (!el) return 'missing: ' + spec.sel;
+    if (!el) return { result: 'missing: ' + spec.sel, prevented: [] };
+    const prevented = [];
     spec.seq.forEach((item) => {
         const kind = typeof item === 'string' ? item : item.kind;
         let ev;
@@ -67,8 +69,9 @@ DISPATCH_JS = """
             Object.defineProperty(ev, 'timeStamp', { value: item.ts });
         }
         el.dispatchEvent(ev);
+        prevented.push(!!ev.defaultPrevented);
     });
-    return 'ok';
+    return { result: 'ok', prevented: prevented };
 }
 """
 
@@ -140,9 +143,10 @@ class ResumeSkipGhostRegressionTest(unittest.TestCase):
     def state(self) -> dict:
         return self.page.evaluate(QUIZ_STATE_JS)
 
-    def dispatch(self, sel: str, seq: list) -> None:
+    def dispatch(self, sel: str, seq: list) -> dict:
         result = self.page.evaluate(DISPATCH_JS, {"sel": sel, "seq": seq})
-        self.assertEqual("ok", result)
+        self.assertEqual("ok", result["result"])
+        return result
 
     def dispatch_on_first_option(self, seq: list) -> None:
         result = self.page.evaluate(DISPATCH_ON_FIRST_OPTION_JS, seq)
@@ -334,6 +338,49 @@ class ResumeSkipGhostRegressionTest(unittest.TestCase):
         st = self.state()
         self.assertFalse(st["hasAnswer"], "切后台前的旧触摸重放不应生效")
         self.assertNotIn("已跳过", st["feedback"])
+
+    def test_15_pre_background_pointer_events_on_skip_are_canceled(self):
+        """切后台前的旧触摸按下/抬起应被整事件取消（消除按钮 ：active 闪烁）。"""
+        hidden_at = self.simulate_background_resume()
+        pre_ts = max(5.0, hidden_at - 1000.0)
+        res = self.dispatch("#skipBtn", [
+            {"kind": "pointerdown", "ts": pre_ts},
+            {"kind": "pointerup", "ts": pre_ts + 100},
+            "click",
+        ])
+        self.assertTrue(res["prevented"][0], "旧触摸按下应被取消（防闪烁）")
+        self.assertTrue(res["prevented"][1], "旧触摸抬起应被取消")
+        self.settle()
+        st = self.state()
+        self.assertFalse(st["hasAnswer"], "被取消的重放不应产生跳过")
+
+    def test_16_pre_background_touchstart_on_skip_is_canceled(self):
+        """切后台前的旧触摸 touchstart/touchend 应被整事件取消。"""
+        hidden_at = self.simulate_background_resume()
+        pre_ts = max(5.0, hidden_at - 1000.0)
+        res = self.dispatch("#skipBtn", [
+            {"kind": "touchstart", "ts": pre_ts},
+            {"kind": "touchend", "ts": pre_ts + 100},
+            "click",
+        ])
+        self.assertTrue(res["prevented"][0], "旧触摸 touchstart 应被取消（防闪烁）")
+        self.assertTrue(res["prevented"][1], "旧触摸 touchend 应被取消")
+        self.settle()
+        st = self.state()
+        self.assertFalse(st["hasAnswer"])
+
+    def test_17_fresh_skip_tap_events_are_not_canceled(self):
+        """真实起手绝不允许被取消：按下事件不被 preventDefault，跳过正常生效。"""
+        res = self.dispatch("#skipBtn", [{"kind": "pointerdown"}])
+        self.assertFalse(res["prevented"][0], "真实按下不应被取消")
+        self.page.wait_for_timeout(HUMAN_TAP_GAP_MS)
+        self.dispatch("#skipBtn", [{"kind": "pointerup"}])
+        self.page.wait_for_timeout(30)
+        self.dispatch("#skipBtn", ["click"])
+        self.settle()
+        st = self.state()
+        self.assertEqual("skip", st["answer"], "真实跳过应正常生效")
+        self.assertIn("已跳过", st["feedback"])
 
 
 if __name__ == "__main__":
