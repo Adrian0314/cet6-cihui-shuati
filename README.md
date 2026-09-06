@@ -132,7 +132,7 @@
 - **在线版**：https://adrian0314.github.io/cet6-cihui-shuati/%E5%85%AD%E7%BA%A7%E8%AF%8D%E6%B1%87%E5%88%B7%E9%A2%98%E7%BD%91%E7%AB%99/word-maps-viewer.html
 - **离线单文件版**：双击 `六级词汇刷题网站/word-maps-viewer-offline.html`（数据已内联，单文件可拷到 U 盘/手机/别的电脑，无需网络、无需 data 目录）
 - **离线外置版**：双击 `六级词汇刷题网站/word-maps-viewer.html`（需与 `六级词汇刷题网站/data/` 目录同放）
-- 功能：Unit/词群下拉切换、🔍 搜索单词自动定位并高亮、点卡片朗读发音、点 ○ 折叠/展开分支、滚轮/双指缩放、拖拽平移、⬇ 导出 SVG/PNG
+- 功能：Unit/词群下拉切换、🔍 搜索单词自动定位并高亮、点卡片朗读发音、点 ○ 折叠/展开分支、滚轮/双指缩放、拖拽平移、⬇ 导出 SVG/PNG；「◀ 上一个 / 下一个 ▶」导航条固定在底部图例上方独立成行，每次加载新词群初始视野自动以根节点为中心
 
 > 词库/导图数据更新后，在仓库根目录运行 `node tools/build-core-words.js`，再运行 `node tools/build-offline-viewer.js`，可同步词库索引并重新生成离线单文件版。
 

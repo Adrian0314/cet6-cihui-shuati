@@ -43,8 +43,6 @@ header h1 .tag{
 .controls{display:flex;flex-direction:column;align-items:stretch;gap:8px;width:100%;min-width:0}
 .control-row{display:flex;flex-wrap:nowrap;align-items:center;justify-content:center;gap:8px;min-width:0;overflow-x:auto;overflow-y:hidden;padding:1px 1px 4px;scrollbar-width:thin}
 .control-row>*{flex:0 0 auto}
-.group-nav{display:flex;align-items:center;justify-content:center;gap:8px}
-.group-nav button{min-width:112px}
 .controls select,.controls input{
   font:inherit;font-size:.88em;color:var(--text);
   background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;outline:none;
@@ -118,12 +116,22 @@ svg text{user-select:none}
 }
 #err b{color:var(--red)}
 #legend{
-  position:fixed;left:12px;bottom:12px;z-index:25;background:var(--surface);
-  border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow);
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
   padding:8px 12px;font-size:.76em;color:var(--text2);display:flex;flex-wrap:wrap;gap:3px 12px;max-width:92vw;
 }
 #legend .lg{display:inline-flex;align-items:center;gap:5px}
 #legend .dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+/* 底部停靠区：上一/下一个导航条独立成行，位于图例上方 */
+#bottomDock{
+  position:fixed;left:12px;bottom:12px;z-index:25;
+  display:flex;flex-direction:column;align-items:flex-start;gap:8px;
+}
+#bottomDock .group-nav{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  box-shadow:var(--shadow);padding:8px 12px;
+}
+#bottomDock .group-nav button{min-width:112px}
 .hint{
   position:fixed;right:12px;bottom:12px;z-index:25;background:var(--surface);
   border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow);
@@ -133,9 +141,11 @@ svg text{user-select:none}
   header{padding:8px 10px}
   header h1{font-size:.95em}
   .control-row{justify-content:flex-start}
-  .group-nav{padding-top:1px}
   #stats{display:none}
-  #legend{left:8px;bottom:8px;padding:6px 10px;font-size:.7em}
+  #bottomDock{left:8px;bottom:8px;gap:6px}
+  #bottomDock .group-nav{padding:6px 10px}
+  #bottomDock .group-nav button{min-width:104px;padding:6px 10px}
+  #legend{padding:6px 10px;font-size:.7em}
   .hint{display:none}
 }
 </style>
@@ -159,10 +169,6 @@ svg text{user-select:none}
       <button id="btnPng" title="导出图片">⬇ PNG</button>
       <span id="stats"></span>
     </div>
-    <div class="group-nav" aria-label="词群导航">
-      <button id="btnPrevGroup" title="上一个词群（←）">◀ 上一个</button>
-      <button id="btnNextGroup" title="下一个词群（→）">下一个 ▶</button>
-    </div>
   </div>
 </header>
 
@@ -171,7 +177,13 @@ svg text{user-select:none}
   <div id="stage"><svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
 </main>
 
-<div id="legend"></div>
+<div id="bottomDock" aria-label="词群导航与图例">
+  <div class="group-nav">
+    <button id="btnPrevGroup" title="上一个词群（←）">◀ 上一个</button>
+    <button id="btnNextGroup" title="下一个词群（→）">下一个 ▶</button>
+  </div>
+  <div id="legend"></div>
+</div>
 <div class="hint">滚轮/双指缩放 · 拖拽平移 · 点击单词即可发音 · 悬停看释义 · ←/→ 切换词群</div>
 <div id="tooltip"></div>
 <div id="toast"></div>
@@ -464,6 +476,21 @@ function countWords(list){
 function applyTransform(){
   stage.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')';
 }
+/* 每次加载新词群后的初始视野：缩放复位，根节点块精确落在可视区中心。
+   图比视口大时用滚动定位；图比视口小时（滚动已被钳到 0）用画布平移 tx/ty 补齐。 */
+function centerOnRoot(){
+  var p = null;
+  nodePos.forEach(function(x){ if (x.isRoot) p = x; });
+  if (!p) return;
+  scale = 1; tx = 0; ty = 0; applyTransform();
+  var cx = p.x + p.w / 2, cy = p.y + p.h / 2;
+  var sl = cx - main.clientWidth / 2;
+  var st = cy - main.clientHeight / 2;
+  if (sl < 0) { tx = -sl; sl = 0; }
+  if (st < 0) { ty = -st; st = 0; }
+  applyTransform();
+  main.scrollTo({ left: sl, top: st });
+}
 
 /* ================= 选择器填充 ================= */
 function fillUnits(){
@@ -584,11 +611,13 @@ unitSel.addEventListener('change', function(){
   fillGroups();
   hitKey = null;
   render();
+  centerOnRoot();
 });
 groupSel.addEventListener('change', function(){
   currentGid = Number(groupSel.value);
   hitKey = null;
   render();
+  centerOnRoot();
 });
 /* 上一个/下一个词群快速翻动：全局顺序 = Unit 升序 × Unit 内 gid 升序，首尾回绕。
    支持按钮与键盘 ←/→（在搜索框/下拉框输入时除外） */
@@ -619,6 +648,7 @@ function goGroup(delta){
   groupSel.value = String(t.gid);
   hitKey = null;
   render();
+  centerOnRoot();
   if (wrapped) {
     var g = currentGroup();
     toastMsg('已回绕到' + (delta < 0 ? '最后一个' : '第一个') + '词群：U' + t.u + (g ? ' ' + g.group_name : ''));
@@ -864,6 +894,7 @@ function init(){
   fillLegend();
   buildGroupOrder();
   render();
+  centerOnRoot();
 }
 init();
 
