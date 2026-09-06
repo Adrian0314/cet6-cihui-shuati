@@ -18,9 +18,11 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.join(__dirname, '..');
-const htmlPath = path.join(root, 'cet6_quiz.html');
-const fullPath = path.join(root, 'data', 'full-words.js');
-const outPath = path.join(root, 'data', 'core-words.js');
+// 网站文件统一位于「六级词汇刷题网站/」子目录（根目录不再保留主程序副本）
+const siteDir = path.join(root, '六级词汇刷题网站');
+const htmlPath = path.join(siteDir, 'cet6_quiz.html');
+const fullPath = path.join(siteDir, 'data', 'full-words.js');
+const outPath = path.join(siteDir, 'data', 'core-words.js');
 
 const html = fs.readFileSync(htmlPath, 'utf8');
 const m = html.match(/<script type="application\/json" id="data-all-words">([\s\S]*?)<\/script>/);

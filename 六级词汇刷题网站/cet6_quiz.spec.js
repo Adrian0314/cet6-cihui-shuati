@@ -3,10 +3,11 @@
 import { test, expect } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 
-const REPO_DIR = process.cwd();
+// 锚定到本文件所在目录（网站目录），无论从哪个目录运行都指向同一份站点文件
+const REPO_DIR = dirname(fileURLToPath(import.meta.url));
 const QUIZ_URL = pathToFileURL(resolve(REPO_DIR, 'cet6_quiz.html')).href;
 const FULL_WORDS_PATH = resolve(REPO_DIR, 'data', 'full-words.js');
 const FULL_WORDS_INTEGRITY_SHA256 = '424764dce6317971ebe815c6e8bcc22fde76f427d18c608c77c05c3090ce0cb5';

@@ -12,10 +12,12 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.join(__dirname, '..');
-const tplPath = path.join(root, 'word-maps-viewer.html');
-const dataPath = path.join(root, 'data', 'unit-maps.js');
-const corePath = path.join(root, 'data', 'core-words.js');
-const outPath = path.join(root, 'word-maps-viewer-offline.html');
+// 网站文件统一位于「六级词汇刷题网站/」子目录（根目录不再保留主程序副本）
+const siteDir = path.join(root, '六级词汇刷题网站');
+const tplPath = path.join(siteDir, 'word-maps-viewer.html');
+const dataPath = path.join(siteDir, 'data', 'unit-maps.js');
+const corePath = path.join(siteDir, 'data', 'core-words.js');
+const outPath = path.join(siteDir, 'word-maps-viewer-offline.html');
 
 const tpl = fs.readFileSync(tplPath, 'utf8');
 const data = fs.readFileSync(dataPath, 'utf8');
