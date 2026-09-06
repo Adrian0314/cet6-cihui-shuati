@@ -2010,58 +2010,64 @@ function optionPosHTML(word, mode) {
 // 用于选择题去重的中文释义键：只保留汉字，避免词性、音标和标点差异
 // 让“询问，打听”与“ɪn'kwaɪə(r)/ v.询问，打听”被误判为不同选项。
 function meaningChineseKey(meaning) {
-  return getChinese(meaning).replace(/[^\u3400-\u9fff]/g, '');
-}
-function meaningChineseSegments(meaning) {
-  var text = getChinese(meaning || '');
-  return text.split(/[，,；;、。]/).map(function(part) {
-    return part.replace(/[^\u3400-\u9fff]/g, '');
-  }).filter(function(part) { return part.length >= 2; });
+  // 词典噪声（【名】…人名 等标注）同样剔除，不参与同根判断。
+  return getChinese(meaning).replace(/【[^】]*】/g, '').replace(/人名/g, '').replace(/[^\u3400-\u9fff]/g, '');
 }
 
-// 判断两个释义是否过于接近。完全相同或核心汉字高度重叠时，
-// 同一道英文选中文题只保留一个，避免用户无法凭释义作答。
+// 释义比较用的高频通用字（词典套话）惰性统计：出现在超过 2% 词条释义
+// 中的二字片段不参与同根判断，避免“指/尤其”一类套话造成误伤。
+var _meaningStopGrams = null;
+var _meaningStopGramsHasFull = false;
+function buildMeaningStopGrams() {
+  var hasFull = !!(window.FULL_WORDS && FULL_WORDS.length);
+  var banks = hasFull ? [ALL_WORDS, FULL_WORDS] : [ALL_WORDS];
+  var df = Object.create(null);
+  var total = 0;
+  banks.forEach(function(bank) {
+    bank.forEach(function(w) {
+      var k = meaningChineseKey(w && w.meaning);
+      if (!k) return;
+      total++;
+      var seen = Object.create(null);
+      for (var i = 0; i < k.length - 1; i++) {
+        var g = k.substring(i, i + 2);
+        if (!seen[g]) { seen[g] = true; df[g] = (df[g] || 0) + 1; }
+      }
+    });
+  });
+  var cap = Math.max(30, total * 0.02);
+  var out = Object.create(null);
+  Object.keys(df).forEach(function(g) { if (df[g] >= cap) out[g] = true; });
+  _meaningStopGrams = out;
+  _meaningStopGramsHasFull = hasFull;
+}
+function getMeaningStopGrams() {
+  var hasFull = !!(window.FULL_WORDS && FULL_WORDS.length);
+  if (!_meaningStopGrams || (hasFull && !_meaningStopGramsHasFull)) buildMeaningStopGrams();
+  return _meaningStopGrams;
+}
+
+// 判断两个释义是否过于接近（对称）：完全相同，或共用任何一个非通用
+// 二字汉字片段（同根词，如 发明者/发明物、木制的/木头、可能的/可能）
+// 即判为过近，同一道英文选中文题只保留一个，避免用户无法凭释义作答。
+// 旧版按分段包含关系判定，比较方向不同结果不同（“可能的；可能存在的”
+// 与“可能；或许”只有先传短释义才命中），同根干扰项因此漏进同一道题。
 function meaningsTooClose(a, b) {
   var ka = meaningChineseKey(a && a.meaning != null ? a.meaning : a);
   var kb = meaningChineseKey(b && b.meaning != null ? b.meaning : b);
   if (!ka || !kb) return false;
   if (ka === kb) return true;
-  var minLen = Math.min(ka.length, kb.length);
-  var shorter = ka.length <= kb.length ? ka : kb;
-  var longer = ka.length <= kb.length ? kb : ka;
-  // 短释义也要去重：例如“尽管”与“尽管如此”只有两个核心字，
-  // 旧的 minLen<4 保护会让它们同时出现在选项中。
-  if (shorter.length >= 2 && longer.indexOf(shorter) !== -1 &&
-      shorter.length / longer.length >= (shorter.length < 4 ? 0.5 : 0.85)) return true;
-  // 处理语序/标点略有差异但共享长连续短语的释义。
-  var common = 0;
-  for (var si = 0; si < shorter.length; si++) {
-    for (var sj = si + 2; sj <= shorter.length; sj++) {
-      var part = shorter.substring(si, sj);
-      if (part.length > common && longer.indexOf(part) !== -1) common = part.length;
-    }
+  if (ka.length < 2 || kb.length < 2) return false;
+  var stop = getMeaningStopGrams();
+  var grams = Object.create(null);
+  for (var i = 0; i < ka.length - 1; i++) grams[ka.substring(i, i + 2)] = true;
+  for (var j = 0; j < kb.length - 1; j++) {
+    var gram = kb.substring(j, j + 2);
+    if (grams[gram] && !stop[gram]) return true;
   }
-  if (common >= 3 && common / shorter.length >= 0.75) return true;
-  if (minLen < 4) return false;
-  var segA = meaningChineseSegments(a && a.meaning != null ? a.meaning : a);
-  var segB = meaningChineseSegments(b && b.meaning != null ? b.meaning : b);
-  if (segA.length && segB.length) {
-    var shared = 0;
-    segA.forEach(function(sa) {
-      if (segB.some(function(sb) { return sa === sb || sa.indexOf(sb) !== -1 || sb.indexOf(sa) !== -1; })) shared++;
-    });
-    var segMin = Math.min(segA.length, segB.length);
-    // Split by meaning markers catches notable/noteworthy (two shared
-    // senses out of three) even when whole-string n-gram similarity is low.
-    if (shared >= 2 && shared / segMin >= 0.5) return true;
-  }
-  var sa = Object.create(null), sb = Object.create(null), union = 0, inter = 0;
-  for (var i = 0; i < ka.length - 1; i++) sa[ka.substring(i, i + 2)] = true;
-  for (var j = 0; j < kb.length - 1; j++) sb[kb.substring(j, j + 2)] = true;
-  Object.keys(sa).forEach(function (gram) { union++; if (sb[gram]) inter++; });
-  Object.keys(sb).forEach(function (gram) { if (!sa[gram]) union++; });
-  return union > 0 && inter / union >= 0.8;
+  return false;
 }
+
 
 function splitMeaning(meaning) {
   // 剥离音标（/.../ 对），折叠空格
@@ -2219,8 +2225,21 @@ function getDistractors(correctWord, mode, count) {
     }
   }
 
-  // 极小自定义词池可能没有足够的独立释义，最后才允许重复释义兜底，
-  // 以保证选择题仍有 count 个选项；正常六级词库不会走到这里。
+  // 当前筛选范围（单元等）内可用且释义独立的候选不足时，从当前词库
+  // 全库补足，尽量避免落到下面允许重复释义的兜底、让同根词挤进同一题。
+  if (result.length < count) {
+    var bankPool = (currentPool === 'core') ? ALL_WORDS : (ensureFullWords(), (FULL_WORDS || []));
+    for (var e = 0; e < bankPool.length && result.length < count; e++) {
+      var bw = bankPool[e];
+      if (usedTexts[bw.word.toLowerCase()] || result.indexOf(bw) !== -1) continue;
+      if (!isUsableDistractor(bw, correctWord, mode) || !canUseCandidate(bw)) continue;
+      result.push(bw);
+      selectedForMeaning.push(bw);
+      usedTexts[bw.word.toLowerCase()] = true;
+    }
+  }
+
+  // 极小自定义词池可能没有足够的独立释义，最后才允许重复释义兜底，  // 以保证选择题仍有 count 个选项；正常六级词库不会走到这里。
   if (result.length < count) {
     for (var f = 0; f < activePool.length && result.length < count; f++) {
       if (isUsableDistractor(activePool[f], correctWord, mode) && result.indexOf(activePool[f]) === -1) result.push(activePool[f]);
@@ -2385,17 +2404,27 @@ function generateOneQuestion(word) {
   }
   // Fill shortage with random words from pool
   if (clean.length < 3) {
-    var pool = getActivePool();
-    var shuffled = pool.slice().sort(function() { return Math.random() - 0.5; });
+    var bankPool = (currentPool === 'core') ? ALL_WORDS : (ensureFullWords(), (FULL_WORDS || []));
+    var shuffled = bankPool.slice().sort(function() { return Math.random() - 0.5; });
+    var selected = [word].concat(clean);
     for (var k = 0; k < shuffled.length && clean.length < 3; k++) {
       var st = shuffled[k].word.toLowerCase();
-      if (!seenText[st] && isUsableDistractor(shuffled[k], word, quizState.mode)) {
-        clean.push(shuffled[k]);
-        seenText[st] = true;
+      if (seenText[st] || !isUsableDistractor(shuffled[k], word, quizState.mode)) continue;
+      // 补位候选同样不得与正确答案或已选干扰项释义过近
+      if (quizState.mode !== 'cn2en') {
+        var near = false;
+        for (var s = 0; s < selected.length; s++) {
+          if (meaningsTooClose(shuffled[k], selected[s])) { near = true; break; }
+        }
+        if (near) continue;
       }
+      clean.push(shuffled[k]);
+      seenText[st] = true;
+      selected.push(shuffled[k]);
     }
   }
-  var options = shuffle([word].concat(clean.slice(0, 3)));
+
+  var options = shuffle([word].concat(clean.slice(0, 3)));  var options = shuffle([word].concat(clean.slice(0, 3)));
   var correctIndex = -1;
   for (var i = 0; i < options.length; i++) {
     if (options[i].id === word.id) { correctIndex = i; break; }

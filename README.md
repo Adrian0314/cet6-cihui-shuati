@@ -25,7 +25,7 @@
 | ❌ 错题本 & 重做 | 自动记录错题，支持搜索、按模式重做、答对自动移除 |
 | 📖 单词详解 | 答完即学：巧记（联想/构词/谐音/对照）、例句（中英对照）、派生词三板块 |
 | ⭐ 重点词 | 做题时在单词标题/音标旁点击「☆ 标记重点」或「★ 已标记」添加/取消当前单词；状态同步到重点词列表和智能练习 |
-| 🔇 智能混淆项 | 高频易混词优先作干扰项，答错时展示易混淆词辨析 |
+| 🔇 智能混淆项 | 高频易混词优先作干扰项，答错时展示易混淆词辨析；英文→中文题的干扰项释义自动去重：与正确答案或其他选项共用核心汉字片段的同根词（如 可能/可能的、发明者/发明物）不会出现在同一道题中，当前单元内独立释义不足时从全库补足 |
 | 🔊 朗读与自动朗读 | 手动朗读优先使用普通媒体音频（更适合蓝牙设备），失败时回退系统 TTS；可开启仅适用于“看英文→选中文”的逐题自动朗读 |
 | 📊 详细统计 | 正确率、连对、每日热力图、近7天趋势、题型对比、词汇掌握情况、每日目标达标庆祝 |
 | 📌 单元筛选 | 手动切换 Unit（大纲词汇 Unit 1-14 / 核心词汇 Unit 1-10）与学习量（1页≈20词，可选 1/2/3 页） |
@@ -146,6 +146,7 @@ cet6_quiz.html        主程序（单文件，含全部数据 + 图表库）
 cet6_quiz.spec.js     Playwright 自动化测试
 test_ebbing_plan_completion_regression.py  4周25天打卡计划回归测试（python -X utf8 test_ebbing_plan_completion_regression.py）
 test_resume_skip_ghost_regression.py  切后台恢复误跳过回归测试（python -X utf8 test_resume_skip_ghost_regression.py）
+test_option_meaning_distinct_regression.py  选项中文释义去重回归测试
 full-words.js         外置打卡词库（核心词汇 3,324 词）
 unit-maps.js          外置词群导图数据（Unit 1-10）
 core-words.js         词库发音/释义索引（自动生成）
