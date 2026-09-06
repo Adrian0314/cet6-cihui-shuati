@@ -31,7 +31,7 @@
 | 📌 单元筛选 | 手动切换 Unit（大纲词汇 Unit 1-14 / 核心词汇 Unit 1-10）与学习量（1页≈20词，可选 1/2/3 页） |
 | 📖 页导航 | 单选某个 Unit 时按 20 词/页独立编页：做题顶部显示「第 X/Y 页」与本页进度条，自动记住上次位置下次续刷，可用「上一页/下一页」跳转；选「全部」/多选/记忆模式时仅显示当前词所在页的位置参考 |
 | 📊 答题进度 | 顶部进度条会标出已完成、当前和未完成题目；翻题或按题号跳转后自动跟随当前题，并尽量保持在可视区域中央 |
-| ⌨️ 快捷键 | 数字 1-4 选答案、空格跳过、回车下一题 |
+| ⌨️ 快捷键 | 数字 1-4 选答案、空格跳过、回车下一题、←/→ 切换上一题/下一题、↑/↓ 滚动页面；手机端做题页左右滑动切换上一题/下一题（全屏与非全屏均可用，记忆模式除外） |
 | 💾 数据自主 | 统计/错题/学习进度全存本地；4 周计划同日刷新或退出后可从「继续做题」或「开始复习」续做，支持导出备份、导入恢复、恢复出厂 |
 | 📡 完全离线 | 图表库已内联，无网络也能用全部功能 |
 
@@ -147,6 +147,7 @@ cet6_quiz.spec.js     Playwright 自动化测试
 test_ebbing_plan_completion_regression.py  4周25天打卡计划回归测试（python -X utf8 test_ebbing_plan_completion_regression.py）
 test_resume_skip_ghost_regression.py  切后台恢复误跳过回归测试（python -X utf8 test_resume_skip_ghost_regression.py）
 test_option_meaning_distinct_regression.py  选项中文释义去重回归测试
+test_swipe_scroll_navigation_regression.py  滑动切题与方向键滚动回归测试
 full-words.js         外置打卡词库（核心词汇 3,324 词）
 unit-maps.js          外置词群导图数据（Unit 1-10）
 core-words.js         词库发音/释义索引（自动生成）

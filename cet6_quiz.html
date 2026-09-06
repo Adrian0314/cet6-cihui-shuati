@@ -4498,10 +4498,12 @@ function renderQuizCard() {
   bindQuizSwipe(card);
 }
 
-// Mobile navigation: horizontal swipes on the question surface move between
-// questions while vertical scrolling, option taps, inputs, maps and canvases
-// retain their native interactions. The listener is bound once because the
-// quiz card's innerHTML is replaced on every question.
+// Mobile navigation: horizontal swipes anywhere on the quiz card (fullscreen
+// or not) move between questions while vertical scrolling, option taps,
+// inputs, maps and canvases retain their native interactions. Memory mode is
+// excluded: finishing a question removes it from the queue, so a swipe must
+// not skip it. The listener is bound once because the quiz card's innerHTML
+// is replaced on every question.
 function bindQuizSwipe(card) {
   if (!card || card._quizSwipeBound) return;
   card._quizSwipeBound = true;
@@ -4514,7 +4516,7 @@ function bindQuizSwipe(card) {
     return isSwipeBlockedTarget(document.elementFromPoint(point.clientX, point.clientY));
   }
   card.addEventListener('touchstart', function(e) {
-    if (!quizActive || !card.classList.contains('fullscreen') || e.touches.length !== 1) { start = null; return; }
+    if (!quizActive || e.touches.length !== 1) { start = null; return; }
     // 切走前的旧触摸重放不作为滑动手势起点（防止恢复后瞬间被“滑动”切题）
     if (preBackgroundEvent(e)) { start = null; return; }
     var target = e.target;
@@ -4539,7 +4541,7 @@ function bindQuizSwipe(card) {
     var endOnInteractive = isSwipeBlockedTarget(e.target) || pointTargetIsBlocked(t);
     var blocked = start.blocked || endOnInteractive;
     start = null;
-    if (blocked || !quizActive || quizState.isMemory || !card.classList.contains('fullscreen') || elapsed > 700 || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.3) return;
+    if (blocked || !quizActive || quizState.isMemory || elapsed > 700 || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.3) return;
     e.preventDefault();
     if (dx > 0) prevQuestion();
     else advanceQuestion();
@@ -6471,6 +6473,12 @@ document.addEventListener('keydown', function(e) {
   }
   if (e.key === 'ArrowLeft') { if (!quizState.isMemory) { e.preventDefault(); prevQuestion(); } }
   else if (e.key === 'ArrowRight') { e.preventDefault(); advanceQuestion(); }
+  else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    // 电脑端上下方向键滚动页面，便于查看题目与答题反馈的完整内容
+    e.preventDefault();
+    var dir = e.key === 'ArrowDown' ? 1 : -1;
+    window.scrollBy(0, dir * Math.max(120, Math.round(window.innerHeight * 0.15)));
+  }
   else if (e.key >= '1' && e.key <= '4' && currentQuizType === 'choice') {
     var idx = parseInt(e.key) - 1;
     var btn = document.getElementById('opt-' + idx);
