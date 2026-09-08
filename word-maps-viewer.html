@@ -220,9 +220,9 @@ function coreInfo(word){
 function isValidPron(p){
   if (!p) return false;
   var s = String(p).replace(/^\//,'').replace(/\/$/,'');
-  if (s.length < 3) return false;
+  if (!s.length) return false;
   if (/^[-/]/.test(s)) return false;
-  if (!/[a-z]/.test(s)) return false;
+  if (!/[a-zəɪɔʊɑɛɒʌɜːʃʒθðŋɡɹɻɾ]/i.test(s)) return false;
   return true;
 }
 

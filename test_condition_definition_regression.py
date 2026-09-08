@@ -160,7 +160,7 @@ class ChoiceDefinitionRegressionTest(unittest.TestCase):
             'animal': ('动物', None),
             'their': ('det.他/她/它们', None),
             'hear': ('v.听见', None),
-            'manoeuvre': ('n.机动动作;策略,手段 v.操纵,控制', '/məˈnuːvə(r)/'),
+            'manoeuvre': ('n.机动动作;策略,手段 v.操纵,控制', '/məˈnuːvə/'),
         }
         for entry in entries:
             meaning, pronunciation = expected[entry['word']]

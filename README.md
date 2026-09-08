@@ -182,3 +182,10 @@ MIT
 - **旧存档兼容**：仅清理大纲打卡存档中误排的基础词区题目，重新对应词群题的答案、题面、当前位置和单元计数。历史统计、错题、重点词及普通做题存档不删除。建议更新前先导出备份，手机联网刷新后再继续复习。
 - **提醒说明**：提醒标明“词群适配”，新建任务按Unit列出实际待完成量，避免把新学习和旧词复习混为一谈；已暂存轮次仍显示该轮有效进度。
 - **验证**：运行 `python -m unittest test_review_workload_regression test_ebbing_plan_completion_regression`，覆盖真实词库题量、25天排期、旧存档迁移和已有完成判定。
+
+
+## 2026-09-08 词库数据审校
+- 清理词义中 OCR 混入的“第 X 页，共 Y 页”页脚，并保留“页边空白”等合法释义。
+- 使用 Wiktionary 公开数据（通过 Kaikki/wiktextract 批量快照）更新可匹配的 IPA，保存 `ipaSource` 来源字段；默认优先英式/Received Pronunciation，并保留多词性读音。
+- 修正 `disappointinging` → `disappointing`、`voit` → `volt`；未找到可靠 IPA 的词标记为待核验，不凭空生成。
+- 增加 `tools/extract_dictionary_ipa.py`、`tools/prepare_dictionary_sources.py`、`tools/update_dictionary_data.py` 与 `reports/dictionary-ipa-audit.json`，便于复核和重复生成。Wiktionary 内容按 CC BY-SA 条款使用；缓存的完整词典快照不提交仓库。
