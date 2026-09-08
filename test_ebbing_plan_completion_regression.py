@@ -4,8 +4,7 @@ Run from this directory:
     python .\\test_ebbing_plan_completion_regression.py
 
 Covers the day-9 completion bug fix:
-  1. The built-in plan table matches the book rule (+1/+3/+6/+12, unit 14's
-     final review folded into day 25).
+  1. The built-in plan table matches the book rule (+1/+3/+6/+12 for the ten word-group Units).
   2. Answering the day's Units through ANY quiz path (review queue, plain
      practice) credits the plan — previously only the review queue did, so a
      fully practiced day stayed "incomplete" and asked for the same questions
@@ -176,15 +175,13 @@ class EbbingPlanCompletionRegressionTest(unittest.TestCase):
                         if (u === newUnit) return;
                         (reviewsOf[u] = reviewsOf[u] || []).push(day);
                     });
-                    if (day > EBING_UNITS && units.length === 0) problems.push('day ' + day + ' empty');
+                    if (units.some(u => u < 1 || u > 10)) problems.push('foundation unit scheduled');
+                    if (day >= 23 && units.length) problems.push('rest day has tasks');
                 });
                 for (let u = 1; u <= EBING_UNITS; u++) {
                     const expected = [u + 1, u + 3, u + 6, u + 12];
                     const actual = (reviewsOf[u] || []).slice().sort((a, b) => a - b);
-                    if (u === EBING_UNITS) {
-                        // Unit 14 的 +12 落在第26天，超出25天表，并入第25天
-                        expected[3] = 25;
-                    }
+
                     if (actual.length !== expected.length || actual.some((d, i) => d !== expected[i])) {
                         problems.push('Unit ' + u + ' reviews ' + JSON.stringify(actual) + ' expected ' + JSON.stringify(expected));
                     }

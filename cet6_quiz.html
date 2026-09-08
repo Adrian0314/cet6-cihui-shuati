@@ -540,7 +540,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
     <div class="rules-body">
       <div class="rb"><strong>📗 《你还在背单词吗》刘晓艳：</strong>词库内容严格取自刘晓艳主编的《英语六级你还在背单词吗》（东北师范大学出版社）。第一部分「词以群记·抓核心」（Unit 1-10）：核心词按词群分类排序，每个词含记忆方法（联想/构词/对照/谐音）、经典例句及扩展词；第二部分「词以序记·刷基础」（Unit 11-14）：按字母序排列的大纲基础词。按书中 Unit 顺序学习，可手动切换 Unit 与学习页数。</div>
       <div class="rb"><strong>📚 《六级英语核心词·艾宾浩斯抗遗忘打卡》：</strong>词库严格取自刘晓艳主编的《六级英语核心词 艾宾浩斯抗遗忘打卡》（开明出版社）。全书 10 个 Unit、40 个 Lesson，每个单词带 8 格打卡（首次学习 + 5分/30分/12时 + 1天/2天/4天/7天），带 * 号为书中派生词。</div>
-      <div class="rb"><strong>📅 记忆规律：</strong>大纲词汇按《你还在背单词吗》书末「艾宾浩斯抗遗忘复习打卡表」（4周25天）调度——每天学习一个新 Unit，按 +1天/+3天/+6天/+12天 的间隔复习之前学过的 Unit（例如第9天学 Unit 9 并复习 Unit 3、6、8；Unit 14 的末次复习按书表超出25天，并入第25天）。完成判定以当天实际作答为准：只要当天计划的每个 Unit 的全部单词都在今天答过一遍——无论是通过“开始复习”队列、记忆模式、普通“开始做题”还是智能练习完成——计划栏都会显示“当天目标已完成”，不会要求重做已练过的题；复习队列中途退出后重新开始时，也只推送今天还没答过的词。跨日仍未完成时，计划会重置为当天的完整目标，不沿用前一天的部分完成进度。核心词汇按书内每词 8 格记忆周期（5分/30分/12时/1天/2天/4天/7天）调度复习。短周期（5分/30分）在学习会话内提醒，12小时及以后到期的词在打开网页时提醒。</div>
+      <div class="rb"><strong>📅 记忆规律：</strong>大纲词汇使用本站「4周25天·词群适配计划」，不是纸质打卡表与网站编号的直接对应：仅 Unit 1-10 词群区参加自动任务，前10天每天学习一个新 Unit，按 +1/+3/+6/+12 天复习；第11天仅复习 Unit 5、8、10（完整词量525题，实际扣除当天已答），第22天完成最后一次计划复习，第23-25天无自动任务，可自主查漏补缺。Unit 11-14 是按字母分组的基础词区，仍可手动筛选刷题，但不再整区自动加入打卡。当天新单元所有词有过作答即算学完；旧单元所有词当天答过才算复习完成，不限做题入口。未完成日跨天仍按原规则重做该日目标。旧打卡存档自动移除基础词区题目，保留词群题的答案、题面及进度，不删除历史统计、错题或重点词。核心词汇仍使用独立8格周期。</div>
       <div class="rb"><strong>🏰 闯关模式：</strong>严格对应书中使用指南——闯关1「词群速记」：结合词群导图快速检测，认识/不认识直接判断；闯关2「选择检测」：对应书中学完一个 Lesson 后的检测（选择题/默写题）；闯关3「Unit综合测」：学完一个 Unit 后的综合检测（覆盖整个 Unit）。词群导图怎么看，见下方「🗺️ 词群导图」。</div>
       <div class="rb"><strong>📖 答题后信息顺序：</strong>提交答案或跳过后，题目与正确答案下方紧接默认展开的“单词详解”（巧记、例句、派生词）；随后显示“⚠️ 易混淆词”辨析和词群归属信息，最后显示“🗺️ 词群导图”。点击“📖 单词详解”标题可收起或重新展开，导图可继续点击圆圈下钻查看关联词。</div>
       <div class="rb"><strong>🧹 选择题释义显示：</strong>系统会自动清理词库中误混入释义末尾的孤立词性标记，并修复已知词条错误（<code>animal</code> 补全释义、<code>their</code> 去除多余“们”、<code>hear</code> 清理尾部残缺标点、<code>manoeuvre</code> 校正音标与释义字段），避免选项出现多余的 <code>v.</code>、<code>adj.</code> 或只有词性没有中文释义的文本。在线入口二维码指向 GitHub Pages 最新做题页。</div>
@@ -1594,18 +1594,19 @@ var POOL_META = {
   full: { name: '📚 核心词汇（艾宾浩斯打卡）', units: [1,2,3,4,5,6,7,8,9,10] }
 };
 
-// 刘晓艳书末「艾宾浩斯抗遗忘复习打卡表」（4周25天）：每天学一个新Unit，复习间隔 +1/+3/+6/+12 天
-// 第N天学 Unit min(N,14)；Unit U 的复习日为 第 U+1、U+3、U+6、U+12 天。
-// 旧表第12天起把 +12 间隔错排成了 +11（例如 Unit 1 的末次复习被排到第12天、
-// 第25天只复习 Unit 14），导致第12天起每天到期 Unit 与书表不一致，此处按规则重排。
-// Unit 14 按 +12 应在第26天复习，超出25天表，末次复习并入第25天。
-var EBBING_25_DAY_PLAN = [
-  [1], [2, 1], [3, 2], [4, 1, 3], [5, 2, 4], [6, 3, 5], [7, 1, 4, 6],
-  [8, 2, 5, 7], [9, 3, 6, 8], [10, 4, 7, 9], [11, 5, 8, 10], [12, 6, 9, 11],
-  [13, 1, 7, 10, 12], [14, 2, 8, 11, 13], [3, 9, 12, 14], [4, 10, 13], [5, 11, 14],
-  [6, 12], [7, 13], [8, 14], [9], [10], [11], [12], [13, 14]
-];
-var EBING_UNITS = 14;
+// 本站适配计划：仅词群区 Unit 1-10 参与自动打卡。
+// Unit 11-14 是按字母分组的大纲基础词区，不是每日一个的词群学习单元。
+// 保留 25 天窗口与 +1/+3/+6/+12 间隔；第23-25天无自动任务，可自主查漏补缺。
+var EBING_UNITS = 10;
+var EBBING_25_DAY_PLAN = [];
+for (var planDay = 1; planDay <= 25; planDay++) {
+  var planUnits = planDay <= EBING_UNITS ? [planDay] : [];
+  [12, 6, 3, 1].forEach(function(offset) {
+    var unit = planDay - offset;
+    if (unit >= 1 && unit <= EBING_UNITS) planUnits.push(unit);
+  });
+  EBBING_25_DAY_PLAN.push(planUnits);
+}
 
 function ebbingPlanUnits(dayN) {
   var units = EBBING_25_DAY_PLAN[Number(dayN) - 1];
@@ -2538,7 +2539,7 @@ function syncEbbingPlan(now) {
 
 function isEbbingPlanComplete(plan) {
   var scheduled = plan ? ebbingPlanUnits(plan.day) : [];
-  return scheduled.length > 0 && scheduled.every(function(unit) {
+  return !!plan && scheduled.every(function(unit) {
     return plan.completedUnits.indexOf(unit) !== -1;
   });
 }
@@ -2790,6 +2791,7 @@ function startMemoryQuiz(mode) {
 }
 
 function startReview() {
+  migrateEbbingPlanSnapshot(state.suspendedQuiz);
   if (isCurrentEbbingPlanSnapshot(state.suspendedQuiz)) {
     // A snapshot created before the current plan was reconciled may contain
     // the day's newly learned Unit (for example all 214 Unit 8 words). Once
@@ -2897,7 +2899,55 @@ function isCurrentEbbingPlanSnapshot(sq, now) {
   return !sq.ebbingPlanDayKey || sq.ebbingPlanDayKey === dayKeyStr(now || new Date());
 }
 
+// 迁移旧计划误纳入的基础词区，仅修剪打卡存档；普通刷题及核心词库不变。
+// 按新题位重映射答案和题面，保留有效已答进度与当前位置；不删除历史统计。
+function migrateEbbingPlanSnapshot(sq) {
+  if (!sq || !sq.isEbbingPlan || sq.poolType !== 'core' || !Array.isArray(sq.ids)) return false;
+  var keep = [];
+  sq.ids.forEach(function(id, index) {
+    var word = getWord(id, 'core');
+    if (word && Number(word.unit) >= 1 && Number(word.unit) <= EBING_UNITS) keep.push(index);
+  });
+  if (keep.length === sq.ids.length) return false;
+  var oldAnswers = sq.answers || {}, answers = {}, answered = {}, remaining = {}, units = [];
+  var oldPos = Number(sq.pos) || 0;
+  var nextPos = keep.findIndex(function(index) { return index >= oldPos; });
+  var snapshots = sq.questionSnapshots || [];
+  var ids = keep.map(function(index, newIndex) {
+    var id = sq.ids[index], word = getWord(id, 'core');
+    if (units.indexOf(word.unit) === -1) units.push(word.unit);
+    if (Object.prototype.hasOwnProperty.call(oldAnswers, index)) {
+      answers[newIndex] = oldAnswers[index];
+      answered[id] = true;
+    } else remaining[word.unit] = (remaining[word.unit] || 0) + 1;
+    return id;
+  });
+  var removedCount = sq.ids.length - ids.length;
+  sq.ids = ids;
+  sq.answers = answers;
+  sq.questionSnapshots = keep.map(function(index) { return snapshots[index] || null; });
+  sq.pos = nextPos < 0 ? Math.max(0, ids.length - 1) : nextPos;
+  sq.currentId = ids[sq.pos] || null;
+  // 记忆模式已答题会从 ids 移除，累计 done/results 不能按剩余队列重算。
+  if (!sq.isMemory) sq.done = Object.keys(answers).length;
+  if (sq.isMemory) sq.memTotal = Math.max(Number(sq.done) || 0, (Number(sq.memTotal) || 0) - removedCount);
+  sq.reviewCorrect = keep.filter(function(index) {
+    var answer = oldAnswers[index], snapshot = snapshots[index];
+    return (typeof answer === 'number' && snapshot && answer === snapshot.correctIndex) ||
+      (answer && typeof answer === 'object' && (answer.correct === true || answer.gate1 === true));
+  }).length;
+  sq.ebbingPlanUnits = units;
+  sq.ebbingPlanAnswered = answered;
+  sq.ebbingPlanRemaining = remaining;
+  if (sq === state.suspendedQuiz) {
+    if (!ids.length) state.suspendedQuiz = null;
+    saveState();
+  }
+  return true;
+}
+
 function suspendedEbbingPlanProgress(sq) {
+  migrateEbbingPlanSnapshot(sq);
   if (!isCurrentEbbingPlanSnapshot(sq)) return null;
   var answers = sq.answers || {};
   var completed = 0;
@@ -2991,6 +3041,7 @@ function saveSuspendedQuiz() {
 }
 
 function checkSuspendedQuiz() {
+  migrateEbbingPlanSnapshot(state.suspendedQuiz);
   var sq = state.suspendedQuiz;
   if (isExpiredEbbingPlanSnapshot(sq)) {
     state.suspendedQuiz = null;
@@ -3033,6 +3084,7 @@ function checkSuspendedQuiz() {
 }
 
 function resumeQuiz() {
+  migrateEbbingPlanSnapshot(state.suspendedQuiz);
   var sq = state.suspendedQuiz;
   if (!sq) return;
   if (isExpiredEbbingPlanSnapshot(sq)) {
@@ -4759,7 +4811,7 @@ function renderReviewBar() {
     if (!state.ebbingActive) { bar.classList.remove('show'); return; }  // 纯刷题：不提醒 ebbing 复习
     var dueUnits = dueUnitsByEbbing();
     if (dueUnits.length > 0) {
-      infoEl.textContent = '大纲词汇按书打卡表今天到期复习：Unit ' + dueUnits.join('、') + '（4周25天表）';
+      infoEl.textContent = '大纲词汇词群适配计划今天待学习/复习：Unit ' + dueUnits.join('、') + '（4周25天表）';
       bar.classList.add('show');
     } else {
       bar.classList.remove('show');
@@ -4778,7 +4830,7 @@ function renderEbbingPlan(now) {
     el.innerHTML =
       '<button class="ctrl-btn accent" onclick="activateEbbing()" ' +
       'style="font-size:0.85em;padding:4px 12px;">▶ 开始 4周25天打卡表</button>' +
-      '<span style="color:var(--text2);margin-left:6px;">大纲词汇按书《你还在背单词吗》艾宾浩斯打卡 · 复习计划未开启（纯刷题）</span>';
+      '<span style="color:var(--text2);margin-left:6px;">大纲词汇 Unit 1-10 词群适配计划 · 复习计划未开启（纯刷题）</span>';
     el.style.display = 'block';
     return;
   }
@@ -4788,10 +4840,11 @@ function renderEbbingPlan(now) {
   if (!dayN) { el.style.display = 'none'; return; }
   var todayUnit = Math.min(dayN, EBING_UNITS);
   var due = dueUnitsByEbbing(now);
-  var txt = '📖 大纲词汇按书「艾宾浩斯抗遗忘复习打卡表」第 ' + dayN + ' 天：';
+  var txt = '📖 大纲词汇「4周25天·词群适配计划」第 ' + dayN + ' 天：';
   if (dayN <= EBING_UNITS) txt += '今天该学 Unit ' + todayUnit;
-  else txt += '新词已学完（Unit 1-14），按表继续复习';
-  if (due.length) txt += ' · 到期复习 Unit ' + due.join('、');
+  else txt += '词群新词学习阶段结束（Unit 1-10），按适配计划继续复习';
+  if (!ebbingPlanUnits(dayN).length) txt += ' · 无自动任务，可自主查漏补缺';
+  if (due.length) txt += ' · 待学习/复习 Unit ' + due.join('、');
   if (isEbbingPlanComplete(state.ebbingPlan)) txt += ' · 当天目标已完成';
   el.innerHTML = txt +
     '<button class="ctrl-btn" onclick="stopEbbing()" ' +
@@ -6712,17 +6765,20 @@ function checkSpacedRepetition() {
     lines = dueInfo.join('\n');
   } else {
     // 大纲词汇：4周25天 Unit 级
-    title = '🧠 大纲词汇复习提醒（4周25天打卡表）';
+    title = '🧠 大纲词汇提醒（4周25天·词群适配）';
     var progress = suspendedEbbingPlanProgress(state.suspendedQuiz);
     if (progress) {
-      desc = '按大纲词汇《你还在背单词吗》书末打卡表，今天尚未完成的复习：';
-      lines = (progress.units.length ? '待复习 Unit ' + progress.units.join('、') + '\n' : '') +
+      desc = '本站词群适配计划（仅 Unit 1-10），本轮尚未完成的学习/复习：';
+      lines = (progress.units.length ? '待学习/复习 Unit ' + progress.units.join('、') + '\n' : '') +
         '已完成 ' + progress.completed + ' 题\n' +
         '待完成 ' + progress.remaining + ' 题（共 ' + progress.total + ' 题）';
     } else {
       var du = dueUnitsByEbbing();
-      desc = '按大纲词汇《你还在背单词吗》书末打卡表，今天到期的 Unit：';
-      lines = du.length ? 'Unit ' + du.join('、') : '';
+      desc = '本站词群适配计划（仅 Unit 1-10），今天待学习/复习的 Unit：';
+      lines = du.length ? du.map(function(unit) {
+        var count = due.filter(function(id) { var w = getWord(id, 'core'); return w && Number(w.unit) === unit; }).length;
+        return 'Unit ' + unit + '：待完成 ' + count + ' 题';
+      }).join('\n') + '\n合计待完成 ' + due.length + ' 题' : '';
     }
   }
   if (currentPool === 'full' && due.length > 5) lines += '\n...还有 ' + (due.length - 5) + ' 个单词';
