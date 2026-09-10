@@ -122,7 +122,7 @@ test('a delayed skip click after returning from another app is ignored', async (
   });
   expect(lateIgnored).toBe(true);
 
-  const result = await page.evaluate(() => {
+  const ignoredTouchResume = await page.evaluate(() => {
     const skip = document.getElementById('skipBtn');
     // A touch that began just before the app switch must also not become a
     // skip after the browser delivers its click on the visible page.
@@ -131,18 +131,29 @@ test('a delayed skip click after returning from another app is ignored', async (
     skip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
     Object.defineProperty(document, 'hidden', { configurable: true, value: false });
     document.dispatchEvent(new Event('visibilitychange'));
-    skip.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    const ignoredTouchResume = quizState.done === 0 && !quizState.answers[quizState.pos];
-    // A genuine tap starts with pointerdown and must remain functional.
-    skip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
-    skip.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    return { ignored: true, ignoredTouchResume, handled: quizState.done === 1, answer: quizState.answers[quizState.pos] };
+    skip.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
+    return quizState.done === 0 && !quizState.answers[quizState.pos];
   });
-  expect(result).toEqual({ ignored: true, ignoredTouchResume: true, handled: true, answer: 'skip' });
-  await page.click('#nextBtn');
+  expect(ignoredTouchResume).toBe(true);
+
+  // A genuine tap must remain functional. The gate tells a human tap from a
+  // replayed burst by the real down→up gap, so the tap is dispatched in two
+  // steps with a real pause in between.
+  await page.evaluate(() => document.getElementById('skipBtn')
+    .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' })));
+  await page.waitForTimeout(60);
+  await page.evaluate(() => document.getElementById('skipBtn')
+    .dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch' })));
+  await page.evaluate(() => document.getElementById('skipBtn')
+    .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 })));
+  expect(await page.evaluate(() => quizState.done)).toBe(1);
+  expect(await page.evaluate(() => quizState.answers[quizState.pos])).toBe('skip');
+
+  // Real (human-paced) button clicks keep working too.
+  await page.click('#nextBtn', { delay: 60 });
   await page.waitForSelector('#skipBtn');
   await page.waitForTimeout(950);
-  await page.click('#skipBtn');
+  await page.click('#skipBtn', { delay: 60 });
   expect(await page.evaluate(() => quizState.done)).toBe(2);
   await context.close();
 });
@@ -169,7 +180,8 @@ test('the first real option tap after a long background stay is not polluted by 
   // timeout, so a stale click remains blocked regardless of elapsed time.
   await page.waitForTimeout(2000);
 
-  await page.locator('.opt-btn').first().click();
+  // delay: 真人点按有真实的按下→抬起耗时；瞬时 click 会被闸门判为补发
+  await page.locator('.opt-btn').first().click({ delay: 60 });
   const afterOption = await page.evaluate(() => ({
     done: quizState.done,
     answer: quizState.answers[quizState.pos],
@@ -191,9 +203,9 @@ test('the first real option tap after a long background stay is not polluted by 
   });
   expect(await page.evaluate(() => quizState.done)).toBe(1);
 
-  await page.click('#nextBtn');
+  await page.click('#nextBtn', { delay: 60 });
   await page.waitForSelector('#skipBtn');
-  await page.click('#skipBtn');
+  await page.click('#skipBtn', { delay: 60 });
   expect(await page.evaluate(() => quizState.done)).toBe(2);
   await context.close();
 });

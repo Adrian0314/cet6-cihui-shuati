@@ -11,6 +11,8 @@
 | 📗 大纲词汇 | 刘晓艳《英语六级你还在背单词吗》（东北师范大学出版社） | 6,526 词。Unit 1-10「词以群记·抓核心」：词汇按词群分类（1,904 词），大多含记忆方法（联想/构词/对照/谐音）、经典例句，部分附扩展词；Unit 11-14「词以序记·刷基础」：大纲基础词按首字母分组——U11 A-E（1,230 词）、U12 F-L（884 词）、U13 M-S（494 词）、U14 P-Z（1,518 词），全部含音标与释义；另有 496 个无单元编号的补充词（选「全部」时参与刷题） |
 | 📚 核心词汇 | 刘晓艳《六级英语核心词·艾宾浩斯抗遗忘打卡》（开明出版社） | 3,324 词。10 个 Unit、每个 Unit 4 个 Lesson，每词按书中 8 格打卡周期调度 |
 
+**音标来源**：全部音标（含「单词详解」里的派生词音标）统一取自**有道词典**（英式优先、无英式时回退美式），不再混用 OCR 识别值与不同词典体系的窄式音标。13,220 条单词音标与 1,500 余条内联派生词音标已全部核验；个别教材自造的派生词不会凭空生成读音。
+
 ## ✨ 功能特色
 
 | 功能 | 说明 |
@@ -141,9 +143,14 @@
 README.md             项目说明
 cet6_quiz.html        主程序（单文件，含全部数据 + 图表库）
 cet6_quiz.spec.js     Playwright 自动化测试
-test_ebbing_plan_completion_regression.py  4周25天打卡计划回归测试（python -X utf8 test_ebbing_plan_completion_regression.py）
-test_resume_skip_ghost_regression.py  切后台恢复误跳过回归测试（python -X utf8 test_resume_skip_ghost_regression.py）
+default-config.spec.js / favorite-button.spec.js / tts-routing.spec.js
+quiz-progress-persistence.spec.js   默认配置 / 重点词 / 朗读 / 进度持久化测试
+test_condition_definition_regression.py     释义与题干渲染回归测试
+test_ebbing_plan_completion_regression.py   4周25天打卡计划回归测试
+test_gate1_known_definition_regression.py   闯关1「认识」释义展示回归测试
 test_option_meaning_distinct_regression.py  选项中文释义去重回归测试
+test_resume_skip_ghost_regression.py        切后台恢复误触（幽灵输入）回归测试
+test_review_completion_controls_regression.py / test_review_workload_regression.py  复习流程与题量回归测试
 test_swipe_scroll_navigation_regression.py  滑动切题与方向键滚动回归测试
 full-words.js         外置打卡词库（核心词汇 3,324 词）
 unit-maps.js          外置词群导图数据（Unit 1-10）
@@ -160,19 +167,51 @@ icon-192.png / icon-512.png / apple-touch-icon.png   应用图标
 site-qrcode.png       网站二维码
 build-core-words.js   构建脚本（生成词库索引 core-words.js）
 build-offline-viewer.js 构建脚本（生成离线单文件版查看器）
+tools/update_phonetics.py  词库音标批量更新脚本（有道词典，带本地缓存）
 scan_meaning_bugs.js  释义数据质量扫描工具
 _lookup.js            单词查询小工具
 ```
 
 释义扫描脚本用法：在仓库根目录运行 `node scan_meaning_bugs.js`。
 
+音标维护：`python tools/update_phonetics.py`（预览）／`python tools/update_phonetics.py --write`（写入），改完再跑一次两个构建脚本。
+
 ## 🛠 技术栈
 
-原生 HTML + CSS + JavaScript（无框架）、Chart.js（已内联）、Web Speech API、Service Worker、localStorage、Playwright（测试）、Node.js（词群编辑器工具链）。
+原生 HTML + CSS + JavaScript（无框架）、Chart.js（已内联）、Web Speech API、Service Worker、localStorage、Playwright（Python / Node 双端测试）、Node.js（词群编辑器与构建脚本）、Python（音标数据维护）。
 
 ## 📄 License
 
 MIT
+
+## 修复记录：2026-09-10 音标与切题手势
+
+### 一、音标全面替换为有道词典读音
+
+- **问题**：手机端多道题显示的音标"缺字符""看着不对"甚至整行没有音标。原因有两层：
+  1. 数据层——上一轮用 Wiktionary 窄式音标（`/ˈnɜːɹ.t͡ʃəɹ/`），含 `ɹ`、`͡` 这类中文 ROM 常缺字形的符号，缺字形就整字消失；另有 268 处"（音标待核验）"占位符和 35 个查不到读音的词（如 `malpractice`）干脆没有音标。
+  2. 渲染层——部分 Android 机型的默认字体缺少 IPA Extensions 字形，`ˈ ʒ ʃ ŋ` 等会渲染成空白或方框。
+- **修复**：全部 13,220 条单词音标（大纲 6,526 + 核心 3,324 + 导图 3,370）与 1,500 余条「单词详解」里的派生词音标，统一替换为**有道词典**读音（英式优先，无英式回退美式），来源可复现、可重跑。无法核验的自造派生词只做字形降级，占位符直接移除，绝不凭空合成读音。同时为正文补上带 IPA 覆盖的字体回退栈。
+- **涉及文件**：`cet6_quiz.html`（内嵌词表 + 字体栈）、`full-words.js`、`unit-maps.js`，并重新生成 `core-words.js`、`word-maps-viewer-offline.html`。
+- **验证**：`python -m unittest test_condition_definition_regression`；另抽查若干词的音标与有道词条逐字一致。
+
+### 二、重做切题手势与「不会，跳过」逻辑
+
+- **问题**：手机把做题页切到后台、在其他 App 停留一段时间再切回后，点一次选项就会自动跳到下一题，连着四五题都这样；想点「上一题」反而被切到「下一题」。
+- **原因**：切后台期间浏览器会把切走前积压的输入事件（常常是完整的 `pointerdown → pointerup → click` 序列）在回到前台时一次性补发。旧实现用 80ms / 300ms / 1.5s 多个时间窗口与"延迟一拍"互相打补丁去猜哪些事件是补发的，既漏掉一部分补发，又误伤真实操作——回上一题被冷却期吞掉、连点被当成"风暴"压制，于是"想回上一题却被切到下一题"。
+- **修复**：改为**统一手势闸门**，规则收敛为四条：
+  1. 起手（`pointerdown`/`touchstart`/`mousedown`）的时间戳必须晚于最近一次切到后台的时刻，切走前的补发事件在捕获阶段整批取消；
+  2. 收尾事件必须落在当前手势里且时间戳不倒流——凭空出现的裸 `click` 一律不执行动作；
+  3. 一个手势只属于一个起手目标：点选项的手势永远不可能触发「下一题」或「不会，跳过」；
+  4. 真机触摸、回到前台后的保护窗口、以及切过后台时手机上的鼠标兼容序列，都要求"起手→收尾"有真实人手耗时（补发批次会被压成 ≈0ms）。
+  闸门内不再有延迟执行和冷却期，所以真人操作一次就是一，既不吞掉也不重复。键盘激活（`detail=0` 且紧跟真实按键）单独放行。
+- **验证**：`python -X utf8 test_resume_skip_ghost_regression.py`（18 项，覆盖裸 click、带切走前时间戳的重放、压缩冲刷重放、幽灵「下一题」点击，以及真人点按/长按/键盘等正向路径）与 `python -X utf8 test_swipe_scroll_navigation_regression.py`（10 项，含切后台前后的滑动与按钮切题）。
+
+### 三、仓库清理
+
+- 删除上一轮 Wiktionary 音标流水线遗留的 `reports/dictionary-ipa-audit.json`（7.1MB 审计快照）与三个一次性脚本，替换为可重跑的 `tools/update_phonetics.py`。
+- 顺带修复 `build-core-words.js` / `build-offline-viewer.js`：`package.json` 声明 `"type": "module"` 后这两个 CommonJS 脚本无法执行，已改为 ESM 写法（用法不变）。
+- 顺带修复 `default-config.spec.js` 缺少 `node:path` / `node:url` 导入导致的测试加载失败。
 
 ## 修复记录：2026-09-08 复习题量异常
 

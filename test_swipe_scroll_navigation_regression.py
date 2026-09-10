@@ -4,7 +4,9 @@
 2. 记忆模式下滑动不切题（做完一题即从队列移除，滑动会跳过未作答的词）；
 3. 纵向为主的触摸不触发切题（保留页面滚动），起点在按钮/输入框上的
    触摸也不触发切题；
-4. 电脑端做题时 ↑/↓ 方向键滚动页面。
+4. 电脑端做题时 ↑/↓ 方向键滚动页面；
+5. 切后台再回前台后，浏览器补发的旧事件（时间戳停留在切走前）既不作答也不切题，
+   而回前台之后的真实点击仍然正常工作。
 """
 
 import unittest
@@ -54,7 +56,65 @@ SWIPE_JS = """
     };
     touch('touchstart', chosen.x1, chosen.y);
     touch('touchend', chosen.x2, chosen.y + dy);
-    return { before, after: quizState.pos, fullscreen: card.classList.contains('fullscreen') };
+    // 手势闸门是同步的：滑动在 touchend 里立即生效，直接读结果即可。
+    return {
+        before, after: quizState.pos,
+        fullscreen: card.classList.contains('fullscreen')
+    };
+}
+"""
+
+# 模拟"切到后台、过一会儿再切回前台"：把切走/回前台时刻写进闸门的基准线。
+BACKGROUND_JS = """
+([hiddenAgo, visibleAgo]) => {
+    const now = performance.now();
+    _ghostEverHidden = true;
+    _ghostHiddenAt = now - hiddenAgo;
+    _ghostVisibleAt = now - visibleAgo;
+    _gesture = null;
+    return true;
+}
+"""
+
+# 浏览器在回到前台时补发的旧输入：完整序列 + 时间戳停留在切走之前。
+GHOST_REPLAY_JS = """
+() => {
+    const card = document.getElementById('quizCard');
+    const opt = card.querySelector('.opt-btn');
+    const next = document.getElementById('nextBtn');
+    const before = quizState.pos;
+    const answeredBefore = !!quizState.answers[before];
+    const hiddenAt = _ghostHiddenAt;
+    const rect = opt.getBoundingClientRect();
+    const point = { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
+
+    const replay = (target, type, tx) => {
+        let ev;
+        if (type === 'click') {
+            ev = new MouseEvent('click', { bubbles: true, cancelable: true });
+        } else {
+            ev = new Event(type, { bubbles: true, cancelable: true });
+            Object.defineProperty(ev, type === 'touchstart' ? 'touches' : 'changedTouches',
+                { value: [point] });
+        }
+        // 补发事件保留切走前的原始时间戳
+        Object.defineProperty(ev, 'timeStamp', { value: tx });
+        target.dispatchEvent(ev);
+    };
+
+    replay(card, 'touchstart', hiddenAt - 4000);   // 切走前的旧滑动
+    replay(card, 'touchend', hiddenAt - 3990);
+    replay(opt, 'touchstart', hiddenAt - 3000);    // 切走前的旧点选项
+    replay(opt, 'touchend', hiddenAt - 2990);
+    replay(opt, 'click', hiddenAt - 2980);
+    if (next) replay(next, 'click', hiddenAt - 2900);  // 切走前的旧"下一题"点击
+
+    return {
+        before,
+        after: quizState.pos,
+        answeredBefore,
+        answeredAfter: !!quizState.answers[before]
+    };
 }
 """
 
@@ -77,7 +137,7 @@ class SwipeScrollNavigationRegressionTest(unittest.TestCase):
         page.evaluate(START_QUIZ_JS)
         page.reload(wait_until="load")
         page.select_option('#gateSelect', '2')
-        page.click('button:has-text("开始做题")')
+        page.click('button:has-text("开始做题")', delay=60)
         page.wait_for_selector('.opt-btn')
         return context, page
 
@@ -98,7 +158,7 @@ class SwipeScrollNavigationRegressionTest(unittest.TestCase):
     def test_swipe_navigates_questions_in_fullscreen(self) -> None:
         context, page = self._start_quiz({'width': 390, 'height': 844}, mobile=True)
         try:
-            page.click('#toggleFsBtn')
+            page.click('#toggleFsBtn', delay=60)
             page.wait_for_function("() => document.getElementById('quizCard').classList.contains('fullscreen')")
             result = page.evaluate(SWIPE_JS, {"dx": -160})
             self.assertTrue(result["fullscreen"])
@@ -144,6 +204,83 @@ class SwipeScrollNavigationRegressionTest(unittest.TestCase):
                 }"""
             )
             self.assertEqual(result["before"], result["after"], "起点在选项按钮上的滑动不应切题")
+        finally:
+            context.close()
+
+    # ---- 切后台恢复：补发的旧事件必须被丢弃 -------------------------------
+
+    def test_replayed_events_after_background_are_ignored(self) -> None:
+        """切后台恢复后，浏览器补发的旧触摸/点击既不作答也不切题。"""
+        context, page = self._start_quiz({'width': 390, 'height': 844}, mobile=True)
+        try:
+            page.evaluate(BACKGROUND_JS, [1000, 0])
+            result = page.evaluate(GHOST_REPLAY_JS)
+            self.assertEqual(result["before"], result["after"],
+                             "补发的旧事件不应切换题目（点选项/点下一题都不行）")
+            self.assertFalse(result["answeredBefore"])
+            self.assertFalse(result["answeredAfter"],
+                             "补发的旧点击不应把当前题作答掉")
+        finally:
+            context.close()
+
+    def test_replayed_events_do_not_skip_question(self) -> None:
+        """补发的旧事件不能把当前题「跳过」掉。"""
+        context, page = self._start_quiz({'width': 390, 'height': 844}, mobile=True)
+        try:
+            page.evaluate(BACKGROUND_JS, [1000, 0])
+            result = page.evaluate(
+                """() => {
+                    const hiddenAt = _ghostHiddenAt;
+                    const skip = document.getElementById('skipBtn');
+                    const before = quizState.pos;
+                    for (const tx of [hiddenAt - 3000, hiddenAt - 2990, hiddenAt - 2980]) {
+                        const ev = new MouseEvent('click', {
+                            bubbles: true, cancelable: true, detail: 1
+                        });
+                        Object.defineProperty(ev, 'timeStamp', { value: tx });
+                        skip.dispatchEvent(ev);
+                    }
+                    return { before, after: quizState.pos, answered: !!quizState.answers[before] };
+                }"""
+            )
+            self.assertEqual(result["before"], result["after"], "补发的旧点击不应切题")
+            self.assertFalse(result["answered"], "补发的旧点击不应触发「不会，跳过」")
+        finally:
+            context.close()
+
+    def test_fresh_input_after_background_still_works(self) -> None:
+        """回到前台之后的真实操作必须照常生效：答题、上一题、下一题都不受影响。"""
+        context, page = self._start_quiz({'width': 390, 'height': 844}, mobile=True)
+        try:
+            page.evaluate(BACKGROUND_JS, [5000, 1500])
+            page.click('#opt-0', delay=60)
+            page.wait_for_function("() => document.getElementById('nextBtn').classList.contains('show')")
+            pos_after_answer = page.evaluate("() => quizState.pos")
+            self.assertTrue(
+                page.evaluate(
+                    "(p) => Object.prototype.hasOwnProperty.call(quizState.answers, p)",
+                    pos_after_answer),
+                "回前台后点选项应正常作答")
+
+            page.click('#nextQBtn', delay=60)
+            self.assertEqual(pos_after_answer + 1, page.evaluate("() => quizState.pos"),
+                             "回前台后点「下一题」应正常切题")
+
+            page.click('#prevQBtn', delay=60)
+            self.assertEqual(pos_after_answer, page.evaluate("() => quizState.pos"),
+                             "回前台后点「上一题」应正常回到上一题")
+        finally:
+            context.close()
+
+    def test_fresh_swipe_after_background_still_works(self) -> None:
+        """回前台后，滑动切题仍然可用（不会被防误触逻辑吞掉）。"""
+        context, page = self._start_quiz({'width': 390, 'height': 844}, mobile=True)
+        try:
+            page.evaluate(BACKGROUND_JS, [5000, 1500])
+            result = page.evaluate(SWIPE_JS, {"dx": -160})
+            self.assertEqual(1, result["after"], "回前台后左滑应正常切到下一题")
+            result = page.evaluate(SWIPE_JS, {"dx": 160})
+            self.assertEqual(0, result["after"], "回前台后右滑应正常回到上一题")
         finally:
             context.close()
 

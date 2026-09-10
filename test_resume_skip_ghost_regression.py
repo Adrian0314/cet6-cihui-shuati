@@ -1,42 +1,39 @@
-"""Regression coverage for the post-background ghost-skip bug (切后台恢复误跳过).
+"""Regression coverage for the post-background ghost-input bug (切后台恢复误触).
 
 Run from this directory:
     python .\\test_resume_skip_ghost_regression.py
 
-Simulates the Android Chrome behaviour that skips a question the moment the
-user taps an option after returning from another app: the queued touch from
-BEFORE the app switch is replayed on the skip button, flushed together with
-the user's next tap. Replays may take three shapes:
-  a. bare compat mouse sequence (mousedown/mouseup/click — no pointer start);
-  b. full pointer/touch replay with original pre-background event timestamps;
-  c. full pointer/touch replay flushed as a compressed burst (down→up ≈ 0ms).
+问题现场（Android Chrome / 全屏 WebView）：把做题页切到后台、过一段时间再切回
+前台后，浏览器会把切走前积压的输入在回到前台时一次性补发。补发可能是
 
-The fix stacks four defences in handleSkip/noteSkipPointer:
-  1. freshness: a skip click needs a pointer/touch start-or-end on the skip
-     button within 1.5s (defeats shape a);
-  2. timestamp gate: arming events older than the last background transition
-     are rejected (defeats shape b — replays keep their original timestamps);
-  3. compression gate: a down→up pair compressed under 25ms is not a human
-     tap (defeats shape c);
-  4. option-batch veto: option activity within 350ms (before) or an option
-     click landing during the 200ms defer window vetoes the skip — tapping an
-     option can never be replaced by a skip, whatever the event order.
+  a. 裸的兼容鼠标序列（mousedown/mouseup/click，没有指针/触摸起手）；
+  b. 保留了切走前原始时间戳的完整 pointer/touch 重放；
+  c. 被压缩冲刷的完整 pointer/touch 重放（down→up ≈ 0ms）。
+
+它们落在选项、"不会，跳过"、"下一题"上就表现为"点一下选项却连跳好几题"
+"想回上一题反而被切到下一题"。
+
+现在的实现是"统一手势闸门"（cet6_quiz.html 里的 gestureAllows）：
+  1. 起手时间戳必须晚于最近一次切到后台的时刻（命中 b）；
+  2. 收尾事件必须落在当前手势里，时间戳不得倒流（命中 a：没有配对起手）；
+  3. 一个手势只属于一个起手目标，点选项的手势触发不了下一题/跳过；
+  4. 触摸手势 / 回前台保护窗口 / 触摸为主设备上的鼠标手势，都要求起手到收尾
+     有真实人手耗时（命中 c）。
+闸门里没有延迟执行、也没有冷却期，所以真人操作不会被吞掉，也不会执行两次。
 """
 
-import json
-import time
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 from playwright.sync_api import Browser, Page, Playwright, sync_playwright
 
 
 QUIZ_HTML = Path(__file__).with_name("cet6_quiz.html")
 
+# 模拟切后台 → 切回前台：走真实的 visibilitychange 分支，让闸门记录下基准线，
+# 并返回切后台时刻（performance.now 时基），供伪造"切走前"的时间戳使用。
 SIMULATE_RESUME_JS = """
 () => {
-    // 模拟切后台 → 切回前台：触发 visibilitychange 的两个分支（armResumeInputGuard）。
-    // 返回切后台时刻（performance.now 时基），供伪造“切后台前”的事件时间戳使用。
     window.__fakeHidden = true;
     Object.defineProperty(document, 'hidden', {
         configurable: true,
@@ -52,8 +49,7 @@ SIMULATE_RESUME_JS = """
 
 DISPATCH_JS = """
 (spec) => {
-    // spec: {sel, seq}；seq 元素为字符串或 {kind, ts, detail}
-    //（ts 用于伪造事件时间戳，detail 用于模拟真实/键盘 click）。
+    // spec: {sel, seq}; seq 元素为字符串或 {kind, ts, detail}
     // 返回每个事件是否被 preventDefault（用于断言重放事件被整事件取消）。
     const el = document.querySelector(spec.sel);
     if (!el) return { result: 'missing: ' + spec.sel, prevented: [] };
@@ -66,7 +62,13 @@ DISPATCH_JS = """
         } else if (kind === 'touchstart' || kind === 'touchend') {
             ev = new Event(kind, { bubbles: true, cancelable: true });
         } else {
-            ev = new MouseEvent(kind, { bubbles: true, cancelable: true, detail: (item && item.detail !== undefined) ? item.detail : 0 });
+            ev = new MouseEvent(kind, {
+                bubbles: true, cancelable: true,
+                // 真实指针派生的 click 是 detail=1；detail=0 只属于键盘/辅助技术激活，
+                // 需要显式指定。
+                detail: (item && item.detail !== undefined) ? item.detail
+                    : (kind === 'click' ? 1 : 0)
+            });
         }
         if (typeof item === 'object' && item.ts !== undefined) {
             Object.defineProperty(ev, 'timeStamp', { value: item.ts });
@@ -107,10 +109,10 @@ QUIZ_STATE_JS = """
 })
 """
 
-# 跳过延迟 200ms 执行（选项批次否决窗口），断言前留出执行窗口
-SKIP_SETTLE_MS = 400
-# 人手点按的按下→抬起间隔（须 ≥25ms 才被认作真实起手）
+# 人手点按的按下→抬起间隔
 HUMAN_TAP_GAP_MS = 70
+# 闸门要求的最小人手耗时（见 cet6_quiz.html: GHOST_MIN_TAP_MS）
+GHOST_MIN_TAP_MS = 24
 
 
 class ResumeSkipGhostRegressionTest(unittest.TestCase):
@@ -128,11 +130,11 @@ class ResumeSkipGhostRegressionTest(unittest.TestCase):
         cls.playwright.stop()
 
     def setUp(self) -> None:
-        self.context = self.browser.new_context()
+        # 触摸为主的移动端上下文：与用户实际遇到问题的环境一致
+        self.context = self.browser.new_context(has_touch=True, is_mobile=True)
         self.page = self.context.new_page()
         self.page.add_init_script("localStorage.setItem('cet6_onboarded', '1');")
         self.page.goto(QUIZ_HTML.as_uri(), wait_until="load")
-        # 固定为「大纲词汇 + 选择题 + 关闭记忆模式」，避免默认记忆模式改变队列行为
         self.page.locator("#poolSelect").select_option("core")
         if self.page.evaluate("memoryModeOn()"):
             self.page.locator("#memoryBtn").click()
@@ -153,48 +155,44 @@ class ResumeSkipGhostRegressionTest(unittest.TestCase):
         return result
 
     def dispatch_on_first_option(self, seq: list) -> None:
-        result = self.page.evaluate(DISPATCH_ON_FIRST_OPTION_JS, seq)
-        self.assertEqual("ok", result)
+        self.assertEqual("ok", self.page.evaluate(DISPATCH_ON_FIRST_OPTION_JS, seq))
 
-    def settle(self) -> None:
-        self.page.wait_for_timeout(SKIP_SETTLE_MS)
-
-    def simulate_background_resume(self) -> int:
+    def simulate_background_resume(self) -> float:
         """切后台再切回，返回切后台时刻（performance.now 时基）。"""
         self._hidden_at = self.page.evaluate(SIMULATE_RESUME_JS)
         return self._hidden_at
 
-    def human_skip_tap(self, pre_hidden_ts: int = None) -> None:
-        """以人手节奏点击跳过按钮（按下→70ms→抬起→click）。"""
-        down = {"kind": "pointerdown"}
-        up = {"kind": "pointerup"}
+    def human_tap(self, sel: str, use_touch: bool = False, pre_hidden_ts=None) -> None:
+        """以人手节奏点按（起手 → 等待 → 收尾 → click）。"""
+        down, up = ("touchstart", "touchend") if use_touch else ("pointerdown", "pointerup")
+        first = {"kind": down}
+        second = {"kind": up}
         if pre_hidden_ts is not None:
-            down["ts"] = pre_hidden_ts
-            up["ts"] = pre_hidden_ts + HUMAN_TAP_GAP_MS
-        self.dispatch("#skipBtn", [down])
+            first["ts"] = pre_hidden_ts
+            second["ts"] = pre_hidden_ts + HUMAN_TAP_GAP_MS
+        self.dispatch(sel, [first])
         self.page.wait_for_timeout(HUMAN_TAP_GAP_MS)
-        self.dispatch("#skipBtn", [up])
+        self.dispatch(sel, [second])
         self.page.wait_for_timeout(30)
-        self.dispatch("#skipBtn", ["click"])
+        self.dispatch(sel, ["click"])
 
-    # ---------- tests ----------
+    # ---------- 幽灵输入：必须被丢弃 ----------
 
     def test_01_ghost_compat_click_after_resume_is_ignored(self):
-        """恢复后补发的兼容鼠标序列（mousedown/mouseup/click）不得跳过当前题。"""
+        """恢复后补发的兼容鼠标序列（mousedown/mouseup/click，间隔≈0ms）不得跳过。"""
         self.simulate_background_resume()
         self.dispatch("#skipBtn", ["mousedown", "mouseup", "click"])
-        self.settle()
         st = self.state()
         self.assertFalse(st["hasAnswer"], "补发的旧 skip click 不应生效")
         self.assertNotIn("已跳过", st["feedback"])
 
-    def test_02_ghost_flush_between_option_events_does_not_skip(self):
-        """用户点击选项时夹在中间补发的 skip click：选项正常作答，不误跳过。"""
+    def test_02_ghost_skip_between_option_events_does_not_skip(self):
+        """夹在选项事件之间补发的 skip click：选项正常作答，且绝不跳过。"""
         self.simulate_background_resume()
-        self.dispatch_on_first_option(["pointerdown"])
+        self.dispatch_on_first_option(["touchstart"])
         self.dispatch("#skipBtn", ["mousedown", "mouseup", "click"])
+        self.page.wait_for_timeout(HUMAN_TAP_GAP_MS)
         self.dispatch_on_first_option(["click"])
-        self.settle()
         st = self.state()
         self.assertTrue(st["hasAnswer"], "选项点击应正常作答")
         self.assertNotEqual("skip", st["answer"], "不得被补发事件跳过")
@@ -208,130 +206,37 @@ class ResumeSkipGhostRegressionTest(unittest.TestCase):
                 const skip = document.getElementById('skipBtn');
                 if (!skip) return 'missing skipBtn';
                 const stale = skip.cloneNode(true);
-                stale.dispatchEvent(new MouseEvent('click', { cancelable: true }));
+                stale.dispatchEvent(new MouseEvent('click', { cancelable: true, detail: 1 }));
                 return 'ok';
             }"""
         )
         self.assertEqual("ok", result)
-        self.settle()
         st = self.state()
         self.assertFalse(st["hasAnswer"], "脱离文档树的旧 click 不应生效")
         self.assertNotIn("已跳过", st["feedback"])
 
-    def test_04_real_skip_after_resume_still_works(self):
-        """恢复后真实点击跳过按钮（按下→抬起→click）应正常跳过。"""
+    def test_04_compressed_pointer_replay_between_option_events_does_not_skip(self):
+        """被压缩冲刷的完整指针重放（down→up≈0ms）夹在选项事件之间：不跳过。"""
         self.simulate_background_resume()
-        self.human_skip_tap()
-        self.settle()
-        st = self.state()
-        self.assertEqual("skip", st["answer"], "真实跳过点击应生效")
-        self.assertIn("已跳过", st["feedback"])
-
-    def test_05_touch_skip_after_resume_still_works(self):
-        """恢复后真实触摸跳过按钮（touchstart→touchend→click）应正常跳过。"""
-        self.simulate_background_resume()
-        self.dispatch("#skipBtn", ["touchstart"])
-        self.page.wait_for_timeout(HUMAN_TAP_GAP_MS)
-        self.dispatch("#skipBtn", ["touchend"])
-        self.page.wait_for_timeout(30)
-        self.dispatch("#skipBtn", ["click"])
-        self.settle()
-        st = self.state()
-        self.assertEqual("skip", st["answer"], "真实触摸跳过应生效")
-        self.assertIn("已跳过", st["feedback"])
-
-    def test_06_ghost_click_without_resume_is_ignored(self):
-        """未发生切后台时，无起手的裸 skip click 同样被拒（覆盖页面被回收后重载的场景）。"""
-        self.dispatch("#skipBtn", ["mousedown", "mouseup", "click"])
-        self.settle()
-        st = self.state()
-        self.assertFalse(st["hasAnswer"], "无真实起手的 click 不应生效")
-        self.assertNotIn("已跳过", st["feedback"])
-
-    def test_07_long_press_skip_still_works(self):
-        """长按跳过按钮（按下超过 1.5 秒后松手）应正常跳过。"""
-        self.dispatch("#skipBtn", ["pointerdown"])
-        self.page.wait_for_timeout(1800)
-        self.dispatch("#skipBtn", ["pointerup"])
-        self.page.wait_for_timeout(30)
-        self.dispatch("#skipBtn", ["click"])
-        self.settle()
-        st = self.state()
-        self.assertEqual("skip", st["answer"], "长按后松手的跳过应生效")
-        self.assertIn("已跳过", st["feedback"])
-
-    def test_08_keyboard_space_skip_works(self):
-        """键盘空格跳过（真实键盘输入）不受影响。"""
-        self.page.evaluate(
-            """() => {
-                document.body.dispatchEvent(new KeyboardEvent('keydown', {
-                    key: ' ', bubbles: true, cancelable: true
-                }));
-            }"""
-        )
-        self.settle()
-        st = self.state()
-        self.assertEqual("skip", st["answer"], "空格跳过应生效")
-        self.assertIn("已跳过", st["feedback"])
-
-    def test_09_normal_option_answer_regression(self):
-        """常规答题不受影响：点击选项正常记录答案。"""
-        self.simulate_background_resume()
-        self.page.locator(".quiz-card .opt-btn:not([disabled])").first.click()
-        st = self.state()
-        self.assertTrue(st["hasAnswer"], "点击选项应正常作答")
-        self.assertNotEqual("skip", st["answer"])
-
-    def test_10_compressed_pointer_replay_between_option_events_does_not_skip(self):
-        """补发为压缩冲刷的完整指针序列（按下→抬起≈0ms）夹在选项事件之间：
-        选项正常作答，不误跳过。"""
-        self.simulate_background_resume()
-        self.dispatch_on_first_option(["pointerdown"])
+        self.dispatch_on_first_option(["touchstart"])
         self.dispatch("#skipBtn", ["pointerdown", "pointerup", "click"])
+        self.page.wait_for_timeout(HUMAN_TAP_GAP_MS)
         self.dispatch_on_first_option(["click"])
-        self.settle()
         st = self.state()
         self.assertTrue(st["hasAnswer"], "选项点击应正常作答")
         self.assertNotEqual("skip", st["answer"], "压缩重放不得跳过本题")
-        self.assertNotIn("已跳过", st["feedback"])
 
-    def test_11_full_pointer_replay_with_pre_background_timestamps_is_ignored(self):
-        """补发保留切后台前时间戳的完整指针重放（即使节奏像人手）不得跳过。"""
+    def test_05_pointer_replay_with_pre_background_timestamps_is_ignored(self):
+        """保留切后台前时间戳的完整指针重放（节奏像人手）不得跳过。"""
         hidden_at = self.simulate_background_resume()
-        # 伪造“切后台前 1 秒”的时间戳（须为正数，时间戳≤0 会被兜底放行）
         pre_ts = max(5.0, hidden_at - 1000.0)
-        self.human_skip_tap(pre_hidden_ts=pre_ts)
-        self.settle()
+        self.human_tap("#skipBtn", pre_hidden_ts=pre_ts)
         st = self.state()
         self.assertFalse(st["hasAnswer"], "切后台前的旧触摸重放不应生效")
         self.assertNotIn("已跳过", st["feedback"])
 
-    def test_12_compressed_touch_replay_between_option_events_does_not_skip(self):
-        """补发为压缩冲刷的完整触摸序列夹在选项事件之间：选项正常作答。"""
-        self.simulate_background_resume()
-        self.dispatch_on_first_option(["touchstart"])
-        self.dispatch("#skipBtn", ["touchstart", "touchend", "click"])
-        self.dispatch_on_first_option(["click"])
-        self.settle()
-        st = self.state()
-        self.assertTrue(st["hasAnswer"], "选项点击应正常作答")
-        self.assertNotEqual("skip", st["answer"], "压缩触摸重放不得跳过本题")
-        self.assertNotIn("已跳过", st["feedback"])
-
-    def test_13_realistic_pointer_replay_before_option_click_is_vetoed(self):
-        """节奏像人手的完整指针重放先于用户选项点击到达（先跳后答顺序）：
-        延迟执行让选项作答否决跳过。"""
-        self.simulate_background_resume()
-        self.human_skip_tap()
-        self.dispatch_on_first_option(["click"])
-        self.settle()
-        st = self.state()
-        self.assertTrue(st["hasAnswer"], "用户的选项点击应正常作答")
-        self.assertNotEqual("skip", st["answer"], "补发跳过应被选项作答否决")
-        self.assertNotIn("已跳过", st["feedback"])
-
-    def test_14_touch_replay_with_pre_background_timestamps_is_ignored(self):
-        """补发保留切后台前时间戳的完整触摸重放不得跳过。"""
+    def test_06_touch_replay_with_pre_background_timestamps_is_ignored(self):
+        """保留切后台前时间戳的完整触摸重放不得跳过。"""
         hidden_at = self.simulate_background_resume()
         pre_ts = max(5.0, hidden_at - 1000.0)
         self.dispatch("#skipBtn", [
@@ -339,13 +244,12 @@ class ResumeSkipGhostRegressionTest(unittest.TestCase):
             {"kind": "touchend", "ts": pre_ts + 100},
             "click",
         ])
-        self.settle()
         st = self.state()
         self.assertFalse(st["hasAnswer"], "切后台前的旧触摸重放不应生效")
         self.assertNotIn("已跳过", st["feedback"])
 
-    def test_15_pre_background_pointer_events_on_skip_are_canceled(self):
-        """切后台前的旧触摸按下/抬起应被整事件取消（消除按钮 ：active 闪烁）。"""
+    def test_07_pre_background_pointer_events_are_canceled(self):
+        """切走前的旧按下/抬起应被整事件取消（消除按钮 ：active 闪烁与合成 click）。"""
         hidden_at = self.simulate_background_resume()
         pre_ts = max(5.0, hidden_at - 1000.0)
         res = self.dispatch("#skipBtn", [
@@ -355,12 +259,10 @@ class ResumeSkipGhostRegressionTest(unittest.TestCase):
         ])
         self.assertTrue(res["prevented"][0], "旧触摸按下应被取消（防闪烁）")
         self.assertTrue(res["prevented"][1], "旧触摸抬起应被取消")
-        self.settle()
-        st = self.state()
-        self.assertFalse(st["hasAnswer"], "被取消的重放不应产生跳过")
+        self.assertFalse(self.state()["hasAnswer"], "被取消的重放不应产生跳过")
 
-    def test_16_pre_background_touchstart_on_skip_is_canceled(self):
-        """切后台前的旧触摸 touchstart/touchend 应被整事件取消。"""
+    def test_08_pre_background_touch_events_are_canceled(self):
+        """切走前的旧 touchstart/touchend 应被整事件取消。"""
         hidden_at = self.simulate_background_resume()
         pre_ts = max(5.0, hidden_at - 1000.0)
         res = self.dispatch("#skipBtn", [
@@ -368,102 +270,154 @@ class ResumeSkipGhostRegressionTest(unittest.TestCase):
             {"kind": "touchend", "ts": pre_ts + 100},
             "click",
         ])
-        self.assertTrue(res["prevented"][0], "旧触摸 touchstart 应被取消（防闪烁）")
-        self.assertTrue(res["prevented"][1], "旧触摸 touchend 应被取消")
-        self.settle()
-        st = self.state()
-        self.assertFalse(st["hasAnswer"])
+        self.assertTrue(res["prevented"][0], "旧 touchstart 应被取消")
+        self.assertTrue(res["prevented"][1], "旧 touchend 应被取消")
+        self.assertFalse(self.state()["hasAnswer"])
 
-    def test_17_fresh_skip_tap_events_are_not_canceled(self):
-        """真实起手绝不允许被取消：按下事件不被 preventDefault，跳过正常生效。"""
-        res = self.dispatch("#skipBtn", [{"kind": "pointerdown"}])
-        self.assertFalse(res["prevented"][0], "真实按下不应被取消")
-        self.page.wait_for_timeout(HUMAN_TAP_GAP_MS)
-        self.dispatch("#skipBtn", [{"kind": "pointerup"}])
-        self.page.wait_for_timeout(30)
-        self.dispatch("#skipBtn", ["click"])
-        self.settle()
-        st = self.state()
-        self.assertEqual("skip", st["answer"], "真实跳过应正常生效")
-        self.assertIn("已跳过", st["feedback"])
-
-    def test_17_fresh_skip_tap_events_are_not_canceled(self):
-        """真实起手绝不允许被取消：按下事件不被 preventDefault，跳过正常生效。"""
-        res = self.dispatch("#skipBtn", [{"kind": "pointerdown"}])
-        self.assertFalse(res["prevented"][0], "真实按下不应被取消")
-        self.page.wait_for_timeout(HUMAN_TAP_GAP_MS)
-        self.dispatch("#skipBtn", [{"kind": "pointerup"}])
-        self.page.wait_for_timeout(30)
-        self.dispatch("#skipBtn", ["click"])
-        self.settle()
-        st = self.state()
-        self.assertEqual("skip", st["answer"], "真实跳过应正常生效")
-        self.assertIn("已跳过", st["feedback"])
-
-    def test_18_ghost_click_on_next_button_is_blocked(self):
-        """补发落在「下一题」按钮上（切走前旧触摸 + 其合成 click）：
-        按下被整事件取消、click 无同按钮按下配对被拦截，题目不得被切走。"""
+    def test_09_ghost_click_on_next_button_is_blocked(self):
+        """补发落在「下一题」按钮上：题目不得被切走。"""
         self.simulate_background_resume()
         pos_before = self.page.evaluate("quizState.pos")
         res = self.dispatch("#nextBtn", [
             {"kind": "pointerdown", "ts": max(5.0, self._hidden_at - 1000.0)},
             {"kind": "click", "detail": 1},
         ])
-        self.settle()
         self.assertTrue(res["prevented"][0], "旧触摸按下应被取消")
-        pos_after = self.page.evaluate("quizState.pos")
-        self.assertEqual(pos_before, pos_after, "补发 click 不得切到下一题")
+        self.assertEqual(pos_before, self.page.evaluate("quizState.pos"),
+                         "补发 click 不得切到下一题")
 
-    def test_19_same_burst_click_on_next_after_option_is_vetoed(self):
-        """点选项后 80ms 内到达的「下一题」click 是同一补发批次：必须被否决；
-        稍后的真实点击（按下+抬起+click）正常切题。"""
-        # 选项作答与补发的「下一题」click 在同一次 evaluate 内派发，保证 ≤80ms
+    def test_10_same_burst_click_on_next_after_option_is_blocked(self):
+        """点选项后同一批次到达的「下一题」click（没有自己的起手）必须被拦截。"""
         res = self.page.evaluate(
             """() => {
                 const opt = document.querySelector('.quiz-card .opt-btn:not([disabled])');
                 const nb = document.getElementById('nextBtn');
-                const down = new PointerEvent('pointerdown', { bubbles: true, cancelable: true });
-                opt.dispatchEvent(down);
-                const click = new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 });
-                opt.dispatchEvent(click);
+                const t0 = new Event('touchstart', { bubbles: true, cancelable: true });
+                Object.defineProperty(t0, 'touches', { value: [{ clientX: 0, clientY: 0 }] });
+                opt.dispatchEvent(t0);
+                opt.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+                opt.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
                 const answered = Object.prototype.hasOwnProperty.call(quizState.answers, quizState.pos);
+                const posAfterOption = quizState.pos;
                 const ghost = new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 });
                 nb.dispatchEvent(ghost);
                 return {
                     answered: answered,
-                    ghostPrevented: !!ghost.defaultPrevented,
+                    posAfterOption: posAfterOption,
                     posAfterGhost: quizState.pos
                 };
             }"""
         )
         self.assertTrue(res["answered"], "选项应正常作答")
-        self.assertTrue(res["ghostPrevented"], "同批次补发的下一题 click 应被否决")
-        pos_after_ghost = res["posAfterGhost"]
-        # 稍后真实地点「下一题」（按下+抬起+click）→ 正常切题
-        self.page.wait_for_timeout(150)
-        self.dispatch("#nextBtn", ["pointerdown"])
-        self.page.wait_for_timeout(40)
-        self.dispatch("#nextBtn", [{"kind": "click", "detail": 1}])
-        pos_after_real = self.page.evaluate("quizState.pos")
-        self.assertNotEqual(pos_after_ghost, pos_after_real, "真实的下一题点击应正常切题")
+        self.assertEqual(res["posAfterOption"], res["posAfterGhost"],
+                         "同一批次补发的下一题 click 必须被拦截，不得切题")
 
-    def test_20_keyboard_click_detail_zero_on_next_is_allowed(self):
-        """键盘激活（detail=0）不受恢复保护过滤影响：Enter 触发的下一题 click 正常切题。"""
+        # 稍后真实地点「下一题」（起手+人手间隔+click）→ 正常切题
+        self.human_tap("#nextBtn")
+        self.assertEqual(res["posAfterGhost"] + 1, self.page.evaluate("quizState.pos"),
+                         "真实的下一题点击应正常切题")
+
+    # ---------- 真人操作：必须照常生效 ----------
+
+    def test_11_real_skip_tap_after_resume_still_works(self):
+        """恢复后真人点按跳过按钮应正常跳过。"""
         self.simulate_background_resume()
-        # 先真实作答（键盘数字 1 → handleAnswer）
+        self.human_tap("#skipBtn")
+        st = self.state()
+        self.assertEqual("skip", st["answer"], "真实跳过点击应生效")
+        self.assertIn("已跳过", st["feedback"])
+
+    def test_12_touch_skip_after_resume_still_works(self):
+        """恢复后真实触摸跳过按钮应正常跳过。"""
+        self.simulate_background_resume()
+        self.human_tap("#skipBtn", use_touch=True)
+        st = self.state()
+        self.assertEqual("skip", st["answer"], "真实触摸跳过应生效")
+        self.assertIn("已跳过", st["feedback"])
+
+    def test_13_long_press_skip_still_works(self):
+        """长按跳过按钮后松手应正常跳过。"""
+        self.dispatch("#skipBtn", ["pointerdown"])
+        self.page.wait_for_timeout(1800)
+        self.dispatch("#skipBtn", ["pointerup"])
+        self.page.wait_for_timeout(30)
+        self.dispatch("#skipBtn", ["click"])
+        st = self.state()
+        self.assertEqual("skip", st["answer"], "长按后松手的跳过应生效")
+
+    def test_14_keyboard_space_skip_works(self):
+        """键盘空格跳过（真实键盘输入）不受闸门影响。"""
+        self.page.evaluate(
+            """() => document.body.dispatchEvent(new KeyboardEvent('keydown', {
+                key: ' ', bubbles: true, cancelable: true
+            }))"""
+        )
+        st = self.state()
+        self.assertEqual("skip", st["answer"], "空格跳过应生效")
+
+    def test_15_normal_option_answer_still_works_after_resume(self):
+        """恢复后真人点选项照常作答，不会连带切题。"""
+        self.simulate_background_resume()
+        pos_before = self.page.evaluate("quizState.pos")
+        self.dispatch_on_first_option(["touchstart"])
+        self.page.wait_for_timeout(HUMAN_TAP_GAP_MS)
+        self.dispatch_on_first_option(["click"])
+        st = self.state()
+        self.assertTrue(st["hasAnswer"], "点击选项应正常作答")
+        self.assertNotEqual("skip", st["answer"])
+        self.assertEqual(pos_before, self.page.evaluate("quizState.pos"),
+                         "作答不应自动跳到下一题")
+
+    def test_16_fresh_skip_tap_events_are_not_canceled(self):
+        """真实起手绝不允许被取消：按下事件不被 preventDefault。"""
+        res = self.dispatch("#skipBtn", [{"kind": "pointerdown"}])
+        self.assertFalse(res["prevented"][0], "真实按下不应被取消")
+        self.page.wait_for_timeout(HUMAN_TAP_GAP_MS)
+        self.dispatch("#skipBtn", [{"kind": "pointerup"}])
+        self.page.wait_for_timeout(30)
+        self.dispatch("#skipBtn", ["click"])
+        self.assertEqual("skip", self.state()["answer"], "真实跳过应正常生效")
+
+    def test_17_keyboard_click_detail_zero_on_next_is_allowed(self):
+        """键盘激活（detail=0）不受闸门过滤：Enter 触发的下一题 click 正常切题。"""
+        self.simulate_background_resume()
         self.page.evaluate("handleAnswer(0)")
         pos_before = self.page.evaluate("quizState.pos")
         res = self.page.evaluate(
             """() => {
                 const nb = document.getElementById('nextBtn');
+                // 键盘激活的真实顺序：先有按键，再派发 detail=0 的 click
+                nb.dispatchEvent(new KeyboardEvent('keydown', {
+                    key: 'Enter', bubbles: true, cancelable: true
+                }));
                 const ev = new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 });
                 nb.dispatchEvent(ev);
                 return { prevented: !!ev.defaultPrevented };
             }"""
         )
         self.assertFalse(res["prevented"], "键盘激活的 click 不应被过滤")
-        pos_after = self.page.evaluate("quizState.pos")
-        self.assertEqual(pos_before + 1, pos_after, "键盘触发的切题应正常执行")
+        self.assertEqual(pos_before + 1, self.page.evaluate("quizState.pos"),
+                         "键盘触发的切题应正常执行")
+
+    def test_18_loaded_page_without_background_is_unaffected(self):
+        """从未切过后台时，闸门不干预任何操作。"""
+        self.assertFalse(self.page.evaluate("() => _ghostEverHidden"))
+        pos_before = self.page.evaluate("quizState.pos")
+        self.page.evaluate(
+            """() => {
+                const nb = document.getElementById('nextBtn');
+                nb.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+            }"""
+        )
+        self.page.wait_for_timeout(HUMAN_TAP_GAP_MS)
+        self.page.evaluate(
+            """() => {
+                const nb = document.getElementById('nextBtn');
+                nb.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
+            }"""
+        )
+        self.assertEqual(pos_before + 1, self.page.evaluate("quizState.pos"),
+                         "未切过后台时点击下一题应正常切题")
 
 
 if __name__ == "__main__":

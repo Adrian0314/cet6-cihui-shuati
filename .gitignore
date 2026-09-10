@@ -2,3 +2,5 @@ test-results/
 playwright-report/
 __pycache__/
 node_modules/
+tools/ipa_cache.json
+_ipa_cache.json

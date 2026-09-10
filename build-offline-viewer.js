@@ -7,11 +7,11 @@
  * 用法：node build-offline-viewer.js
  * 说明：数据更新后重新运行本脚本即可同步离线版。
  * ============================================================ */
-'use strict';
-const fs = require('fs');
-const path = require('path');
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = __dirname;
+const root = path.dirname(fileURLToPath(import.meta.url));
 // 网站文件全部位于仓库根目录（扁平结构，无子目录）
 const siteDir = root;
 const tplPath = path.join(siteDir, 'word-maps-viewer.html');

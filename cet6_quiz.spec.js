@@ -36,7 +36,7 @@ test('external Ebbinghaus data matches the authoritative vocabulary projection',
   }));
 
   expect(words).toHaveLength(3324);
-  expect(words.every(word => Object.keys(word).sort().join(',') === 'id,isStar,lesson,meaning,seq,unit,word')).toBe(true);
+  expect(words.every(word => Object.keys(word).sort().join(',') === 'id,isStar,lesson,meaning,pronunciation,seq,unit,word')).toBe(true);
   expect(projection).toEqual(words);
   expect(createHash('sha256').update(JSON.stringify(projection)).digest('hex')).toBe(FULL_WORDS_INTEGRITY_SHA256);
 });

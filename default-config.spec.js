@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const quizUrl = pathToFileURL(resolve(dirname(fileURLToPath(import.meta.url)), 'cet6_quiz.html')).href;
 
