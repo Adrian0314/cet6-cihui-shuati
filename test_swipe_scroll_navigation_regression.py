@@ -4,7 +4,9 @@
 2. 记忆模式下滑动不切题（做完一题即从队列移除，滑动会跳过未作答的词）；
 3. 纵向为主的触摸不触发切题（保留页面滚动），起点在按钮/输入框上的
    触摸也不触发切题；
-4. 电脑端做题时 ↑/↓ 方向键滚动页面；
+4. 电脑端 ↑/↓ 方向键滚动页面：普通模式滚文档、全屏模式滚题卡内部的
+   .quiz-scroll（全屏时 body 是 overflow:hidden，只滚文档会完全没反应）、
+   词库等标签页滚其列表；焦点在输入框内时保持浏览器原生行为；
 5. 切后台再回前台后，浏览器补发的旧事件（时间戳停留在切走前）既不作答也不切题，
    而回前台之后的真实点击仍然正常工作。
 """
@@ -61,6 +63,54 @@ SWIPE_JS = """
         before, after: quizState.pos,
         fullscreen: card.classList.contains('fullscreen')
     };
+}
+"""
+
+# 等待平滑滚动动画停稳：连续 3 帧位置不变才算结束（按下后立刻读位置会读到动画起点）。
+SETTLE_SCROLL_JS = """
+() => new Promise((resolve) => {
+    let last = -1;
+    let stable = 0;
+    const tick = () => {
+        const y = window.scrollY;
+        if (y === last) {
+            if (++stable >= 3) return resolve(true);
+        } else {
+            stable = 0;
+            last = y;
+        }
+        requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+})
+"""
+
+# 伪造「切到后台 → 一段时间后回到前台」，并把切走时刻放在足够大的时基上：
+# eventPerfTime 会把非正数时间戳当成"无法判定"（返回 0），基准线太靠近页面加载
+# 时刻时补发时间戳会变成负数，陈旧判定就失效了。
+ARROW_BACKGROUND_JS = """
+([hiddenAgo, visibleAgo]) => {
+    const now = performance.now();
+    _ghostEverHidden = true;
+    _ghostHiddenAt = now - hiddenAgo;
+    _ghostVisibleAt = now - visibleAgo;
+    _gesture = null;
+    return { hiddenAt: _ghostHiddenAt };
+}
+"""
+
+# 补发的旧方向键：时间戳停留在切走之前。
+DISPATCH_ARROW_JS = """
+(args) => {
+    const el = document.querySelector('#quizCard .quiz-scroll');
+    const doc = document.scrollingElement || document.documentElement;
+    const read = () => (el && el.scrollHeight > el.clientHeight) ? el.scrollTop : doc.scrollTop;
+    const ev = new KeyboardEvent('keydown', {
+        key: args.dir, bubbles: true, cancelable: true
+    });
+    Object.defineProperty(ev, 'timeStamp', { value: args.ts });
+    document.dispatchEvent(ev);
+    return { before: read() };
 }
 """
 
@@ -288,16 +338,129 @@ class SwipeScrollNavigationRegressionTest(unittest.TestCase):
         context, page = self._start_quiz({'width': 800, 'height': 600}, mobile=False)
         try:
             page.evaluate("() => window.scrollTo(0, 0)")
+            # 滚动是平滑动画，按下后要等它落定再读位置
             page.keyboard.press('ArrowDown')
             page.keyboard.press('ArrowDown')
+            page.wait_for_function(SETTLE_SCROLL_JS)
             top_after_down = page.evaluate("() => window.scrollY")
             self.assertGreaterEqual(top_after_down, 100, "按下 ↓ 应向下滚动页面")
 
             page.keyboard.press('ArrowUp')
             page.keyboard.press('ArrowUp')
+            page.wait_for_function(SETTLE_SCROLL_JS)
             top_after_up = page.evaluate("() => window.scrollY")
             self.assertLess(top_after_up, top_after_down, "按下 ↑ 应向上滚动页面")
             self.assertLessEqual(top_after_up, 0, "滚动位置不应低于页面顶部")
+        finally:
+            context.close()
+
+    def test_arrow_keys_scroll_quiz_card_in_fullscreen(self) -> None:
+        """全屏时 body 是 overflow:hidden，真正滚动的是题卡内部的 .quiz-scroll。
+
+        旧实现写死 window.scrollBy，全屏下方向键毫无反应；矮视口让题面必然溢出
+        （实测各题溢出量都在 200px 以上，远大于一次滚动的步长）。
+        """
+        context, page = self._start_quiz({'width': 800, 'height': 340}, mobile=False)
+        try:
+            page.click('#toggleFsBtn', delay=60)
+            page.wait_for_function(
+                "() => document.getElementById('quizCard').classList.contains('fullscreen')")
+            page.wait_for_timeout(300)
+            over = page.evaluate(
+                "() => { const sc = document.querySelector('#quizCard .quiz-scroll');"
+                " return sc.scrollHeight - sc.clientHeight; }")
+            self.assertGreater(over, 0, "测试前提：全屏题卡的内容应超出视口高度")
+
+            page.keyboard.press('ArrowDown')
+            page.wait_for_function(
+                "() => document.querySelector('#quizCard .quiz-scroll').scrollTop > 0")
+            after_down = page.evaluate(
+                "() => document.querySelector('#quizCard .quiz-scroll').scrollTop")
+            self.assertGreater(after_down, 0, "全屏下按 ↓ 应滚动题卡内容")
+
+            page.keyboard.press('ArrowUp')
+            page.wait_for_function(
+                "(top) => document.querySelector('#quizCard .quiz-scroll').scrollTop < top",
+                arg=after_down)
+            self.assertLess(
+                page.evaluate(
+                    "() => document.querySelector('#quizCard .quiz-scroll').scrollTop"),
+                after_down, "全屏下按 ↑ 应向上滚动")
+        finally:
+            context.close()
+
+    def test_arrow_keys_scroll_word_list_tab(self) -> None:
+        """词库 / 错题本等标签页一样很长，方向键也该能翻。
+
+        这条同时守住"按键处理不能只在做题时生效"这一条：切到词库标签页后
+        quizActive 仍是 true，但真正的滚动容器已经换成列表自身的滚动条。
+        """
+        context, page = self._start_quiz({'width': 900, 'height': 600}, mobile=False)
+        try:
+            page.click('.tab-btn[data-tab="browse"]', delay=60)
+            page.fill('#browseSearch', 'a')            # 填充列表使其可滚动
+            page.wait_for_timeout(400)
+            page.evaluate("() => document.activeElement.blur()")
+            over = page.evaluate(
+                "() => { const l = document.getElementById('browseList');"
+                " return l.scrollHeight - l.clientHeight; }")
+            self.assertGreater(over, 0, "测试前提：词库列表应超出其可视高度")
+
+            page.keyboard.press('ArrowDown')
+            page.wait_for_function(
+                "() => document.getElementById('browseList').scrollTop > 0")
+            self.assertGreater(
+                page.evaluate("() => document.getElementById('browseList').scrollTop"), 0,
+                "词库列表页按 ↓ 应滚动列表")
+
+            page.keyboard.press('ArrowUp')
+            page.wait_for_function(
+                "() => document.getElementById('browseList').scrollTop === 0")
+        finally:
+            context.close()
+
+    def test_arrow_keys_leave_text_fields_to_browser(self) -> None:
+        """焦点在输入框内时，方向键属于浏览器原生行为（移动光标/翻候选），不该被抢走。"""
+        context, page = self._start_quiz({'width': 900, 'height': 600}, mobile=False)
+        try:
+            page.click('.tab-btn[data-tab="browse"]', delay=60)
+            page.fill('#browseSearch', 'a')
+            page.wait_for_timeout(400)
+            page.evaluate(
+                "() => { document.getElementById('browseList').scrollTop = 0; window.scrollTo(0, 0); }")
+            page.focus('#browseSearch')
+            self.assertEqual('browseSearch',
+                             page.evaluate("() => document.activeElement.id"))
+
+            page.keyboard.press('ArrowDown')
+            page.wait_for_timeout(700)
+            self.assertEqual(
+                0, page.evaluate("() => document.getElementById('browseList').scrollTop"),
+                "输入框内的方向键不应滚动列表")
+            self.assertEqual(0, page.evaluate("() => window.scrollY"),
+                             "输入框内的方向键不应滚动页面")
+        finally:
+            context.close()
+
+    def test_replayed_arrow_key_after_resume_does_not_scroll(self) -> None:
+        """切后台期间积压的旧方向键（时间戳停留在切走前）不应把页面顶走。"""
+        context, page = self._start_quiz({'width': 800, 'height': 600}, mobile=False)
+        try:
+            page.wait_for_function("() => performance.now() > 3000")
+            info = page.evaluate(ARROW_BACKGROUND_JS, [2500, 200])
+            self.assertGreater(info["hiddenAt"], 0,
+                               "测试前提：切后台时刻应是正数时间戳")
+
+            page.evaluate("() => window.scrollTo(0, 0)")
+            page.evaluate(DISPATCH_ARROW_JS,
+                          {"dir": "ArrowDown", "ts": info["hiddenAt"] - 400})
+            page.wait_for_timeout(700)
+            self.assertEqual(0, page.evaluate("() => window.scrollY"),
+                             "补发的旧方向键不应滚动页面")
+
+            # 回前台之后的真实按键照常生效
+            page.keyboard.press('ArrowDown')
+            page.wait_for_function("() => window.scrollY > 0")
         finally:
             context.close()
 
