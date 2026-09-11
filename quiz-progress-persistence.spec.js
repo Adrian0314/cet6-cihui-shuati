@@ -579,7 +579,7 @@ test('starting review resumes an unfinished 4-week plan on the same day', async 
   await context.close();
 });
 
-test('a previous-day 4-week plan snapshot is not resumed', async ({ browser }) => {
+test('an unfinished previous-day 4-week plan snapshot carries over to the next day', async ({ browser }) => {
   const context = await browser.newContext();
   await context.addInitScript(() => localStorage.setItem('cet6_onboarded', '1'));
   const page = await context.newPage();
@@ -599,6 +599,42 @@ test('a previous-day 4-week plan snapshot is not resumed', async ({ browser }) =
       answers: {},
       done: 0,
       poolType: 'core'
+    };
+    saveState();
+  });
+
+  await page.reload();
+  await page.waitForLoadState('domcontentloaded');
+
+  // 未完成的计划跨天延续：前一天的做题队列不再按日期清空，仍可继续做题
+  await expect(page.locator('#savedBar')).toHaveClass(/show/);
+  await expect.poll(() => page.evaluate(() => state.suspendedQuiz && state.suspendedQuiz.ids.length)).toBe(1);
+
+  await context.close();
+});
+
+test('a 4-week plan snapshot is cleared after the plan advances to a new day', async ({ browser }) => {
+  const context = await browser.newContext();
+  await context.addInitScript(() => localStorage.setItem('cet6_onboarded', '1'));
+  const page = await context.newPage();
+
+  await page.goto(QUIZ_URL);
+  await page.waitForLoadState('domcontentloaded');
+  await page.evaluate(() => {
+    state.ebbingActive = true;
+    state.ebbingStart = '2000-01-01';
+    // 计划已完成并推进到今天（dayKey = 今天）；旧队列仍标记为 Day 1 开始日
+    state.ebbingPlan = { day: 2, dayKey: dayKeyStr(new Date()), completedUnits: [] };
+    state.suspendedQuiz = {
+      mode: 'en2cn',
+      isReview: true,
+      isEbbingPlan: true,
+      ids: [1],
+      pos: 0,
+      answers: {},
+      done: 0,
+      poolType: 'core',
+      ebbingPlanDayKey: '2000-01-01'
     };
     saveState();
   });

@@ -144,7 +144,7 @@ class ReviewWorkloadTest(unittest.TestCase):
         self.assertIn('第 25 天', result['text'])
         self.assertNotIn('重做第', result['text'])
 
-    def test_missed_day_clears_progress_and_forces_redo(self):
+    def test_missed_day_carries_progress_over_instead_of_forcing_redo(self):
         result = self.page.evaluate('''() => {
           const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
           state.ebbingPlan={day:24,dayKey:dayKeyStr(yesterday),completedUnits:[]};
@@ -158,10 +158,11 @@ class ReviewWorkloadTest(unittest.TestCase):
             due:dueUnitsByEbbing(),text:document.getElementById('ebbingPlan').textContent};
         }''')
         self.assertEqual(24, result['day'], '未完成则停留在原计划日')
-        self.assertTrue(result['makeup'])
-        self.assertEqual([], result['completed'], '前一天的进度必须清空')
-        self.assertEqual([13], result['due'], '整天重做，昨天答过的词也要重来')
-        self.assertIn('重做第 24 天计划', result['text'])
+        self.assertFalse(result['makeup'], '不再置补做标记，不强制整份重做')
+        self.assertEqual([13], result['due'], '未完成的 Unit 13 延续到今天继续')
+        self.assertIn('进度延续中', result['text'])
+        self.assertNotIn('重做第', result['text'])
+        self.assertNotIn('须清空', result['text'])
 
     def test_legacy_real_queue_reload_resume_and_modal(self):
         self.page.evaluate('''() => {

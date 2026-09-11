@@ -914,6 +914,31 @@ test('core plan keeps a missed Day 1 on Day 2 and unlocks Day 2 only on Day 3 af
   expect(result.day3Plan).toEqual({ day: 2, completedUnits: [], units: [2, 1] });
 });
 
+test('a partially completed plan day keeps its completed Units across midnight instead of resetting', async ({ page }) => {
+  const result = await page.evaluate(() => {
+    const day1 = new Date(2026, 7, 24);
+    const day2 = new Date(2026, 7, 25);
+    state = normalizeState({
+      ebbingActive: true,
+      ebbingStart: dayKeyStr(day1),
+      ebbingPlan: { day: 4, dayKey: dayKeyStr(day1), completedUnits: [4, 1] }
+    });
+    syncEbbingPlan(day2);
+    return {
+      day: state.ebbingPlan.day,
+      dayKey: state.ebbingPlan.dayKey,
+      completedUnits: state.ebbingPlan.completedUnits.slice(),
+      due: dueUnitsByEbbing(day2)
+    };
+  });
+
+  // 跨天后计划停留在原日、进度不清零：已完成的 Unit 4、1 保留，只差 Unit 3
+  expect(result.day).toBe(4);
+  expect(result.dayKey).toBe('2026-08-24');
+  expect(result.completedUnits).toEqual([4, 1]);
+  expect(result.due).toEqual([3]);
+});
+
 test('Ebbinghaus plan bar marks the day complete only after every scheduled Unit, including a reset makeup day', async ({ page }) => {
   const result = await page.evaluate(() => {
     const day2 = new Date();

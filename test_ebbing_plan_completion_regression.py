@@ -15,9 +15,10 @@ Correctness rules covered here:
   3. A rebuilt review queue no longer re-pushes words already answered today.
   4. Legacy broken states (completed but unrecorded day, stale snapshot) heal
      on load instead of demanding a full redo.
-  5. Unfinished day -> the next day clears the previous progress and forces the
-     whole previous day's plan to be redone; the originally scheduled day is
-     unreachable that day and yesterday's answers never count as credit.
+  5. Unfinished day -> the plan stays on that day and progress carries over:
+     completed Units, remaining questions and the suspended quiz queue all
+     survive the midnight rollover; the day only advances after its whole
+     plan has been finished.
 """
 
 from pathlib import Path
@@ -355,8 +356,8 @@ class EbbingPlanCompletionRegressionTest(unittest.TestCase):
         self.assertEqual([10, 4, 7, 9], st["due"])
         self.assertIn("第 10 天", st["planBar"])
 
-    def test_08_rollover_restarts_missed_day(self) -> None:
-        """跨天结算：前一天确实没做完 → 清空前一天进度，强制重做第9天整份计划。"""
+    def test_08_rollover_keeps_missed_day_progress(self) -> None:
+        """跨天结算：前一天没做完 → 停留在第9天，进度延续、不清空、不强制重做。"""
         self.seed(
             day=PLAN_DAY,
             dayKeyOffset=1,
@@ -368,14 +369,17 @@ class EbbingPlanCompletionRegressionTest(unittest.TestCase):
 
         st = self.plan_state()
         self.assertEqual(9, st["day"], "前一天未完成，应停留在第9天")
-        self.assertEqual([], st["completedUnits"], "前一天进度必须清空")
-        # 第9天计划：学 Unit 9 + 复习 Unit 3、6、8 —— 整天重做，昨天的作答记录一律不抵扣
-        self.assertEqual([9, 3, 6, 8], st["due"], "未完成的第9天计划需整份重做")
+        self.assertEqual([9], st["completedUnits"], "已学过的新 Unit 9 应计入进度，不清空")
+        # 第9天计划：学 Unit 9 + 复习 Unit 3、6、8 —— Unit 9 已学过不再重推，
+        # 未完成的复习 Unit 延续到今天补上，而不是整份清空重做
+        self.assertEqual([3, 6, 8], st["due"], "未完成的复习 Unit 延续到今天继续")
         self.assertNotIn("当天目标已完成", st["planBar"])
-        self.assertIn("重做第 9 天计划", st["planBar"])
+        self.assertIn("进度延续中", st["planBar"])
+        self.assertNotIn("重做第", st["planBar"])
+        self.assertNotIn("须清空", st["planBar"])
 
-    def test_09_makeup_day_cannot_skip_to_the_next_plan_and_completes_only_when_redone(self) -> None:
-        """补做日：不能改做原定当天(第10天)的计划；整份重做完后次日才推进到第10天。"""
+    def test_09_carryover_day_cannot_skip_to_the_next_plan_and_advances_after_completion(self) -> None:
+        """延续日：不能提前做原定第10天的计划；补完缺口当天完成，次日才推进到第10天。"""
         self.seed(
             day=PLAN_DAY,
             dayKeyOffset=1,
@@ -387,11 +391,11 @@ class EbbingPlanCompletionRegressionTest(unittest.TestCase):
 
         st = self.plan_state()
         self.assertEqual(9, st["day"])
-        # 原定第10天的 Unit 10/4/7 不得出现在待办里（4 只在第10天计划中）
+        # 原定第10天的 Unit 10/4 不得出现在待办里（4 只在第10天计划中）
         self.assertNotIn(10, st["due"])
         self.assertNotIn(4, st["due"])
 
-        # 只把昨天的缺口 Unit 8 补上 → 仍不算完成（新 Unit 9 也须今天重做）
+        # 只把昨天的缺口 Unit 8 补上 → 仍不算完成（Unit 3、6 也须今天答过才算复习完成）
         self.page.evaluate(
             """() => {
                 ebbingUnitWords(8).forEach(w => recordStat(w, 'en2cn', true, false, false));
@@ -399,10 +403,11 @@ class EbbingPlanCompletionRegressionTest(unittest.TestCase):
             }"""
         )
         st = self.plan_state()
-        self.assertFalse(st["complete"], "新 Unit 未重做前，补做日不能算完成")
-        self.assertIn(9, st["due"])
+        self.assertFalse(st["complete"], "复习 Unit 未完成前，延续日不能算完成")
+        self.assertIn(3, st["due"])
+        self.assertIn(6, st["due"])
 
-        # 整份重做第9天计划 → 完成，且当天不推进
+        # 把第9天计划的复习 Unit 全部答完 → 完成，且当天不推进
         self.page.evaluate(
             """() => {
                 ebbingPlanUnits(9).forEach(u => ebbingUnitWords(u).forEach(
@@ -411,26 +416,27 @@ class EbbingPlanCompletionRegressionTest(unittest.TestCase):
             }"""
         )
         st = self.plan_state()
-        self.assertTrue(st["complete"], "整份重做完后应判定完成")
+        self.assertTrue(st["complete"], "补完全部缺口后应判定完成")
         self.assertEqual(9, st["day"], "完成当天不推进，次日才开始第10天")
         self.assertIn("当天目标已完成", st["planBar"])
 
-        # 跨天结算 → 推进到第10天，补做标记清除
+        # 跨天结算 → 推进到第10天，延续状态解除
         advanced = self.page.evaluate(
             """() => {
-                // 补做日与第10天是相邻的两天：把第9天的作答时间退回昨天
+                // 延续日与第10天是相邻的两天：把第9天的作答时间退回昨天
                 const shift = Date.now() - (startOfTodayMs(new Date()) - 86400000 + 3600000);
                 ebbingPlanUnits(9).forEach(u => ebbingUnitWords(u).forEach(w => {
                     const wa = state.stats.wordAttempts[wordStateKey(w.id, 'core')];
                     if (wa) wa.lastTime -= shift;
                 }));
                 state.ebbingPlan.dayKey = '2000-01-01';
+                state.ebbingPlan.settledKey = '2000-01-01';
                 syncEbbingPlan(); renderEbbingPlan();
                 return { day: state.ebbingPlan.day, makeup: state.ebbingPlan.makeup,
                          due: dueUnitsByEbbing(), bar: document.getElementById('ebbingPlan').textContent };
             }"""
         )
-        self.assertEqual(10, advanced["day"], "补做完成后次日应进入第10天")
+        self.assertEqual(10, advanced["day"], "计划完成后次日应进入第10天")
         self.assertFalse(advanced["makeup"])
         self.assertEqual([10, 4, 7, 9], advanced["due"])
         self.assertNotIn("重做第", advanced["bar"])
