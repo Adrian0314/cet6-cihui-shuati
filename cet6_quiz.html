@@ -549,6 +549,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>📅 记忆规律：</strong>大纲词汇按刘晓艳《你还在背单词吗》书末「艾宾浩斯抗遗忘复习打卡表」的 4 周 25 天计划推进，14 个 Unit 全部参与自动打卡，每日 Unit 顺序严格照抄纸质打卡表（不再只取 Unit 1-10）：<code>第1天 Unit1</code>；<code>第2天 Unit2、1</code>；<code>第3天 Unit3、2</code>；<code>第4天 Unit4、1、3</code>；<code>第5天 Unit5、2、4</code>；<code>第6天 Unit6、3、5</code>；<code>第7天 Unit7、1、4、6</code>；<code>第8天 Unit8、2、5、7</code>；<code>第9天 Unit9、3、6、8</code>；<code>第10天 Unit10、4、7、9</code>；<code>第11天 Unit11、5、8、10</code>；<code>第12天 Unit12、1、6、9、11</code>；<code>第13天 Unit13、2、7、10、12</code>；<code>第14天 Unit14、3、8、11、13</code>；<code>第15天 Unit4、9、12、14</code>；<code>第16天 Unit5、10、13</code>；<code>第17天 Unit6、11、14</code>；<code>第18天 Unit7、12</code>；<code>第19天 Unit8、13</code>；<code>第20天 Unit9、14</code>；<code>第21天 Unit10</code>；<code>第22天 Unit11</code>；<code>第23天 Unit12</code>；<code>第24天 Unit13</code>；<code>第25天 Unit14</code>。每行第一个 Unit 是当天新学，其余是当天按 +1/+3/+6/+11 天间隔要复习的 Unit（Unit 11-14 是按字母分组的基础词区，词量大，对应日期的单日题量会明显偏高）。当天新学 Unit 的所有词都有过作答即算学完；复习 Unit 的所有词当天答过才算完成，不限做题入口。<strong>未完成规则：若当天未完成计划，第二天会清空前一天的进度并强制重做前一天的计划，当天无法改做原定当天的计划，也不能用旧作答记录抵扣。</strong>旧存档保留词群题的答案、题面及进度，不删除历史统计、错题或重点词。核心词汇仍使用书中独立的 8 格周期（5分/30分/12时/1天/2天/4天/7天）。</div>
       <div class="rb"><strong>🏰 闯关模式：</strong>严格对应书中使用指南——闯关1「词群速记」：结合词群导图快速检测，认识/不认识直接判断；闯关2「选择检测」：对应书中学完一个 Lesson 后的检测（选择题/默写题）；闯关3「Unit综合测」：学完一个 Unit 后的综合检测（覆盖整个 Unit）。词群导图怎么看，见下方「🗺️ 词群导图」。</div>
       <div class="rb"><strong>📖 答题后信息顺序：</strong>提交答案或跳过后，题目与正确答案下方紧接默认展开的“单词详解”（巧记、例句、派生词）；随后显示“⚠️ 易混淆词”辨析和词群归属信息，最后显示“🗺️ 词群导图”。点击“📖 单词详解”标题可收起或重新展开，导图可继续点击圆圈下钻查看关联词。</div>
+      <div class="rb"><strong>📖 单词详解字段规范：</strong>单词浏览器与做题页的「单词详解」都按同一套字段渲染——<strong>🧠 巧记</strong>：以「构词 / 联想 / 谐音 / 对照 / 提示」开头（构词=拆词根词缀 + “→”导出词义；联想=形近、同根或场景串联；谐音=读音谐音；对照=与近义词、同音词对比），一行讲清记忆抓手；<strong>💬 例句</strong>：统一为“英文句 + 一个半角句号 + 空格 + 中文译文”两行显示；<strong>🌱 派生词</strong>：同族词 + 音标，可点击朗读。核心词汇 3324 词中，2346 词（全部非派生词）已配齐巧记与例句；其余 960 个派生词按书中体例不单独撰写详解，点「查询」时会提示结合同词群的基词记忆。旧词条中写作 <code>[联想]</code>、<code>【构词】</code> 的巧记与新写法含义相同，只是标记写法不同。</div>
       <div class="rb"><strong>🧹 选择题释义显示：</strong>系统会自动清理词库中误混入释义末尾的孤立词性标记，并修复已知词条错误（<code>animal</code> 补全释义、<code>their</code> 去除多余“们”、<code>hear</code> 清理尾部残缺标点、<code>manoeuvre</code> 校正音标与释义字段），避免选项出现多余的 <code>v.</code>、<code>adj.</code> 或只有词性没有中文释义的文本。在线入口二维码指向 GitHub Pages 最新做题页。</div>
       <div class="rb"><strong>🧹 中文选项清理：</strong>英文→中文题目选项仅保留英文词性缩写（如 <code>n.</code>、<code>v.</code>、<code>adj.</code>、<code>prep.</code>）和清洗后的中文释义，不显示英文单词、音标或英文括注；答错后的“其余选项”反馈会显示对应英文单词、词性和音标，便于复盘。中文→英文选项显示英文单词、标准词性缩写和音标。系统会移除释义中混入的拉丁字母、音标及英文括号说明（包括缺少开头斜杠但以斜杠接词性结尾的异常格式），保留中文释义中的正常斜杠用法。超过 90 个汉字的极长释义或清洗后无中文的候选不会作为中文干扰项，系统优先从同词性、同前缀、易混淆或释义相近的短释义候选补位，保证四个选项可用且不修改原词库。</div>
       <div class="rb"><strong>🧩 选项释义去重：</strong>英文选中文模式会自动比较四个选项的中文核心释义，跳过完全相同或高度重叠的释义，避免 <code>inquire/enquire</code>、<code>optimal/optimum</code> 这类词同时造成歧义；词库中的合法同义词仍会保留，只有在候选不足的极小自定义词池中才使用重复释义兜底。</div>
@@ -6818,7 +6819,14 @@ function toggleBrowseDetail(word) {
       for (var i = 0; i < FULL_WORDS.length; i++) {
         if (FULL_WORDS[i].word === word) { w = FULL_WORDS[i]; break; }
       }
-      box.innerHTML = (w ? getWordDetailHTML(w, 'full') : '') || '<div style=\"color:var(--text2);font-size:0.85em;padding:8px 0\">\u6682\u65E0\u8BE6\u89E3</div>';
+      var html = w ? getWordDetailHTML(w, 'full') : '';
+      if (w && !w.memo && !w.example) {
+        // 派生词（书中以 * 标注、列在其他词条的派生词字段里）本轮不单独撰写巧记/例句，
+        // 明确提示而不是留一块空白，避免看起来像功能坏了。
+        html += '<div style="color:var(--text2);font-size:0.85em;padding:8px 0;">' +
+          '\u{1F331} 该词是派生词，未单独撰写巧记与例句；可打开同一词群里的基词条目，结合它的巧记一起记忆。</div>';
+      }
+      box.innerHTML = html || '\u6682\u65E0\u8BE6\u89E3';
     }
     box.style.display = 'block';
     btn.textContent = '\u6536\u8D77';
