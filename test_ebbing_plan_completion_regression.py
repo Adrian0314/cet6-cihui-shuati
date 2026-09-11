@@ -3,8 +3,11 @@
 Run from this directory:
     python .\\test_ebbing_plan_completion_regression.py
 
-Covers the day-9 completion bug fix:
-  1. The built-in plan table matches the book rule (+1/+3/+6/+12 for the ten word-group Units).
+Correctness rules covered here:
+  1. The built-in plan table is copied verbatim from the paper check-in card:
+     14 Units, Unit N reviewed on days N+1 / N+3 / N+6 / N+11, day 25 winds up.
+     (The old table only scheduled Unit 1-10, so day 14 wrongly asked for
+     "Unit 2、8" instead of "Unit 14、3、8、11、13".)
   2. Answering the day's Units through ANY quiz path (review queue, plain
      practice) credits the plan — previously only the review queue did, so a
      fully practiced day stayed "incomplete" and asked for the same questions
@@ -12,6 +15,9 @@ Covers the day-9 completion bug fix:
   3. A rebuilt review queue no longer re-pushes words already answered today.
   4. Legacy broken states (completed but unrecorded day, stale snapshot) heal
      on load instead of demanding a full redo.
+  5. Unfinished day -> the next day clears the previous progress and forces the
+     whole previous day's plan to be redone; the originally scheduled day is
+     unreachable that day and yesterday's answers never count as credit.
 """
 
 from pathlib import Path
@@ -21,6 +27,15 @@ from playwright.sync_api import Browser, Page, Playwright, sync_playwright
 
 
 QUIZ_HTML = Path(__file__).with_name("cet6_quiz.html")
+
+# 纸质打卡表逐日照抄：每行第一个 Unit 是当天新学，其余是当天要复习的 Unit
+BOOK_TABLE = [
+    [1], [2, 1], [3, 2], [4, 1, 3], [5, 2, 4],
+    [6, 3, 5], [7, 1, 4, 6], [8, 2, 5, 7], [9, 3, 6, 8], [10, 4, 7, 9],
+    [11, 5, 8, 10], [12, 1, 6, 9, 11], [13, 2, 7, 10, 12], [14, 3, 8, 11, 13], [4, 9, 12, 14],
+    [5, 10, 13], [6, 11, 14], [7, 12], [8, 13], [9, 14],
+    [10], [11], [12], [13], [14],
+]
 
 PLAN_DAY = 9                      # 学 Unit 9，复习 Unit 3、6、8
 DAY9_UNITS = [9, 3, 6, 8]
@@ -163,7 +178,8 @@ class EbbingPlanCompletionRegressionTest(unittest.TestCase):
     # ---------- tests ----------
 
     def test_01_plan_table_matches_book_rule(self) -> None:
-        """每个 Unit 的复习日必须落在 U+1 / U+3 / U+6 / U+12；第25天为收尾日。"""
+        """内置表必须与纸质打卡表逐日逐项一致：14 个 Unit，
+        每个 Unit 的复习日落在 U+1 / U+3 / U+6 / U+11，第25天收尾。"""
         result = self.page.evaluate(
             """() => {
                 const problems = [];
@@ -175,22 +191,31 @@ class EbbingPlanCompletionRegressionTest(unittest.TestCase):
                         if (u === newUnit) return;
                         (reviewsOf[u] = reviewsOf[u] || []).push(day);
                     });
-                    if (units.some(u => u < 1 || u > 10)) problems.push('foundation unit scheduled');
-                    if (day >= 23 && units.length) problems.push('rest day has tasks');
+                    if (units.some(u => u < 1 || u > 14)) problems.push('out-of-range unit on day ' + day);
+                    if (newUnit && units[0] !== newUnit) problems.push('day ' + day + ' does not learn first');
                 });
                 for (let u = 1; u <= EBING_UNITS; u++) {
-                    const expected = [u + 1, u + 3, u + 6, u + 12];
+                    const expected = [u + 1, u + 3, u + 6, u + 11].filter(d => d <= 25);
                     const actual = (reviewsOf[u] || []).slice().sort((a, b) => a - b);
-
                     if (actual.length !== expected.length || actual.some((d, i) => d !== expected[i])) {
                         problems.push('Unit ' + u + ' reviews ' + JSON.stringify(actual) + ' expected ' + JSON.stringify(expected));
                     }
                 }
-                return { problems: problems, days: EBBING_25_DAY_PLAN.length };
+                return {
+                    problems: problems,
+                    days: EBBING_25_DAY_PLAN.length,
+                    units: EBING_UNITS,
+                    table: EBBING_25_DAY_PLAN.map(d => d.slice())
+                };
             }"""
         )
         self.assertEqual(25, result["days"])
+        self.assertEqual(14, result["units"], "14 个 Unit 必须全部参与自动打卡")
+        self.assertEqual(BOOK_TABLE, result["table"], "每日 Unit 顺序必须与纸质打卡表一致")
         self.assertEqual([], result["problems"])
+        # 截图 bug：第14天曾被截成 Unit 2、8
+        self.assertEqual([14, 3, 8, 11, 13], result["table"][13])
+        self.assertEqual([11, 5, 8, 10], result["table"][10])
 
     def test_02_review_queue_full_completion_marks_day_complete(self) -> None:
         """走「开始复习」整队列做完 → 当天目标已完成，不再要求重做。"""
@@ -331,7 +356,7 @@ class EbbingPlanCompletionRegressionTest(unittest.TestCase):
         self.assertIn("第 10 天", st["planBar"])
 
     def test_08_rollover_restarts_missed_day(self) -> None:
-        """跨天结算：前一天确实没做完 → 留在第9天补做未完成的复习。"""
+        """跨天结算：前一天确实没做完 → 清空前一天进度，强制重做第9天整份计划。"""
         self.seed(
             day=PLAN_DAY,
             dayKeyOffset=1,
@@ -343,9 +368,72 @@ class EbbingPlanCompletionRegressionTest(unittest.TestCase):
 
         st = self.plan_state()
         self.assertEqual(9, st["day"], "前一天未完成，应停留在第9天")
-        self.assertEqual([9], st["completedUnits"], "新 Unit 已学过，补记完成")
-        self.assertEqual([3, 6, 8], st["due"], "9 已学过不再重推；3、6、8 需要今天补复习")
+        self.assertEqual([], st["completedUnits"], "前一天进度必须清空")
+        # 第9天计划：学 Unit 9 + 复习 Unit 3、6、8 —— 整天重做，昨天的作答记录一律不抵扣
+        self.assertEqual([9, 3, 6, 8], st["due"], "未完成的第9天计划需整份重做")
         self.assertNotIn("当天目标已完成", st["planBar"])
+        self.assertIn("重做第 9 天计划", st["planBar"])
+
+    def test_09_makeup_day_cannot_skip_to_the_next_plan_and_completes_only_when_redone(self) -> None:
+        """补做日：不能改做原定当天(第10天)的计划；整份重做完后次日才推进到第10天。"""
+        self.seed(
+            day=PLAN_DAY,
+            dayKeyOffset=1,
+            learnedOldUnits=LEARNED_OLD_UNITS,
+            answeredYesterdayUnits=[9, 3, 6],
+            completedUnits=[],
+        )
+        self.page.reload(wait_until="load")
+
+        st = self.plan_state()
+        self.assertEqual(9, st["day"])
+        # 原定第10天的 Unit 10/4/7 不得出现在待办里（4 只在第10天计划中）
+        self.assertNotIn(10, st["due"])
+        self.assertNotIn(4, st["due"])
+
+        # 只把昨天的缺口 Unit 8 补上 → 仍不算完成（新 Unit 9 也须今天重做）
+        self.page.evaluate(
+            """() => {
+                ebbingUnitWords(8).forEach(w => recordStat(w, 'en2cn', true, false, false));
+                syncEbbingPlan(); renderAll();
+            }"""
+        )
+        st = self.plan_state()
+        self.assertFalse(st["complete"], "新 Unit 未重做前，补做日不能算完成")
+        self.assertIn(9, st["due"])
+
+        # 整份重做第9天计划 → 完成，且当天不推进
+        self.page.evaluate(
+            """() => {
+                ebbingPlanUnits(9).forEach(u => ebbingUnitWords(u).forEach(
+                    w => recordStat(w, 'en2cn', true, false, false)));
+                syncEbbingPlan(); renderAll();
+            }"""
+        )
+        st = self.plan_state()
+        self.assertTrue(st["complete"], "整份重做完后应判定完成")
+        self.assertEqual(9, st["day"], "完成当天不推进，次日才开始第10天")
+        self.assertIn("当天目标已完成", st["planBar"])
+
+        # 跨天结算 → 推进到第10天，补做标记清除
+        advanced = self.page.evaluate(
+            """() => {
+                // 补做日与第10天是相邻的两天：把第9天的作答时间退回昨天
+                const shift = Date.now() - (startOfTodayMs(new Date()) - 86400000 + 3600000);
+                ebbingPlanUnits(9).forEach(u => ebbingUnitWords(u).forEach(w => {
+                    const wa = state.stats.wordAttempts[wordStateKey(w.id, 'core')];
+                    if (wa) wa.lastTime -= shift;
+                }));
+                state.ebbingPlan.dayKey = '2000-01-01';
+                syncEbbingPlan(); renderEbbingPlan();
+                return { day: state.ebbingPlan.day, makeup: state.ebbingPlan.makeup,
+                         due: dueUnitsByEbbing(), bar: document.getElementById('ebbingPlan').textContent };
+            }"""
+        )
+        self.assertEqual(10, advanced["day"], "补做完成后次日应进入第10天")
+        self.assertFalse(advanced["makeup"])
+        self.assertEqual([10, 4, 7, 9], advanced["due"])
+        self.assertNotIn("重做第", advanced["bar"])
 
 
 if __name__ == "__main__":
