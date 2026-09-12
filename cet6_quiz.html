@@ -6965,7 +6965,30 @@ if (location.protocol !== 'file:') {
   document.head.appendChild(_manifestLink);
 }
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-  navigator.serviceWorker.register('./sw.js').catch(function() {});
+  navigator.serviceWorker.register('./sw.js').then(function(reg) {
+    // 词库更新提示：新 Service Worker 接管（skipWaiting + clients.claim）后，
+    // 当前页面仍是旧缓存渲染的旧词库，弹条提示用户刷新一次即可加载最新内容。
+    try {
+      var notifyUpdate = function() {
+        if (document.getElementById('swUpdateBar')) return;
+        var bar = document.createElement('div');
+        bar.id = 'swUpdateBar';
+        bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:var(--accent);color:#fff;' +
+          'padding:8px 12px;font-size:0.9em;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25);';
+        bar.textContent = '\u{1F4DA} \u8BCD\u5E93\u5DF2\u66F4\u65B0\uFF0C\u70B9\u51FB\u5237\u65B0\u52A0\u8F7D\u6700\u65B0\u5185\u5BB9';
+        bar.onclick = function() { location.reload(); };
+        document.body.appendChild(bar);
+      };
+      reg.addEventListener('updatefound', function() {
+        var nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener('statechange', function() {
+          if (nw.state === 'activated') notifyUpdate();
+        });
+      });
+      reg.update();
+    } catch (e) {}
+  }).catch(function() {});
 }
 applyPrefs();  // 恢复上次做题模式（词库/单元/闯关/模式/题型/记忆/学习量）
 updatePrefsSnapshot();  // 记录「上次已保存」的模式快照，退出做题时据此询问是否保留
