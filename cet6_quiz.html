@@ -550,6 +550,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>🏰 闯关模式：</strong>严格对应书中使用指南——闯关1「词群速记」：结合词群导图快速检测，认识/不认识直接判断；闯关2「选择检测」：对应书中学完一个 Lesson 后的检测（选择题/默写题）；闯关3「Unit综合测」：学完一个 Unit 后的综合检测（覆盖整个 Unit）。词群导图怎么看，见下方「🗺️ 词群导图」。</div>
       <div class="rb"><strong>📖 答题后信息顺序：</strong>提交答案或跳过后，题目与正确答案下方紧接默认展开的“单词详解”（巧记、例句、派生词）；随后显示“⚠️ 易混淆词”辨析和词群归属信息，最后显示“🗺️ 词群导图”。点击“📖 单词详解”标题可收起或重新展开，导图可继续点击圆圈下钻查看关联词。</div>
       <div class="rb"><strong>📖 单词详解字段规范：</strong>单词浏览器与做题页的「单词详解」都按同一套字段渲染——<strong>🧠 巧记</strong>：以「构词 / 联想 / 谐音 / 对照 / 提示」开头（构词=拆词根词缀 + “→”导出词义；联想=形近、同根或场景串联；谐音=读音谐音；对照=与近义词、同音词对比），一行讲清记忆抓手；<strong>💬 例句</strong>：统一为“英文句 + 一个半角句号 + 空格 + 中文译文”两行显示；<strong>🌱 派生词</strong>：同族词 + 音标，可点击朗读。全部词条已配齐巧记与例句：核心词汇 3324 词、大纲词汇 6526 词覆盖率均达 100%（含书中 * 标注的派生词）。旧词条中写作 <code>[联想]</code>、<code>【构词】</code> 的巧记与新写法含义相同，只是标记写法不同。</div>
+      <div class="rb"><strong>🔎 单词浏览器：</strong>「词库」标签可按单元检索全部单词——默认浏览<strong>大纲词汇 Unit 1-14（6526 词）</strong>，可切换<strong>核心词汇 Unit 1-10（3324 词）</strong>；单元按钮可筛选任一 Unit（另有「未分单元」收录书中未归入单元的补充词），搜索框支持中文释义与英文单词。每词可点「查询」看巧记 / 例句 / 派生词，点「🗺️ 导图」看词群关系图（导图数据覆盖大纲词汇 Unit 1-10），也可朗读发音、标记重点词。</div>
       <div class="rb"><strong>🧹 选择题释义显示：</strong>系统会自动清理词库中误混入释义末尾的孤立词性标记，并修复已知词条错误（<code>animal</code> 补全释义、<code>their</code> 去除多余“们”、<code>hear</code> 清理尾部残缺标点、<code>manoeuvre</code> 校正音标与释义字段），避免选项出现多余的 <code>v.</code>、<code>adj.</code> 或只有词性没有中文释义的文本。在线入口二维码指向 GitHub Pages 最新做题页。</div>
       <div class="rb"><strong>🧹 中文选项清理：</strong>英文→中文题目选项仅保留英文词性缩写（如 <code>n.</code>、<code>v.</code>、<code>adj.</code>、<code>prep.</code>）和清洗后的中文释义，不显示英文单词、音标或英文括注；答错后的“其余选项”反馈会显示对应英文单词、词性和音标，便于复盘。中文→英文选项显示英文单词、标准词性缩写和音标。系统会移除释义中混入的拉丁字母、音标及英文括号说明（包括缺少开头斜杠但以斜杠接词性结尾的异常格式），保留中文释义中的正常斜杠用法。超过 90 个汉字的极长释义或清洗后无中文的候选不会作为中文干扰项，系统优先从同词性、同前缀、易混淆或释义相近的短释义候选补位，保证四个选项可用且不修改原词库。</div>
       <div class="rb"><strong>🧩 选项释义去重：</strong>英文选中文模式会自动比较四个选项的中文核心释义，跳过完全相同或高度重叠的释义，避免 <code>inquire/enquire</code>、<code>optimal/optimum</code> 这类词同时造成歧义；词库中的合法同义词仍会保留，只有在候选不足的极小自定义词池中才使用重复释义兜底。</div>
@@ -767,6 +768,11 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <input class="search-box" id="browseSearch" placeholder="🔍 输入中文/英文" oninput="_browsePage=0;renderBrowse()">
       </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px;">
+        <button class="ctrl-btn" id="browsePoolCore" onclick="setBrowsePool('core')" style="padding:5px 10px;font-size:0.8em;">📗 大纲词汇 Unit 1-14</button>
+        <button class="ctrl-btn" id="browsePoolFull" onclick="setBrowsePool('full')" style="padding:5px 10px;font-size:0.8em;">📚 核心词汇 Unit 1-10</button>
+      </div>
+      <div id="browseUnits" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px;"></div>
     </div>
     <div class="panel-b" id="browseList" style="max-height:70vh;overflow-y:auto;"><p style="text-align:center;color:var(--text2);padding:40px;">点击上方输入框搜索单词</p></div>
   </div>
@@ -784,27 +790,21 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
 // Load word data from JSON blocks (ALL_WORDS eagerly, FULL_WORDS lazily)
 var ALL_WORDS = JSON.parse(document.getElementById('data-all-words').textContent);
 function repairWordData(list) {
+  // 只保留「数据文件本身残缺、必须运行时补齐」的词条（都在 20 字内）。
+  // 注意：数据已修好的词（way / bunch / family / sweet / ought / animal /
+  // their / hear / manoeuvre 等）不再在此覆盖——此前 repair 表里留着这些词的
+  // 旧长释义，会在运行时把它们又改回长文本，导致词库精简失效。
   var repairs = {
-    bunch: { meaning: 'n. 束，串，扎；一伙、一群；大量；发辫（bunches）；突起;v. 捆，扎，使集中；收紧，起褶;【名】 （Bunch）（英）邦奇（人名）' },
-    family: { meaning: 'n. 家，家庭；家属，亲属；家族；子女，孩子；（动植物的）科；语族；祖先；一窝（动物）；有组织的犯罪团伙；（具有明显共同特征的）一类东西；（在某些方面）像家人一样的一群人；（数）族；派别；氏族;adj. 家庭的；一家所有的；老少咸宜的；全家用的' },
     // fibre 的原始释义混入了 OCR 识别出的音标，选择题中应只显示中文释义。
     fibre: { meaning: 'n.(食物的)纤维素;(布绳的)纤维' },
-    nightmare: { },
-    ought: { meaning: 'v. 应该（表义务、责任、必要等）；应该（表期望）；n. 零（=nought）；pron. 任何事物（=aught）' },
-    sunshine: { },
+    // 以下词条词库数据里只剩词性标记（n./v.），需运行时补全释义。
     tempo: { meaning: 'n. 节奏；速度；拍子' },
-    animal: { meaning: 'n.动物；兽；畜生；adj.动物的；肉体的' },
-    their: { meaning: 'det.他/她/它们' },
-    hear: { meaning: 'v.听见' },
-    manoeuvre: { meaning: 'n.机动动作;策略,手段 v.操纵,控制' },
     intake: { meaning: 'n. 摄入量；吸入；进气口' },
     mineral: { meaning: 'n. 矿物；矿物质' },
-    wall: { meaning: 'n. 墙；墙壁；围墙；屏障；v. 用墙围住；堵塞' },
-    disarm: { meaning: 'v. 解除武装；使缴械；消除（敌意、怒气等）' },
+    wall: { meaning: 'n. 墙，围墙 v. 围住，堵塞' },
+    disarm: { meaning: 'v. 解除武装；消除（敌意）' },
     // optimum 与 optimal 原始释义完全相同；补充 optimum 的名词义，避免选择题出现两个相同答案。
-    optimum: { meaning: 'n. 最优值；最佳状态' },
-    sweet: { meaning: 'adj. 含糖的，甜的；未加盐的，淡的；芳香的，芬芳的；清新的，纯净的，新鲜的；（声音）甜美的，悦耳的，动听的；（音乐，尤指爵士乐）甜派风格的；惹人喜爱的，可爱的；亲爱的；温和的，和蔼的，善良的；愉快的，惬意的，令人满意的；（用于表示同意，赞成）好的；容易操纵的，运转平稳的；丝毫的，一丁点儿的;n. 糖果；甜食；餐后甜点；（亲昵的称呼）宝贝儿，亲爱的；快乐，乐趣（sweets）；芳香' },
-    way: { meaning: 'n. 方法，手段；习俗，习惯，行为方式；（行事）作风，（某事发生的）方式；道路，路线；行进路线，通路；方向；……路（用于道路的名称）；出入通道，门口；距离，时段；方面；（两种之一的）选择；情况，状态；（某人居住的）地区，地方；（分成的）部分；职业，行当；（船）航行，动力；船台，滑道（ways）;adv. 大大地，远远地；非常，很;adj. 途中的;【名】 （Way）韦（人名）' }
+    optimum: { meaning: 'n. 最优值；最佳状态' }
   };
   (list || []).forEach(function(word) {
     var fix = repairs[String(word.word || '').toLowerCase()];
@@ -3649,9 +3649,9 @@ function favoriteButtonHTML(word, poolName) {
 function getWordGroupInfoHTML(word, poolName) {
   var groupInfo = '<div class="word-group-info" style="text-align:right;margin:8px 0 4px;">' + favoriteButtonHTML(word, poolName) + '</div>';
   if (word.group_id || word.unit) {
-    groupInfo = '<div class="word-group-info" style="margin:8px 0 4px;font-size:0.85em;color:var(--text2);">📁 ' +
-      (word.group_id ? '词群 ' + word.group_id + '「' + (word.group_name || '') + '」' : '') +
-      (word.unit ? ' · Unit ' + word.unit : '') +
+    groupInfo = '<div class="word-group-info" style="margin:8px 0 4px;font-size:0.85em;color:var(--text2);">' +
+      (word.group_id ? '📁 词群 ' + word.group_id + '「' + (word.group_name || '') + '」' : '📍') +
+      (word.unit ? (word.group_id ? ' · ' : ' ') + 'Unit ' + word.unit : '') +
       (word.lesson ? ' · Lesson ' + word.lesson : '') +
       (word.isStar ? ' · 书中派生词*' : '') +
       '</div>';
@@ -3662,7 +3662,9 @@ function getWordGroupInfoHTML(word, poolName) {
 function getWordDetailHTML(word, poolName, options) {
   var includeGroupInfo = !(options && options.detailOnly);
   var parts = [];
-  if (currentPool === 'full' && word.id) {
+  // 打卡进度按词条所属词库显示（核心词库才有 8 格打卡；不能用做题页 currentPool 判断，
+  // 否则单词浏览器里浏览大纲词时会误用核心词库的 id 查进度）
+  if (poolName === 'full' && word.id) {
     var gp = gridProgressText(word.id);
     if (gp) parts.push(['\u{1F5D3}\uFE0F', '\u6253\u5361', gp, '']);
   }
@@ -6766,10 +6768,53 @@ function findBestDictWord(lower) {
 
 // ============ WORD BROWSER ============
 var _browsePage = 0, _browsePageSize = 50;
+// 浏览器词库：默认大纲词汇（Unit 1-14 全部 6526 词可检索），可切换核心词汇（Unit 1-10）
+var _browsePool = 'core';
+var _browseUnit = 0; // 0 = 全部单元
+try {
+  var _bpSaved = localStorage.getItem('cet6_browse_pool');
+  if (_bpSaved === 'full' || _bpSaved === 'core') _browsePool = _bpSaved;
+} catch (e) {}
+function browsePoolWords() {
+  if (_browsePool === 'full') return FULL_WORDS || [];
+  return (typeof ALL_WORDS !== 'undefined' && ALL_WORDS) ? ALL_WORDS : [];
+}
+function setBrowsePool(p) {
+  _browsePool = (p === 'full') ? 'full' : 'core';
+  _browseUnit = 0;
+  _browsePage = 0;
+  try { localStorage.setItem('cet6_browse_pool', _browsePool); } catch (e) {}
+  renderBrowse();
+}
+function setBrowseUnit(u) {
+  _browseUnit = Number(u) || 0;
+  _browsePage = 0;
+  renderBrowse();
+}
+function renderBrowseUnitChips() {
+  var box = document.getElementById('browseUnits');
+  if (!box) return;
+  var maxUnit = _browsePool === 'full' ? 10 : 14;
+  var html = '<span style="color:var(--text2);font-size:0.78em;">单元</span>' +
+    '<button class="ctrl-btn' + (_browseUnit === 0 ? ' accent' : '') + '" onclick="setBrowseUnit(0)" style="padding:3px 9px;font-size:0.78em;">全部</button>';
+  for (var u = 1; u <= maxUnit; u++) {
+    html += '<button class="ctrl-btn' + (_browseUnit === u ? ' accent' : '') + '" onclick="setBrowseUnit(' + u + ')" style="padding:3px 9px;font-size:0.78em;">Unit ' + u + '</button>';
+  }
+  // 书中未归入任何 Unit 的补充词（lesson/seq 均为 0），保证全库无死角
+  if (_browsePool === 'core') {
+    html += '<button class="ctrl-btn' + (_browseUnit === -1 ? ' accent' : '') + '" onclick="setBrowseUnit(-1)" style="padding:3px 9px;font-size:0.78em;">未分单元</button>';
+  }
+  box.innerHTML = html;
+  var bc = document.getElementById('browsePoolCore');
+  var bf = document.getElementById('browsePoolFull');
+  if (bc) bc.classList.toggle('accent', _browsePool === 'core');
+  if (bf) bf.classList.toggle('accent', _browsePool === 'full');
+}
 function renderBrowse() {
   var list = document.getElementById('browseList');
   if (!list) return;
-  if (!FULL_WORDS) {
+  renderBrowseUnitChips();
+  if (_browsePool === 'full' && !FULL_WORDS) {
     if (_fullWordsFailed) {
       list.innerHTML = '<p style="text-align:center;color:var(--text2);padding:40px;">核心词汇加载失败，请检查网络后刷新</p>';
       return;
@@ -6778,7 +6823,7 @@ function renderBrowse() {
     ensureFullWords(function() { renderBrowse(); });
     return;
   }
-  var words = FULL_WORDS;
+  var words = browsePoolWords();
   if (!words || !words.length) { list.innerHTML = '<p style=\"text-align:center;color:var(--text2);padding:40px;\">\u8BCD\u5E93\u52A0\u8F7D\u4E2D...</p>'; return; }
   var searchEl = document.getElementById('browseSearch');
   var search = (searchEl ? searchEl.value : '') || '';
@@ -6786,12 +6831,16 @@ function renderBrowse() {
   var filtered = [];
   for (var i = 0; i < words.length; i++) {
     var w = words[i];
+    if (_browseUnit > 0 && Number(w.unit) !== _browseUnit) continue;
+    if (_browseUnit === -1 && Number(w.unit)) continue; // 未分单元：unit 为 0/空
     if (search && w.word.toLowerCase().indexOf(search) === -1 && getChinese(w.meaning).indexOf(search) === -1) continue;
     filtered.push(w);
   }
   var start = _browsePage * _browsePageSize;
   var page = filtered.slice(start, start + _browsePageSize);
-  var html = '';
+  var html = '<div style="padding:8px 14px;color:var(--text2);font-size:0.8em;border-bottom:1px solid var(--border);">' +
+    '共 ' + filtered.length + ' 个单词 · ' + (_browsePool === 'core' ? '大纲词汇 Unit 1-14' : '核心词汇 Unit 1-10') +
+    (_browseUnit === -1 ? ' · 未分单元' : (_browseUnit ? ' · Unit ' + _browseUnit : '')) + '</div>';
   for (var j = 0; j < page.length; j++) {
     var w = page[j];
     // 词性统一 badge 渲染（多词性单词的每个词性都有独立标签）
@@ -6806,7 +6855,7 @@ function renderBrowse() {
       '<span onclick=\"speakWord(&quot;' + w.word + '&quot;)\" style=\"cursor:pointer;font-size:0.95em;margin-left:8px;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;vertical-align:middle;border-radius:50%;transition:background 200ms;\" title=\"朗读发音\">\u{1F50A}</span></span>' +
       '<span><button class=\"ctrl-btn\" id=\"bdbtn-' + w.word + '\" style=\"padding:6px 12px;font-size:0.8em\" onclick=\"toggleBrowseDetail(&quot;' + w.word + '&quot;)\">\u67E5\u8BE2</button> ' +
       '<button class=\"ctrl-btn\" style=\"padding:6px 12px;font-size:0.8em\" onclick=\"toggleBrowseMap(&quot;' + w.word + '&quot;)\">\u{1F5FA}\uFE0F 导图</button> ' +
-      '<button class=\"ctrl-btn favorite-toggle' + (isFavorite(w.id, 'full') ? ' active' : '') + '\" data-favorite-toggle data-favorite-key=\"' + favoriteKey(w.id, 'full') + '\" aria-pressed=\"' + (isFavorite(w.id, 'full') ? 'true' : 'false') + '\">' + (isFavorite(w.id, 'full') ? '★ 已标记' : '☆ 标记重点') + '</button></span></div>' +
+      '<button class=\"ctrl-btn favorite-toggle' + (isFavorite(w.id, _browsePool) ? ' active' : '') + '\" data-favorite-toggle data-favorite-key=\"' + favoriteKey(w.id, _browsePool) + '\" aria-pressed=\"' + (isFavorite(w.id, _browsePool) ? 'true' : 'false') + '\">' + (isFavorite(w.id, _browsePool) ? '★ 已标记' : '☆ 标记重点') + '</button></span></div>' +
       (_uinfo ? '<div style=\"color:var(--accent2);font-size:0.78em;margin-top:3px\">📁 ' + _uinfo + _star + '</div>' : '') +
       '<div style=\"color:var(--text2);font-size:0.85em;margin-top:2px\">' + posHtml + '</div>' +
       '<div id=\"bd-' + w.word + '\" style=\"display:none\"></div>' +
@@ -6834,12 +6883,21 @@ function toggleBrowseDetail(word) {
   if (!box || !btn) return;
   if (box.style.display === 'none') {
     if (!box.innerHTML) {
-      // 按单词拼写精确匹配（不能用 id：核心词汇与大纲词汇 id 编号体系不同会冲突）
+      // 按当前浏览词库精确匹配（不能用 id：核心词汇与大纲词汇 id 编号体系不同会冲突）
+      var pool = _browsePool;
+      var arr = browsePoolWords();
       var w = null;
-      for (var i = 0; i < FULL_WORDS.length; i++) {
-        if (FULL_WORDS[i].word === word) { w = FULL_WORDS[i]; break; }
+      for (var i = 0; i < arr.length; i++) {
+        if (arr[i].word === word) { w = arr[i]; break; }
       }
-      var html = w ? getWordDetailHTML(w, 'full') : '';
+      if (!w) {
+        // 兜底：在当前词库里找不到时（如切换词库后旧列表残留）到另一词库查找
+        var other = (pool === 'full') ? ((typeof ALL_WORDS !== 'undefined' && ALL_WORDS) || []) : (FULL_WORDS || []);
+        for (var k = 0; k < other.length; k++) {
+          if (other[k].word === word) { w = other[k]; pool = (pool === 'full') ? 'core' : 'full'; break; }
+        }
+      }
+      var html = w ? getWordDetailHTML(w, pool) : '';
       if (w && !w.memo && !w.example) {
         // 派生词（书中以 * 标注、列在其他词条的派生词字段里）本轮不单独撰写巧记/例句，
         // 明确提示而不是留一块空白，避免看起来像功能坏了。
@@ -6879,7 +6937,7 @@ function toggleBrowseMap(word) {
       box.innerHTML = '<p style="color:var(--text2);font-size:0.85em;padding:8px 0">🗺️ 词群导图加载中…</p>';
       ensureUnitMaps(function() {
         var html = browseGroupMapHTML(word);
-        box.innerHTML = html || '<p style="color:var(--text2);font-size:0.85em;padding:8px 0">📖 本书词群导图暂无此词（当前导图数据覆盖大纲词汇 Unit 1）</p>';
+        box.innerHTML = html || '<p style="color:var(--text2);font-size:0.85em;padding:8px 0">📖 本书词群导图暂无此词（导图数据覆盖大纲词汇 Unit 1-10）</p>';
         box.dataset.loaded = '1';
       });
     }

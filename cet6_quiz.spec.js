@@ -1950,6 +1950,10 @@ test.describe('group map (new: unit-maps.js data)', () => {
       return target;
     });
     expect(absent).not.toBeNull();
+    // 该词取自核心词库（FULL_WORDS），而浏览器默认展示大纲词汇 Unit 1-14，
+    // 先切换到核心词汇再搜索，才能命中该词并验证「暂无导图」提示。
+    await page.evaluate(() => { setBrowsePool('full'); });
+    await page.waitForTimeout(300);
     await page.fill('#browseSearch', absent);
     await page.waitForFunction((w) => {
       const list = document.getElementById('browseList');
