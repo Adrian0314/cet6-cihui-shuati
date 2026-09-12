@@ -5,7 +5,7 @@ Run from this directory:
 
 锁定三件事：
   1. full-words.js（单词浏览器数据源）可正常解析，词条数不变；
-  2. 所有非派生词都配齐了 巧记(memo) + 例句(example)；缺口只允许出现在派生词上；
+  2. 全部词条（含派生词）都配齐了 巧记(memo) + 例句(example)，不允许任何缺口；
   3. 详解字段符合规范（巧记有类别标记，例句为「英文 + 句末标点 + 空格 + 中文」），
      并且单词浏览器的「查询」按钮真的能把详解渲染出来。
 """
@@ -22,7 +22,8 @@ QUIZ_HTML = ROOT / "cet6_quiz.html"
 FULL_JS = ROOT / "full-words.js"
 
 EXPECTED_FULL_WORDS = 3324
-EXPECTED_WITH_DETAIL = 2346
+# 2026-09-12 起全部词条（含书中 * 标注的派生词）均已配齐巧记与例句
+EXPECTED_WITH_DETAIL = 3324
 MEMO_TAGS = ("构词", "联想", "谐音", "对照", "提示", "拟声", "拆解")
 # 旧词条沿用的无类别标记写法（如「success（成功）+ -ive → …」）行数，只封顶不回改
 LEGACY_UNTAGGED_MEMOS = 271
@@ -79,24 +80,21 @@ class WordDetailCoverageTest(unittest.TestCase):
         self.assertEqual(EXPECTED_FULL_WORDS, len(self.full_words))
         self.assertTrue(all("word" in w and "meaning" in w for w in self.full_words))
 
-    def test_02_every_non_derivative_word_has_full_detail(self) -> None:
-        """非派生词必须巧记 + 例句齐全；缺口只允许是派生词。"""
+    def test_02_every_word_has_full_detail(self) -> None:
+        """全部词条（含派生词）必须巧记 + 例句齐全，不允许任何缺口。"""
         missing = []
         for w in self.full_words:
-            if w["word"].strip().lower() in self.derived:
-                continue
             if not (has(w.get("memo")) and has(w.get("example"))):
                 missing.append((w["unit"], w["lesson"], w["word"]))
-        self.assertEqual([], missing, "以下非派生词仍缺详解：%s" % missing[:20])
+        self.assertEqual([], missing, "以下词仍缺详解：%s" % missing[:20])
 
         with_detail = sum(1 for w in self.full_words if has(w.get("memo")) and has(w.get("example")))
         self.assertEqual(EXPECTED_WITH_DETAIL, with_detail)
 
-    def test_03_remaining_gaps_are_all_derivatives(self) -> None:
-        gaps = [w for w in self.full_words if not has(w.get("memo")) and not has(w.get("example"))]
-        self.assertTrue(gaps, "应当存在按体例不单独撰写详解的派生词")
-        wrong = [w["word"] for w in gaps if w["word"].strip().lower() not in self.derived]
-        self.assertEqual([], wrong, "以下无详解的词并不是派生词：%s" % wrong[:20])
+    def test_03_no_remaining_detail_gaps(self) -> None:
+        """不允许存在无详解的缺口（派生词也已全部单独撰写）。"""
+        gaps = [w["word"] for w in self.full_words if not has(w.get("memo")) and not has(w.get("example"))]
+        self.assertEqual([], gaps, "以下词条没有详解：%s" % gaps[:20])
 
     def test_04_memo_follows_the_field_spec(self) -> None:
         """巧记最多两行、每行不超过 130 字；带类别标记的行必须用规范标记。
@@ -164,26 +162,15 @@ class WordDetailCoverageTest(unittest.TestCase):
             self.assertIn("巧记", result["text"], word)
             self.assertIn("例句", result["text"], word)
 
-    def test_07_derivative_words_get_an_explanation_hint(self) -> None:
-        """派生词没有详解时给出解释性提示，不能只剩空白。"""
+    def test_07_no_word_lacks_detail_in_the_browser(self) -> None:
+        """2026-09-12 起全库配齐：浏览器数据源里不应再有任何无详解的词。"""
         word = self.page.evaluate(
             """() => {
                 const w = FULL_WORDS.find(x => !x.memo && !x.example);
                 return w ? w.word : null;
             }"""
         )
-        self.assertIsNotNone(word, "应能找到一个无详解的派生词")
-        self.page.evaluate(
-            """() => { document.querySelector('.tab-btn[data-tab="browse"]').click(); }"""
-        )
-        self.page.wait_for_timeout(400)
-        self.page.evaluate(
-            """(word) => { toggleBrowseDetail(word); }""", word
-        )
-        box_id = "bd-" + word
-        html = self.page.evaluate("(id) => (document.getElementById(id) || {}).innerHTML", box_id)
-        self.assertTrue(html, "查询结果不应为空")
-        self.assertIn("派生词", html)
+        self.assertIsNone(word, "全库已配齐详解，不应存在无详解的词：%s" % word)
 
 
 if __name__ == "__main__":
