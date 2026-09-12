@@ -191,14 +191,11 @@ icon-192.png / icon-512.png / apple-touch-icon.png   应用图标
 site-qrcode.png       网站二维码
 build-core-words.js   构建脚本（生成词库索引 core-words.js）
 build-offline-viewer.js 构建脚本（生成离线单文件版查看器）
-tools/update_phonetics.py  词库音标批量更新脚本（有道词典，带本地缓存）
 scan_meaning_bugs.js  释义数据质量扫描工具
 _lookup.js            单词查询小工具
 ```
 
 释义扫描脚本用法：在仓库根目录运行 `node scan_meaning_bugs.js`。
-
-音标维护：`python tools/update_phonetics.py`（预览）／`python tools/update_phonetics.py --write`（写入），改完再跑一次两个构建脚本。
 
 ## 🛠 技术栈
 
