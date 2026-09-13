@@ -166,17 +166,6 @@
 ```
 README.md             项目说明
 cet6_quiz.html        主程序（单文件，含全部数据 + 图表库）
-cet6_quiz.spec.js     Playwright 自动化测试
-default-config.spec.js / favorite-button.spec.js / tts-routing.spec.js
-quiz-progress-persistence.spec.js   默认配置 / 重点词 / 朗读 / 进度持久化测试
-test_condition_definition_regression.py     释义与题干渲染回归测试
-test_ebbing_plan_completion_regression.py   4周25天打卡计划回归测试
-test_gate1_known_definition_regression.py   闯关1「认识」释义展示回归测试
-test_option_meaning_distinct_regression.py  选项中文释义去重回归测试
-test_resume_skip_ghost_regression.py        切后台恢复误触（幽灵输入）回归测试
-test_review_completion_controls_regression.py / test_review_workload_regression.py  复习流程与题量回归测试
-test_swipe_scroll_navigation_regression.py  滑动切题与方向键滚动回归测试（14 项）
-test_word_detail_coverage_regression.py     单词详情覆盖与字段规范回归测试（7 项）
 full-words.js         外置打卡词库（核心词汇 3,324 词）
 unit-maps.js          外置词群导图数据（Unit 1-10）
 core-words.js         词库发音/释义索引（自动生成）
@@ -198,9 +187,13 @@ _lookup.js            单词查询小工具
 
 释义扫描脚本用法：在仓库根目录运行 `node scan_meaning_bugs.js`。
 
+> **测试文件不入库**：Playwright 用例（`*.spec.js`）与 Python 回归脚本（`test_*.py`）只在本地保留，
+> 已在 `.gitignore` 中忽略，不会被提交或推送。下方修复记录里提到的用例名与运行命令，
+> 指的是当时本地跑过的测试，仓库中不包含这些脚本。
+
 ## 🛠 技术栈
 
-原生 HTML + CSS + JavaScript（无框架）、Chart.js（已内联）、Web Speech API、Service Worker、localStorage、Playwright（Python / Node 双端测试）、Node.js（词群编辑器与构建脚本）、Python（音标数据维护）。
+原生 HTML + CSS + JavaScript（无框架）、Chart.js（已内联）、Web Speech API、Service Worker、localStorage、Node.js（词群编辑器与构建脚本）、Python（音标数据维护）。
 
 ## 功能调整：2026-09-12 单词浏览器支持 Unit 1-14 全量检索 + 修复 repair 表超长释义覆盖
 

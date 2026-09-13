@@ -3,3 +3,10 @@ playwright-report/
 __pycache__/
 node_modules/
 _ipa_cache.json
+
+# 测试文件只在本地保留，不入库：避免 Playwright 用例与 Python 回归脚本被误提交
+*.spec.js
+*.spec.mjs
+test_*.py
+*_test.py
+tests/
