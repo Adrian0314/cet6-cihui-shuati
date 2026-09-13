@@ -213,6 +213,16 @@ MIT
 
 > 按时间从新到旧记录每次功能调整与修复。测试脚本只在本地保留，仓库中不包含。
 
+### 修复记录：2026-09-13 选项不显示词性（int./exclam./abbr. 未收录）+ 残缺释义补全
+
+- **问题**：截图三题（pleasing / please / pleasure）中，`please`、`hey` 等选项没有词性标签。定位：选项词性由 `wordPartOfSpeech()` 扫描释义中的 `xx.` 标记产生，而词性白名单 `POS_LABELS` 未收录词库实际使用的 `int.`（please、hello、hey）、`exclam.`（hi、fuck）、`abbr.`（AD、BC、CD、DVD、etc），这些词因此整条选项无词性。
+- **修复（渲染层）**：
+  1. `POS_LABELS` 增补 `int` / `exclam` / `abbr`；
+  2. `splitMeaning()` 支持「前置括号注记 + 词性」写法（`(=phone) n.电话`、`( = burger) n.汉堡包`、`(=exam)n.考试`）：注记归入中文、词性照常生成 badge，修复 14 个带注记词条在题干/浏览器列表里缺词性的现象；
+  3. `getChineseOptionText()` 增补斜杠清理，词性写法 `n./v.` 清洗后不再在中文里残留 `/`（patrol 曾显示「/ 巡逻，巡查」）。
+- **修复（数据层，17 个词条）**：补全只有词性或残缺的释义——`airplane`/`chairman`（原为音标残片）→ n.飞机 / n.主席；`banana`/`carrot`/`season`/`semi-colon`/`normalisation`/`oceanic`/`falsehood` 补词性与释义；`useful` 修 `adj` 缺句点与重复；`can`/`could`/`might`/`shall`/`would` 由 `modal v.` 统一为 `aux.`；`patrol` 由 `n & v.` 规范为 `n./v.`；`pharmaceutical` 去前导孤立「；」。
+- **验证**：全库扫描 0 个选项缺词性、0 个缺词性释义段、0 个中文残留异常符号；新增 `test_option_pos_regression.py` 6 项（含截图三道题的选项词性断言）；Python 全量 83 项通过，JS 相关用例经 HEAD 基线对比确认通过。sw.js 缓存版本 v12 → v13。
+
 ### 功能调整：2026-09-12 单词浏览器支持 Unit 1-14 全量检索 + 修复 repair 表超长释义覆盖
 
 #### 一、单词浏览器覆盖 Unit 1-14（此前仅核心词汇 Unit 1-10）
