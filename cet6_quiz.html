@@ -3460,6 +3460,9 @@ function releaseGesture(e) {
 }
 // 这次交互能不能执行动作？——整套闸门只在这里下判断，调用方不再各自计时。
 function gestureAllows(e, opts) {
+  // 无目标的事件无法归属任何手势（直接调用 handleSkip/handleAnswer 而不传事件、
+  // 或测试桩漏传 target 时），一律拒绝，避免 gestureNode(e.target) 抛异常。
+  if (!e || e.target === null || e.target === undefined) return false;
   // 程序化/合成事件（内部代码、自动化测试）不是浏览器补发的幽灵事件：
   // 保留下面的结构性校验，只跳过"人手耗时"这一条启发式判断。
   var synthetic = !(e && e.isTrusted);
@@ -3573,6 +3576,25 @@ window.addEventListener('focus', function() {
   if (_ghostEverHidden && !document.hidden) noteVisible();
 });
 window.addEventListener('beforeunload', autoSaveProgress);
+
+// 心跳兜底：部分手机浏览器 / PWA（尤其微信内置浏览器）切后台时并不触发
+// visibilitychange / blur，手势闸门的生命周期基准线因此缺失，切回来之后
+// 补发的旧事件会被当成新鲜操作（表现为「点一下选项就自动跳题」）。
+// 后台页面的定时器会被节流，于是「心跳间隙过大」本身就说明页面被挂起过：
+// 把挂起起点记为 _ghostHiddenAt、恢复点走 noteVisible()，陈旧判定与保护
+// 窗口照常生效——不加任何冷却时间窗口，真人操作一次就是一次。
+var GHOST_SUSPEND_MS = 2500;  // 心跳间隙超过该值即判定页面曾被挂起
+var _lastHeartbeat = perfNow();
+function noteHeartbeat() {
+  var now = perfNow();
+  if (_lastHeartbeat > 0 && now - _lastHeartbeat > GHOST_SUSPEND_MS) {
+    _ghostEverHidden = true;
+    if (!_ghostHiddenAt || _ghostHiddenAt > _lastHeartbeat) _ghostHiddenAt = _lastHeartbeat;
+    noteVisible();
+  }
+  _lastHeartbeat = now;
+}
+setInterval(noteHeartbeat, 1000);
 
 // ============ 切题入口（上一题/下一题按钮与滑动切题的唯一出口）============
 // 闸门只判断"这次交互是不是真人刚做的"，不再延迟执行、也没有冷却期：
@@ -6239,10 +6261,12 @@ function showOnboarding() {
 
 // ============ TTS ============
 var _pendingSpeak = null;
+var _pendingSpeakSeq = 0;
 var _ttsWaiting = false;
 var _onlineTTSAudio = null;
+var _speakSeq = 0;            // 朗读代次：每次 speakWord 递增；过期的回退/补读据此放弃
 // 优先使用普通媒体音频，跟随视频/音乐的输出路由（包括蓝牙 A2DP）；失败时回退系统 TTS。
-function playOnlineTTS(text, onFailure) {
+function playOnlineTTS(text, onFailure, seq) {
   var audio = null;
   var settled = false;
   var started = false;
@@ -6250,7 +6274,12 @@ function playOnlineTTS(text, onFailure) {
     if (settled) return;
     settled = true;
     if (audio === _onlineTTSAudio) _onlineTTSAudio = null;
-    if (onFailure) onFailure();
+    // 判定失败的在线音频必须立即停掉（含仍在缓冲、尚未出声的情况）：
+    // 否则它稍后缓冲完成开始播放，会与接管播放的系统 TTS 同时出声——
+    // 这就是「在线男声 + 系统女声重叠」的来源。
+    try { audio.pause(); } catch (e) {}
+    try { audio.removeAttribute('src'); try { audio.load(); } catch (e2) {} } catch (e) {}
+    if (onFailure && seq === _speakSeq) onFailure();
   }
   try {
     if (_onlineTTSAudio) {
@@ -6299,17 +6328,19 @@ function speakSystemTTS(text) {
 }
 function speakWord(text) {
   if (!text) return;
+  var seq = ++_speakSeq;   // 新朗读开始：此前所有回退/补读定时器全部过期
   // 普通媒体音频能跟随蓝牙媒体输出；播放失败时才使用离线系统 TTS。
   if (window.speechSynthesis) window.speechSynthesis.cancel();
   if (navigator.onLine === false) {
     if (speakSystemTTS(text)) return;
     _pendingSpeak = text;
+    _pendingSpeakSeq = seq;
     if (_ttsWaiting) return;
     _ttsWaiting = true;
     setTimeout(function() {
       _ttsWaiting = false;
       var offlineText = _pendingSpeak; _pendingSpeak = null;
-      if (offlineText) speakSystemTTS(offlineText);
+      if (offlineText && seq === _speakSeq) speakSystemTTS(offlineText);
     }, 1500);
     return;
   }
@@ -6317,23 +6348,26 @@ function speakWord(text) {
   if (playOnlineTTS(text, function() {
     if (speakSystemTTS(text)) { fallbackStarted = true; return; }
     _pendingSpeak = text;
+    _pendingSpeakSeq = seq;
     if (_ttsWaiting) return;
     _ttsWaiting = true;
     setTimeout(function() {
       _ttsWaiting = false;
       var t = _pendingSpeak; _pendingSpeak = null;
-      if (t) speakSystemTTS(t);
+      if (t && seq === _speakSeq) speakSystemTTS(t);
     }, 1500);
-  }) || fallbackStarted) return;
+  }, seq) || fallbackStarted) return;
   if (!window.speechSynthesis) return;
   // 系统 TTS 语音列表未就绪：等待加载，超时后结束本次尝试
   _pendingSpeak = text;
+  _pendingSpeakSeq = seq;
   if (_ttsWaiting) return;
   _ttsWaiting = true;
   setTimeout(function() {
     _ttsWaiting = false;
     var t = _pendingSpeak; _pendingSpeak = null;
     if (!t) return;
+    if (seq !== _speakSeq) return;   // 期间用户已切题/发起新朗读：旧回退过期
     speakSystemTTS(t);
   }, 1500);
 }
@@ -6342,7 +6376,11 @@ if (window.speechSynthesis) {
   try {
     window.speechSynthesis.getVoices();
     window.speechSynthesis.onvoiceschanged = function() {
-      if (_pendingSpeak) { var t = _pendingSpeak; _pendingSpeak = null; speakWord(t); }
+      // 只补读「当前代」的待读词；旧代待读词在用户切题后已无意义
+      if (_pendingSpeak && _pendingSpeakSeq === _speakSeq) {
+        var t = _pendingSpeak; _pendingSpeak = null;
+        speakWord(t);
+      }
     };
   } catch(e) {}
 }
