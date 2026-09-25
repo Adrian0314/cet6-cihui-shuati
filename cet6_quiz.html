@@ -572,7 +572,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>📡 离线说明：</strong>所有功能（含统计图表）均已内置，无需网络即可使用。用手机浏览器打开本页后，选择「添加到主屏幕」，即可像 App 一样全屏使用（需通过 https 地址访问，本地双击打开不支持安装）。</div>
       <div class="rb"><strong>🎯 每日目标：</strong>统计页可自选每日目标（做题+复习总数），达标后做题页会弹出庆祝提示；学习热力图的深绿色格子即代表"当日达标"。大纲词汇的艾宾浩斯打卡表则以当前计划日全部 Unit 的完成为准（按实际作答结算，不限做题入口；未完成的部分跨天自动延续，不会清零），完成后计划栏显示“当天目标已完成”。</div>
       <div class="rb"><strong>🧠 记忆模式：</strong>做完一题即从队列移除，答错的词按当前词库的书中记忆规律自动排期回来复习。打开网页时若有到期单词，做题页顶部会显示复习横幅，点击"开始复习"一键清债；复习采用四选一快刷，复习中跳过视同答错。复习只从首次作答开始计，历史数据不迁移。</div>
-      <div class="rb"><strong>🔊 朗读发音：</strong>点击喇叭按钮时优先使用普通媒体音频，以便跟随视频/音乐的蓝牙输出；网络音频无法播放时自动回退到系统 TTS。离线使用时仍可使用系统 TTS。</div>
+      <div class="rb"><strong>🔊 朗读发音：</strong>点击喇叭按钮时优先使用普通媒体音频，以便跟随视频/音乐的蓝牙输出；词条里的合并写法（如 vigo(u)r、hono(u)r、theatre/-ter）会先规范化为标准拼写再发音，避免音频接口报错；美式音源失败时会在同一媒体通道内改用英式音源重试。仅当完全离线或两个音源都不可达时，才回退到系统 TTS（系统 TTS 走系统语音通道，输出设备可能不跟随蓝牙耳机）。</div>
       <div class="rb"><strong>🔊 自动朗读：</strong>开始做题前可在“练习设置”中切换“自动朗读：开/关”，开关会保存到本机。开启后仅在“看英文 → 选中文”模式下，每显示一道新题自动朗读一次；答题反馈或局部刷新不会让同一道题重复朗读。切换到“看中文 → 选英文”或关闭开关后不会自动朗读。手机浏览器若限制后台/非用户操作播放，仍可点击题面旁的“🔊 朗读”按钮。</div>
       <div class="rb"><strong>💾 中途退出：</strong>做题过程中会即时保存当前题位、已答数量和已选答案；手机切到后台、刷新页面或关闭网页时还会通过页面生命周期事件再保存一次，因此重新打开后点击顶部“继续做题”即可接着完成同一队列。手机从其他应用返回后，恢复保护会持续忽略浏览器补发的旧“不会，跳过”事件：首次真实点击选项可正常作答，只有实际按下跳过按钮才会执行跳过。跳过点击还必须落在真实起手之后 1.5 秒内（pointer/touch 按下或抬起落在跳过按钮上），且起手必须发生在切回前台之后——浏览器补发的旧触摸（含完整指针/触摸序列重放）会被整事件取消，无论是否命中恢复保护窗口都会被拒绝，切后台很久再回来，点击选项不会被误判为跳过，跳过按钮也不会再无故闪动。4 周 25 天计划会同时保存当日进度，复习提醒也会显示实际的已完成题数和待完成题数；当天新 Unit 的全部单词学完后会记录为已完成，不会再次生成同一 Unit 的整组复习；复习队列中断后重新开始时只推送当天尚未答过的词，已练过的题不会重复出现；进入新的一天后，未完成的做题队列和已完成的 Unit 会原样延续，不会清空——第二天打开“继续做题”或“开始复习”接着上次继续即可；只有当该日任务全部完成、计划推进到新的一天后，属于旧任务的已答完队列才会在重进时自动清除。</div>
       <div class="rb"><strong>🧠 智能练习：</strong>这不是生成式 AI，而是按规则自动安排优先级：先练重点词和已经到期的复习词，再练从未做过、错误率较高或答错次数较多的词。系统从当前词库和 Unit 筛选范围中取词，覆盖当前筛选范围内的全部单词（按优先级排序），并沿用当前的做题方向、题目类型和闯关模式。通过智能练习或普通“开始做题”完成的 4 周 25 天计划 Unit，只要当天全部单词都答过一遍，同样会计入打卡进度。智能练习不是只练错题；只练错题请使用“重做当前模式错题”，智能练习答错的单词仍会进入错题本。</div>
@@ -6265,8 +6265,20 @@ var _pendingSpeakSeq = 0;
 var _ttsWaiting = false;
 var _onlineTTSAudio = null;
 var _speakSeq = 0;            // 朗读代次：每次 speakWord 递增；过期的回退/补读据此放弃
+// 词条写法 → 可发音文本。
+// 词库里保留了书上的合并写法（hono(u)r / symbolic(al) / a/an / theatre/-ter / photo(graph)），
+// 直接送进 TTS 接口会被拒（有道返回 HTTP 500），从而错误地回退到系统 TTS、输出设备随之改变。
+function normalizeSpeakText(text) {
+  var t = String(text == null ? '' : text);
+  t = t.replace(/\(([A-Za-z'’\-\. ]*)\)/g, '$1');  // 展开括号：vigo(u)r → vigour
+  t = t.replace(/\/-?[A-Za-z'’\.]*/g, '');          // 去掉斜杠变体：a/an → a；theatre/-ter → theatre
+  t = t.replace(/[¹²³⁴⁵]/g, '');                     // 去掉上标（历史数据残留）
+  t = t.replace(/\s+/g, ' ').trim();
+  return t || String(text == null ? '' : text);
+}
 // 优先使用普通媒体音频，跟随视频/音乐的输出路由（包括蓝牙 A2DP）；失败时回退系统 TTS。
-function playOnlineTTS(text, onFailure, seq) {
+// type: 2 = 美式（默认），1 = 英式；换音源重试仍在同一媒体通道内，不会改变输出设备。
+function playOnlineTTS(text, onFailure, seq, type) {
   var audio = null;
   var settled = false;
   var started = false;
@@ -6286,7 +6298,7 @@ function playOnlineTTS(text, onFailure, seq) {
       _onlineTTSAudio.pause();
       _onlineTTSAudio = null;
     }
-    audio = new Audio('https://dict.youdao.com/dictvoice?audio=' + encodeURIComponent(text) + '&type=2');
+    audio = new Audio('https://dict.youdao.com/dictvoice?audio=' + encodeURIComponent(text) + '&type=' + (type || 2));
     audio.preload = 'auto';
     audio.onplaying = function() { started = true; };
     audio.onerror = fail;
@@ -6326,8 +6338,11 @@ function speakSystemTTS(text) {
   window.speechSynthesis.speak(u);
   return true;
 }
-function speakWord(text) {
-  if (!text) return;
+function speakWord(rawText) {
+  if (!rawText) return;
+  // 统一规范化朗读文本：词条里的括号/斜杠写法（vigo(u)r、a/an…）会让在线音频接口报错，
+  // 一旦报错就会掉进系统 TTS 通道（输出设备可能不是蓝牙耳机）。规范化后两端都更稳。
+  var text = normalizeSpeakText(rawText);
   var seq = ++_speakSeq;   // 新朗读开始：此前所有回退/补读定时器全部过期
   // 普通媒体音频能跟随蓝牙媒体输出；播放失败时才使用离线系统 TTS。
   if (window.speechSynthesis) window.speechSynthesis.cancel();
@@ -6345,7 +6360,14 @@ function speakWord(text) {
     return;
   }
   var fallbackStarted = false;
-  if (playOnlineTTS(text, function() {
+  var retriedAlt = false;
+  function onlineFailed() {
+    // 先在同一媒体通道内换英式音源重试（仍走 HTMLAudioElement → 仍是蓝牙耳机输出），
+    // 只有两个音源都失败才回退系统 TTS（纯离线兜底）。
+    if (!retriedAlt) {
+      retriedAlt = true;
+      if (playOnlineTTS(text, onlineFailed, seq, 1)) return;
+    }
     if (speakSystemTTS(text)) { fallbackStarted = true; return; }
     _pendingSpeak = text;
     _pendingSpeakSeq = seq;
@@ -6356,7 +6378,8 @@ function speakWord(text) {
       var t = _pendingSpeak; _pendingSpeak = null;
       if (t && seq === _speakSeq) speakSystemTTS(t);
     }, 1500);
-  }, seq) || fallbackStarted) return;
+  }
+  if (playOnlineTTS(text, onlineFailed, seq, 2) || fallbackStarted) return;
   if (!window.speechSynthesis) return;
   // 系统 TTS 语音列表未就绪：等待加载，超时后结束本次尝试
   _pendingSpeak = text;
