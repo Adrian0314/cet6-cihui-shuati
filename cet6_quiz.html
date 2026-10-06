@@ -461,6 +461,13 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
 .pp-tools{margin-top:2px}
 .pp-micsel{display:flex;align-items:center;gap:8px;font-size:.8em;color:var(--text2);margin:0 0 8px}
 .pp-micsel select{flex:1;min-width:0;padding:4px 6px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:1em}
+/* 识别引擎选择 + 离线模型状态 */
+.pp-engines{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.78em;color:var(--text2);margin:0 0 6px}
+.pp-engine{padding:4px 10px;border:1px solid var(--border);border-radius:14px;background:var(--surface2);color:var(--text2);cursor:pointer;font-size:1em}
+.pp-engine.on{border-color:var(--accent);color:var(--accent);font-weight:700}
+.pp-model{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.78em;color:var(--text2);margin:0 0 10px}
+.pp-model.ok #ppModelState{color:var(--green,#3fb950)}
+.pp-model.busy #ppModelState{color:var(--accent2,#d29922)}
 .pp-stats{font-size:.78em;color:var(--text2);border-top:1px solid var(--border);padding-top:8px}
 /* 麦克风自检：实时输入电平，用来判断"系统/浏览器到底有没有收到声音" */
 .pp-meter{display:none;align-items:center;gap:8px;margin:0 0 8px;font-size:.78em;color:var(--text2)}
@@ -6535,7 +6542,7 @@ document.addEventListener('click', function(e) {
 var _ppState = { word: '', ipa: '', rec: null, listening: false, stoppedByUser: false, gotResult: false, watchdog: null,
                  pending: false, stream: null, ac: null, analyser: null, meterTimer: null, silenceTimer: null, peak: 0,
                  maxPeak: 0, checking: false, checkTimer: null, deviceId: '', recorder: null, chunks: null,
-                 recording: false, recTimer: null, playbackUrl: '', recRms: [], recSampler: null };
+                 recording: false, recTimer: null, playbackUrl: '', recRms: [], recSampler: null, engine: 'browser' };
 // 跟读状态机：listening=正在收声；gotResult=本轮是否已拿到识别结果；stoppedByUser=本轮是否被用户点了「结束跟读」。
 // 这三个标记必须由本页自己维护并与识别器生命周期同步——只靠 onend/onresult 回调更新界面的话，
 // 一旦回调不来（权限弹窗挂起、识别服务无响应、只给 onresult 不给 onend），界面就会永远卡在「正在听…」，
@@ -6546,6 +6553,8 @@ function ppClearWatchdog() {
 function ppListenIdle(label) {
   ppClearWatchdog();
   ppReleaseMic();          // 收掉麦克风占用：电平表、AudioContext、MediaStream 一起释放
+  ppVoskRelease();         // 离线引擎若在跑，也一并释放
+  PP_VOSK.running = false;
   _ppState.listening = false;
   _ppState.rec = null;
   var b = document.getElementById('ppRecBtn');
@@ -6585,7 +6594,17 @@ function ppPanelHTML(word, ipa) {
   var st = pronStatsGet(word);
   return '<div class="pp-head"><span>\u{1F3A4} 发音练习</span><span class="pp-close" id="ppCloseBtn" title="关闭（Esc）">\u2715</span></div>' +
     '<div class="pp-word">' + _ppEsc(word) + (ipa ? '<span class="pp-ipa">' + _ppEsc(ipa) + '</span>' : '') + '</div>' +
-    '<div class="pp-tip">先点「听标准发音」，再点「开始跟读」，读完会自动比对；识别不准时可用下方按钮自评。<br>不确定麦克风有没有声音时，点「\u{1F39A} 检测麦克风」看<strong>实时输入电平</strong>；点「\u23FA 录音对比」会<strong>在本地检测有没有人声</strong>并让你回放自己的朗读（不联网、不做云端识别）。</div>' +
+    '<div class="pp-tip">先点「听标准发音」，再点「开始跟读」，读完会自动比对；识别不准时可用下方按钮自评。<br>不确定麦克风有没有声音时，点「\u{1F39A} 检测麦克风」看<strong>实时输入电平</strong>；点「\u23FA 录音对比」会<strong>在本地检测有没有人声</strong>并让你回放自己的朗读（不联网、不做云端识别）。<br>识别引擎可在下面切换：<strong>浏览器识别</strong>依赖云端服务（需联网）；<strong>离线模型</strong>在本机运行，加载一次后可断网使用。</div>' +
+    // 识别引擎选择：浏览器云端识别 / 本地离线模型（vosk-browser）
+    '<div class="pp-engines"><span>识别引擎</span>' +
+    '<button class="pp-engine" id="ppEngBrowser" data-engine="browser">\u{1F310} 浏览器（需联网）</button>' +
+    '<button class="pp-engine" id="ppEngVosk" data-engine="vosk">\u{1F4F4} 离线模型</button>' +
+    '</div>' +
+    '<div class="pp-model" id="ppModelRow"><span id="ppModelState">离线模型：未加载</span>' +
+    '<button class="pp-btn" id="ppModelLoadBtn">加载/下载模型</button>' +
+    '<button class="pp-btn" id="ppModelFileBtn" title="选本机已下载好的模型压缩包（tar.gz），完全离线可用">选择本机模型…</button>' +
+    '<input type="file" id="ppModelFile" accept=".gz,.tgz,application/gzip,application/x-gzip" style="display:none">' +
+    '</div>' +
     '<div class="pp-actions">' +
     '<button class="pp-btn" id="ppPlayBtn">\u{1F50A} 听标准发音</button>' +
     '<button class="pp-btn primary" id="ppRecBtn">\u{1F3A4} 开始跟读</button>' +
@@ -6639,6 +6658,24 @@ function openPronPractice(word, ipa) {
   byId('ppCheckBtn').addEventListener('click', ppToggleMicCheck);
   byId('ppRecBtn2').addEventListener('click', ppToggleRecord);
   byId('ppPlayMineBtn').addEventListener('click', ppPlayMyRecording);
+  // 识别引擎切换（浏览器云端识别 / 本机离线模型）
+  byId('ppEngBrowser').addEventListener('click', function() { ppEngineSet('browser'); ppSetStatus('已切换到「浏览器识别」：需要联网，且依赖浏览器的语音识别服务。'); });
+  byId('ppEngVosk').addEventListener('click', function() {
+    ppEngineSet('vosk');
+    ppSetStatus('已切换到「离线模型」：首次需要准备模型（约 39 MB），之后可断网使用。');
+  });
+  byId('ppModelLoadBtn').addEventListener('click', function() {
+    ppVoskEnsureModel(function(p) { ppVoskState('离线模型：下载中 ' + Math.round(p * 100) + '%', 'busy'); })
+      .then(function() {})
+      .catch(function() {});
+  });
+  byId('ppModelFileBtn').addEventListener('click', function() { var f = byId('ppModelFile'); if (f) f.click(); });
+  byId('ppModelFile').addEventListener('change', function() {
+    var f = this.files && this.files[0];
+    if (f) ppVoskUseLocalFile(f);
+    this.value = '';
+  });
+  ppEngineSet(ppEngineGet());   // 恢复上次选择并同步按钮状态
   var micSel = byId('ppMicSel');
   if (micSel) {
     micSel.addEventListener('change', function() {
@@ -6649,6 +6686,7 @@ function openPronPractice(word, ipa) {
     });
   }
   ppRefreshMicList();   // 已授权时可直接列出设备名；未授权时先隐藏，授权后会自动刷新
+  ppEngineSet(ppEngineGet());   // 同步识别引擎按钮与模型状态行
   byId('ppSelfOk').addEventListener('click', function() {
     ppStopListening(true);   // 自评前先收掉正在进行的跟读
     ppFinish({ level: 'ok', text: '已按自评记录为「读对了」', dist: 0 }, '');
@@ -6676,6 +6714,7 @@ function closePronPractice() {
   try { if (_ppState.recorder && _ppState.recorder.state !== 'inactive') _ppState.recorder.stop(); } catch (e) {}
   if (_ppState.recTimer) { clearInterval(_ppState.recTimer); _ppState.recTimer = null; }
   _ppState.recording = false;
+  try { if (PP_VOSK.running) { PP_VOSK.running = false; try { PP_VOSK.rec.retrieveFinalResult(); } catch (e) {} } } catch (e) {}
   ppReleaseMic();
   ppRecStatusSet('');
   ppListenIdle('\u{1F3A4} 开始跟读');
@@ -7089,7 +7128,324 @@ function ppStopMeter() {
   var meter = document.getElementById('ppMeter');
   if (meter) meter.classList.remove('on');
 }
+// ============ 离线识别引擎：vosk-browser（Vosk WASM，模型跑在本机）============
+// 为什么要有它：浏览器的 SpeechRecognition 走云端服务，网络受限/离线时只"听"不返回。
+// vosk-browser 把 Vosk 编译成 WASM（worker 与 wasm 内联在单个 vosk.js 里），
+// 模型是 tar.gz 压缩包；装好之后整条识别链路都在本机执行，断网也能用。
+//
+// 三段链路：
+//   ① 模型加载：库 <script> 懒加载 → 模型解析顺序 = 缓存(blob) → 同源文件 → 在线地址(需 CORS)
+//      → 首次拿到后写入 Cache Storage，之后直接走缓存（离线可用）。
+//   ② 音频输入：getUserMedia → AudioContext(sampleRate=16000) → ScriptProcessor(4096)
+//      → recognizer.acceptWaveform(inputBuffer)。刻意不用 MediaRecorder：
+//      实测 webm/opus 录音用 decodeAudioData 只能解出很短一段，直接喂 PCM 才可靠。
+//   ③ 结果输出：on('partialresult') 实时回显、on('result') 累积文本，停止时 retrieveFinalResult()
+//      → 与目标词做归一化比对（复用 pronVerdict）。
+var PP_VOSK = {
+  libUrl: 'vosk/vosk.js',
+  modelPath: 'vosk/vosk-model-small-en-us-0.15.tar.gz',   // 与站点同源的模型（可选，放了就自动用）
+  modelUrl: '',                                           // 可选在线地址，必须带 CORS 头
+  cacheName: 'cet6-vosk-model-v1',
+  cacheKey: 'vosk-model-small-en-us-0.15.tar.gz',
+  libLoading: null, model: null, modelPromise: null, modelSrc: '',
+  rec: null, stream: null, ac: null, proc: null, gain: null, src: null, finishTimer: null, readyAt: 0,
+  text: '', partial: '', onPartial: null, onFinal: null, running: false
+};
+function ppVoskEnvOk() {
+  if (!(window.Worker && window.WebAssembly)) return '当前浏览器不支持 WebAssembly/Web Worker，无法运行离线模型。';
+  if (location.protocol === 'file:') return '离线模型需要以 http(s) 打开页面（如 GitHub Pages 或本地 http 服务）；file:// 下浏览器不允许创建 Worker。';
+  return '';
+}
+function ppVoskState(text, cls) {
+  var el = document.getElementById('ppModelState');
+  var row = document.getElementById('ppModelRow');
+  if (el) el.textContent = text;
+  if (row) { row.classList.remove('ok', 'busy'); if (cls) row.classList.add(cls); }
+}
+function ppVoskLoadLib() {
+  if (window.Vosk) return Promise.resolve(window.Vosk);
+  if (PP_VOSK.libLoading) return PP_VOSK.libLoading;
+  PP_VOSK.libLoading = new Promise(function(resolve, reject) {
+    var s = document.createElement('script');
+    s.src = PP_VOSK.libUrl;
+    s.async = true;
+    s.onload = function() { window.Vosk ? resolve(window.Vosk) : reject(new Error('vosk.js 已加载但未导出 Vosk')); };
+    s.onerror = function() { PP_VOSK.libLoading = null; reject(new Error('无法加载 ' + PP_VOSK.libUrl + '（确认该文件已随站点部署）')); };
+    document.head.appendChild(s);
+  });
+  return PP_VOSK.libLoading;
+}
+function ppVoskCacheOpen() {
+  return (window.caches ? caches.open(PP_VOSK.cacheName) : Promise.reject(new Error('浏览器不支持 Cache Storage')));
+}
+// 取已缓存的模型（返回 blob URL）
+function ppVoskCachedModelUrl() {
+  return ppVoskCacheOpen().then(function(cache) {
+    return cache.match(PP_VOSK.cacheKey).then(function(res) {
+      if (!res) return '';
+      return res.blob().then(function(b) { return URL.createObjectURL(b); });
+    });
+  }).catch(function() { return ''; });
+}
+// 带进度的下载：返回 blob，并写入缓存
+function ppVoskDownload(url, onProgress) {
+  return fetch(url, { mode: 'cors' }).then(function(res) {
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var total = parseInt(res.headers.get('content-length') || '0', 10);
+    if (!res.body || !res.body.getReader) return res.blob();
+    var reader = res.body.getReader(), chunks = [], got = 0;
+    return (function pump() {
+      return reader.read().then(function(r) {
+        if (r.done) return new Blob(chunks, { type: 'application/gzip' });
+        chunks.push(r.value); got += r.value.length;
+        if (onProgress && total) onProgress(got / total);
+        return pump();
+      });
+    })();
+  });
+}
+// 解析模型：缓存 → 同源文件 → 在线地址，命中后统一写入缓存
+function ppVoskResolveModel(onProgress) {
+  return ppVoskCachedModelUrl().then(function(cached) {
+    if (cached) { PP_VOSK.modelSrc = 'cache'; return cached; }
+    var trySameOrigin = fetch(PP_VOSK.modelPath, { method: 'HEAD' }).then(function(r) {
+      return r.ok ? PP_VOSK.modelPath : null;
+    }).catch(function() { return null; });
+    return trySameOrigin.then(function(path) {
+      var url = path || PP_VOSK.modelUrl;
+      if (!url) throw new Error('未找到离线模型：请把 ' + PP_VOSK.modelPath + ' 放到站点目录，或点「选择本机模型…」选中已下载的压缩包。');
+      PP_VOSK.modelSrc = path ? 'same-origin' : 'online';
+      return ppVoskDownload(url, onProgress).then(function(blob) {
+        return ppVoskCacheOpen().then(function(cache) {
+          cache.put(PP_VOSK.cacheKey, new Response(blob, { headers: { 'Content-Type': 'application/gzip' } }));
+        }).catch(function() {}).then(function() { return URL.createObjectURL(blob); });
+      });
+    });
+  });
+}
+function ppVoskEnsureModel(onProgress) {
+  if (PP_VOSK.model) return Promise.resolve(PP_VOSK.model);
+  if (PP_VOSK.modelPromise) return PP_VOSK.modelPromise;
+  var envErr = ppVoskEnvOk();
+  if (envErr) return Promise.reject(new Error(envErr));
+  ppVoskState('离线模型：加载运行库…', 'busy');
+  PP_VOSK.modelPromise = ppVoskLoadLib().then(function(Vosk) {
+    ppVoskState('离线模型：准备模型文件…', 'busy');
+    return ppVoskResolveModel(onProgress);
+  }).then(function(modelUrl) {
+    ppVoskState('离线模型：解析中（首次约几秒）…', 'busy');
+    return window.Vosk.createModel(modelUrl);
+  }).then(function(model) {
+    PP_VOSK.model = model;
+    ppVoskState('离线模型：✅ 已就绪（' + (PP_VOSK.modelSrc === 'cache' ? '来自本机缓存' : PP_VOSK.modelSrc === 'same-origin' ? '已缓存到本机' : '已下载并缓存') + '，可断网使用）', 'ok');
+    return model;
+  }).catch(function(err) {
+    PP_VOSK.modelPromise = null;
+    ppVoskState('离线模型：加载失败 — ' + (err && err.message ? err.message : '未知错误'));
+    throw err;
+  });
+  return PP_VOSK.modelPromise;
+}
+// 用本机选中的模型文件（完全离线：不碰网络，直接 blob URL）
+function ppVoskUseLocalFile(file, onProgress) {
+  if (!file) return;
+  var envErr = ppVoskEnvOk();
+  if (envErr) { ppVoskState('离线模型：' + envErr); return; }
+  ppVoskState('离线模型：读取本机文件 ' + file.name + '…', 'busy');
+  var blobUrl = URL.createObjectURL(file);
+  ppVoskCacheOpen().then(function(cache) {
+    return cache.put(PP_VOSK.cacheKey, new Response(file, { headers: { 'Content-Type': 'application/gzip' } }));
+  }).catch(function() {});
+  PP_VOSK.modelSrc = 'local-file';
+  ppVoskState('离线模型：解析中…', 'busy');
+  ppVoskLoadLib().then(function() { return window.Vosk.createModel(blobUrl); }).then(function(model) {
+    PP_VOSK.model = model;
+    PP_VOSK.modelPromise = Promise.resolve(model);
+    ppVoskState('离线模型：✅ 已就绪（来自本机文件，已缓存，可断网使用）', 'ok');
+  }).catch(function(err) {
+    ppVoskState('离线模型：解析失败 — ' + (err && err.message ? err.message : '未知错误'));
+  });
+}
+// 在识别结果里挑与目标词最接近的一段（离线模型返回的是整句文本）
+function ppPickBestHeard(target, text) {
+  var t = pronNormalize(target);
+  var raw = String(text || '').trim();
+  if (!raw) return '';
+  var tokens = raw.split(/\s+/), best = raw, bestD = Infinity;
+  for (var i = 0; i < tokens.length; i++) {
+    var n = pronNormalize(tokens[i]);
+    if (!n) continue;
+    var d = (typeof levenshtein === 'function') ? levenshtein(t, n) : Math.abs(t.length - n.length);
+    if (d < bestD) { bestD = d; best = tokens[i]; }
+    if (d === 0) break;
+  }
+  return best;
+}
+// ③ 结果输出：把识别文本转成判定（复用 pronVerdict + 练习记录）
+function ppVoskFinish() {
+  var heard = ppPickBestHeard(_ppState.word, PP_VOSK.text);
+  if (!PP_VOSK.text) {
+    ppSetStatus('离线模型没有识别到内容：请靠近麦克风、放慢语速再读一遍。');
+    return;
+  }
+  var v = pronVerdict(_ppState.word, heard || PP_VOSK.text);
+  var res = document.getElementById('ppResult');
+  if (res) {
+    res.className = 'pp-result ' + v.level;
+    res.textContent = (v.level === 'ok' ? '\u2705 ' : (v.level === 'near' ? '\u26A0\uFE0F ' : '\u274C ')) + v.text;
+  }
+  var st = pronStatsBump(_ppState.word, v.level === 'ok');
+  var stats = document.getElementById('ppStats');
+  if (stats) stats.textContent = '本词已练 ' + st.tries + ' 次，读对 ' + st.oks + ' 次';
+  ppSetStatus('离线模型识别到：' + PP_VOSK.text + '（本机识别，未联网）');
+}
+// 释放离线识别占用的麦克风与音频节点
+function ppVoskRelease() {
+  if (PP_VOSK.finishTimer) { clearInterval(PP_VOSK.finishTimer); PP_VOSK.finishTimer = null; }
+  try { if (PP_VOSK.proc) PP_VOSK.proc.disconnect(); } catch (e) {}
+  try { if (PP_VOSK.gain) PP_VOSK.gain.disconnect(); } catch (e) {}
+  try { if (PP_VOSK.src) PP_VOSK.src.disconnect(); } catch (e) {}
+  try { if (PP_VOSK.ac && PP_VOSK.ac.close) PP_VOSK.ac.close(); } catch (e) {}
+  try {
+    if (PP_VOSK.stream && PP_VOSK.stream.getTracks) {
+      PP_VOSK.stream.getTracks().forEach(function(t) { try { t.stop(); } catch (e) {} });
+    }
+  } catch (e) {}
+  PP_VOSK.stream = null; PP_VOSK.ac = null; PP_VOSK.proc = null; PP_VOSK.gain = null; PP_VOSK.src = null;
+}
+// ② 音频输入 + 识别主循环
+function ppVoskStart() {
+  if (PP_VOSK.running) return;
+  PP_VOSK.text = ''; PP_VOSK.partial = '';
+  ppSetStatus('离线模型：准备中…');
+  ppVoskEnsureModel(function(p) {
+    ppVoskState('离线模型：下载中 ' + Math.round(p * 100) + '%', 'busy');
+  }).then(function(model) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      ppSetStatus('浏览器不支持麦克风采集。');
+      return;
+    }
+    var constraints = { audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } };
+    if (_ppState.deviceId) constraints.audio.deviceId = { exact: _ppState.deviceId };
+    return navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
+      PP_VOSK.stream = stream;
+      var AC = window.AudioContext || window.webkitAudioContext;
+      // 直接按 16 kHz 建 AudioContext：Vosk 的声学模型就是 16 kHz，让浏览器替我们重采样
+      PP_VOSK.ac = new AC({ sampleRate: 16000 });
+      PP_VOSK.rec = new model.KaldiRecognizer(PP_VOSK.ac.sampleRate);
+      PP_VOSK.rec.setWords(false);
+      // worker 里的识别器是异步构造的：早期版本若在就绪前灌音频，会出现"什么都识别不到"。
+      // 这里显式接住错误事件（库会把 worker 的异常发到识别器上），并在接入音频前留一点时间。
+      PP_VOSK.rec.on('error', function(msg) {
+        var e = (msg && msg.error) ? msg.error : '未知错误';
+        ppSetStatus('离线模型内部报错：' + e + '（可重试，或切回浏览器引擎）');
+      });
+      PP_VOSK.rec.on('result', function(msg) {
+        var t = (msg && msg.result && msg.result.text) ? String(msg.result.text).trim() : '';
+        if (t) PP_VOSK.text = (PP_VOSK.text ? PP_VOSK.text + ' ' : '') + t;
+      });
+      PP_VOSK.rec.on('partialresult', function(msg) {
+        var p = (msg && msg.result && msg.result.partial) ? String(msg.result.partial).trim() : '';
+        if (p) { PP_VOSK.partial = p; ppSetStatus('离线模型正在听：' + p); }
+      });
+      PP_VOSK.src = PP_VOSK.ac.createMediaStreamSource(PP_VOSK.stream);
+      PP_VOSK.proc = PP_VOSK.ac.createScriptProcessor(4096, 1, 1);
+      // 浏览器通常会给到 16 kHz（我们在构造 AudioContext 时就是这么要求的）；
+      // 万一没有遵守，就自己线性重采样到 16 kHz 再喂——Vosk 的声学模型固定是 16 kHz，
+      // 采样率对不上会让识别结果直接变空（这个坑在测试里踩过一次）。
+      PP_VOSK.needResample = PP_VOSK.ac.sampleRate !== 16000;
+      PP_VOSK.proc.onaudioprocess = function(ev) {
+        try {
+          if (!PP_VOSK.needResample) { PP_VOSK.rec.acceptWaveform(ev.inputBuffer); return; }
+          var input = ev.inputBuffer.getChannelData(0);
+          var from = ev.inputBuffer.sampleRate, ratio = from / 16000;
+          var outLen = Math.max(1, Math.floor(input.length / ratio));
+          var out = new Float32Array(outLen);
+          for (var i = 0; i < outLen; i++) {
+            var pos = i * ratio, i0 = Math.floor(pos), frac = pos - i0;
+            var a = input[i0] || 0, b = input[i0 + 1] || a;
+            out[i] = a + (b - a) * frac;
+          }
+          PP_VOSK.rec.acceptWaveformFloat(out, 16000);
+        } catch (e) {}
+      };
+      PP_VOSK.gain = PP_VOSK.ac.createGain();
+      PP_VOSK.gain.gain.value = 0;              // 静音输出：只为让 onaudioprocess 持续触发，避免回授
+      PP_VOSK.src.connect(PP_VOSK.proc);
+      PP_VOSK.proc.connect(PP_VOSK.gain);
+      PP_VOSK.gain.connect(PP_VOSK.ac.destination);
+      PP_VOSK.running = true;
+      _ppState.listening = true;
+      var b = document.getElementById('ppRecBtn');
+      if (b) b.textContent = '\u23F9 结束跟读';
+      ppRecStatusSet('');
+      // 先播 0.3 秒静音做"预热"，让 worker 把识别器建好，再开始接收真实语音
+      try { PP_VOSK.rec.acceptWaveformFloat(new Float32Array(4800), 16000); } catch (e) {}
+      PP_VOSK.readyAt = Date.now() + 300;
+      ppSetStatus('离线模型准备中…（约 0.3 秒）');
+      setTimeout(function() {
+        if (PP_VOSK.running) ppSetStatus('正在听…（离线模型）请朗读 ' + _ppState.word);
+      }, 300);
+    });
+  }).catch(function(err) {
+    _ppState.listening = false;
+    var b = document.getElementById('ppRecBtn');
+    if (b) b.textContent = '\u{1F3A4} 开始跟读';
+    ppSetStatus('离线识别没能启动：' + (err && err.message ? err.message : '未知错误')
+      + '　可先切回「\u{1F310} 浏览器」引擎，或用「\u23FA 录音对比」自评。');
+  });
+}
+function ppVoskStop() {
+  if (!PP_VOSK.running) return;
+  var b = document.getElementById('ppRecBtn');
+  if (b) b.textContent = '\u{1F3A4} 再读一次';
+  _ppState.listening = false;
+  ppSetStatus('离线模型正在识别…（本机计算，通常 1～3 秒）');
+  try { PP_VOSK.rec.retrieveFinalResult(); } catch (e) {}
+  // 关键：WASM 识别是"边解码边出结果"，实测 8 秒音频要 4～8 秒才全部出完。
+  // 原来固定等 600ms 必然拿不到结果（表现为"什么都识别不到"）。这里改成
+  // 等结果到达，最多等 8 秒；超时就用已经拿到的部分结果兜底，避免白读。
+  var waited = 0;
+  var finish = function() {
+    if (PP_VOSK.finishTimer) { clearInterval(PP_VOSK.finishTimer); PP_VOSK.finishTimer = null; }
+    ppVoskRelease();
+    PP_VOSK.running = false;
+    if (!PP_VOSK.text && PP_VOSK.partial) PP_VOSK.text = PP_VOSK.partial;   // 兜底：用最后一个部分结果
+    ppVoskFinish();
+  };
+  PP_VOSK.finishTimer = setInterval(function() {
+    waited += 300;
+    if (PP_VOSK.text) { finish(); return; }
+    if (waited >= 8000) { finish(); return; }
+    if (waited % 900 === 0) ppSetStatus('离线模型正在识别…已等 ' + Math.round(waited / 1000) + ' 秒（本机计算）');
+  }, 300);
+}
+function ppVoskToggle() {
+  if (PP_VOSK.running) ppVoskStop(); else ppVoskStart();
+}
+// ---------- 识别引擎切换 ----------
+var PP_ENGINE_KEY = 'cet6_pron_engine_v1';
+function ppEngineGet() {
+  try { return localStorage.getItem(PP_ENGINE_KEY) === 'vosk' ? 'vosk' : 'browser'; } catch (e) { return 'browser'; }
+}
+function ppEngineSet(eng) {
+  _ppState.engine = (eng === 'vosk') ? 'vosk' : 'browser';
+  try { localStorage.setItem(PP_ENGINE_KEY, _ppState.engine); } catch (e) {}
+  var eb = document.getElementById('ppEngBrowser'), ev = document.getElementById('ppEngVosk');
+  if (eb) eb.classList.toggle('on', _ppState.engine === 'browser');
+  if (ev) ev.classList.toggle('on', _ppState.engine === 'vosk');
+  var row = document.getElementById('ppModelRow');
+  if (row) row.style.display = _ppState.engine === 'vosk' ? 'flex' : 'none';
+  if (_ppState.engine === 'vosk') {
+    if (PP_VOSK.model) ppVoskState('离线模型：✅ 已就绪（可断网使用）', 'ok');
+    else if (PP_VOSK.modelPromise) ppVoskState('离线模型：加载中…', 'busy');
+    else ppVoskState('离线模型：未加载（点右侧按钮加载，或用「选择本机模型…」）');
+  }
+}
+
 function ppListen() {
+  // 选中「离线模型」时走本机识别链路（完全不碰 SpeechRecognition）
+  if (ppEngineGet() === 'vosk') { ppVoskToggle(); return; }
   var Ctor = pronRecognitionCtor();
   if (!Ctor) { ppSetStatus(pronUnsupportedMsg()); return; }
   // 同一个按钮兼作「开始跟读 / 结束跟读」：正在收声时再点一次 = 主动结束

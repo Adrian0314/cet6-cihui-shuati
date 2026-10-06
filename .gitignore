@@ -10,3 +10,10 @@ _ipa_cache.json
 test_*.py
 *_test.py
 tests/
+
+# 离线识别模型（约 39MB）：按需放在本机/服务器上，默认不进仓库
+vosk/*.tar.gz
+vosk/*.part
+
+# 端到端测试用的语音样本（vosk-api 官方 test.wav，仅本地测试用）
+vosk/_test.wav
