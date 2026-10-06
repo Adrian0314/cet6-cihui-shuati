@@ -458,6 +458,9 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
 .pp-result.near{color:var(--accent2,#d29922)}
 .pp-result.bad{color:var(--red,#f85149)}
 .pp-manual{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.pp-tools{margin-top:2px}
+.pp-micsel{display:flex;align-items:center;gap:8px;font-size:.8em;color:var(--text2);margin:0 0 8px}
+.pp-micsel select{flex:1;min-width:0;padding:4px 6px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:1em}
 .pp-stats{font-size:.78em;color:var(--text2);border-top:1px solid var(--border);padding-top:8px}
 /* 麦克风自检：实时输入电平，用来判断"系统/浏览器到底有没有收到声音" */
 .pp-meter{display:none;align-items:center;gap:8px;margin:0 0 8px;font-size:.78em;color:var(--text2)}
@@ -6530,7 +6533,9 @@ document.addEventListener('click', function(e) {
   openPronPractice(el.getAttribute('data-pron-practice') || '', el.getAttribute('data-pron-ipa') || '');
 });
 var _ppState = { word: '', ipa: '', rec: null, listening: false, stoppedByUser: false, gotResult: false, watchdog: null,
-                 pending: false, stream: null, ac: null, analyser: null, meterTimer: null, silenceTimer: null, peak: 0 };
+                 pending: false, stream: null, ac: null, analyser: null, meterTimer: null, silenceTimer: null, peak: 0,
+                 maxPeak: 0, checking: false, checkTimer: null, deviceId: '', recorder: null, chunks: null,
+                 recording: false, recTimer: null, playbackUrl: '' };
 // 跟读状态机：listening=正在收声；gotResult=本轮是否已拿到识别结果；stoppedByUser=本轮是否被用户点了「结束跟读」。
 // 这三个标记必须由本页自己维护并与识别器生命周期同步——只靠 onend/onresult 回调更新界面的话，
 // 一旦回调不来（权限弹窗挂起、识别服务无响应、只给 onresult 不给 onend），界面就会永远卡在「正在听…」，
@@ -6540,7 +6545,7 @@ function ppClearWatchdog() {
 }
 function ppListenIdle(label) {
   ppClearWatchdog();
-  ppStopMeter();          // 收掉麦克风占用：电平表、AudioContext、MediaStream 一起释放
+  ppReleaseMic();          // 收掉麦克风占用：电平表、AudioContext、MediaStream 一起释放
   _ppState.listening = false;
   _ppState.rec = null;
   var b = document.getElementById('ppRecBtn');
@@ -6580,7 +6585,7 @@ function ppPanelHTML(word, ipa) {
   var st = pronStatsGet(word);
   return '<div class="pp-head"><span>\u{1F3A4} 发音练习</span><span class="pp-close" id="ppCloseBtn" title="关闭（Esc）">\u2715</span></div>' +
     '<div class="pp-word">' + _ppEsc(word) + (ipa ? '<span class="pp-ipa">' + _ppEsc(ipa) + '</span>' : '') + '</div>' +
-    '<div class="pp-tip">先点「听标准发音」，再点「开始跟读」，读完会自动比对；识别不准时可用下方按钮自评。<br>开始跟读后会显示<strong>实时输入电平</strong>：电平条一直不动，说明系统/浏览器没有收到麦克风声音（属设备或权限问题，非功能故障）。</div>' +
+    '<div class="pp-tip">先点「听标准发音」，再点「开始跟读」，读完会自动比对；识别不准时可用下方按钮自评。<br>不确定麦克风有没有声音时，点「\u{1F39A} 检测麦克风」看<strong>实时输入电平</strong>；完全不想联网识别，就点「\u23FA 录音对比」录下来自己听。</div>' +
     '<div class="pp-actions">' +
     '<button class="pp-btn" id="ppPlayBtn">\u{1F50A} 听标准发音</button>' +
     '<button class="pp-btn primary" id="ppRecBtn">\u{1F3A4} 开始跟读</button>' +
@@ -6588,6 +6593,13 @@ function ppPanelHTML(word, ipa) {
     '<div class="pp-status" id="ppStatus"></div>' +
     '<div class="pp-meter" id="ppMeter"><span>输入电平</span><span class="pp-meter-track"><span class="pp-meter-fill" id="ppMeterFill"></span></span><span class="pp-meter-val" id="ppMeterVal">—</span></div>' +
     '<div class="pp-result" id="ppResult"></div>' +
+    // 两条不依赖云端识别的辅助通道：① 只看麦克风有没有声音 ② 录下来自己回放对比
+    '<div class="pp-actions pp-tools">' +
+    '<button class="pp-btn" id="ppCheckBtn" title="只看麦克风有没有声音，不做识别">\u{1F39A} 检测麦克风</button>' +
+    '<button class="pp-btn" id="ppRecBtn2" title="录下自己的朗读并回放，不需要联网识别">\u23FA 录音对比</button>' +
+    '<button class="pp-btn" id="ppPlayMineBtn" style="display:none">\u25B6 播放我的录音</button>' +
+    '</div>' +
+    '<div class="pp-micsel" id="ppMicRow" style="display:none"><span>输入设备</span><select id="ppMicSel"></select></div>' +
     '<div class="pp-manual">' +
     '<button class="pp-btn" id="ppSelfOk">\u2705 读对了（自评）</button>' +
     '<button class="pp-btn" id="ppSelfAgain">\u{1F501} 再练一次</button>' +
@@ -6603,6 +6615,8 @@ function openPronPractice(word, ipa) {
   ppListenIdle('\u{1F3A4} 开始跟读');
   _ppState.stoppedByUser = false;
   _ppState.gotResult = false;
+  _ppState.deviceId = ppSavedDeviceId();          // 沿用上次选择的输入设备
+  if (_ppState.playbackUrl) { try { URL.revokeObjectURL(_ppState.playbackUrl); } catch (e) {} _ppState.playbackUrl = ''; }
   var el = document.getElementById('pronPracticePanel');
   if (!el) {
     el = document.createElement('div');
@@ -6619,6 +6633,20 @@ function openPronPractice(word, ipa) {
   byId('ppPlayBtn').addEventListener('click', function() { speakWord(word); });
   byId('ppRecBtn').addEventListener('click', ppListen);
   byId('ppCloseBtn').addEventListener('click', closePronPractice);
+  // 辅助通道：只看麦克风电平 / 本地录音回放（都不依赖云端识别）
+  byId('ppCheckBtn').addEventListener('click', ppToggleMicCheck);
+  byId('ppRecBtn2').addEventListener('click', ppToggleRecord);
+  byId('ppPlayMineBtn').addEventListener('click', ppPlayMyRecording);
+  var micSel = byId('ppMicSel');
+  if (micSel) {
+    micSel.addEventListener('change', function() {
+      ppSaveDeviceId(this.value || '');
+      ppSetStatus(this.value
+        ? '已切换输入设备：下次跟读/检测会用它（若设备不可用会自动回退到系统默认）。'
+        : '已改用系统默认输入设备。');
+    });
+  }
+  ppRefreshMicList();   // 已授权时可直接列出设备名；未授权时先隐藏，授权后会自动刷新
   byId('ppSelfOk').addEventListener('click', function() {
     ppStopListening(true);   // 自评前先收掉正在进行的跟读
     ppFinish({ level: 'ok', text: '已按自评记录为「读对了」', dist: 0 }, '');
@@ -6640,9 +6668,13 @@ function openPronPractice(word, ipa) {
 function closePronPractice() {
   var el = document.getElementById('pronPracticePanel');
   if (el) el.classList.remove('open');
-  // 关闭面板：先按"用户主动结束"收尾（会立即复位界面与状态），再中止识别器
+  // 收尾：先按"用户主动结束"结束跟读，再停录音、释放麦克风
   ppStopListening(true);
   try { if (_ppState.rec) _ppState.rec.abort(); } catch (e) {}
+  try { if (_ppState.recorder && _ppState.recorder.state !== 'inactive') _ppState.recorder.stop(); } catch (e) {}
+  if (_ppState.recTimer) { clearInterval(_ppState.recTimer); _ppState.recTimer = null; }
+  _ppState.recording = false;
+  ppReleaseMic();
   ppListenIdle('\u{1F3A4} 开始跟读');
 }
 // 展示结果 + 记录练习次数
@@ -6692,19 +6724,76 @@ function ppMicErrorMessage(err) {
   }
   return '无法打开麦克风（' + (n || '未知错误') + '）：请检查系统「隐私和安全性 → 麦克风」是否允许应用访问。';
 }
+// 输入设备：优先用用户在下拉框里选的（存本机），否则用系统默认
+var PP_MIC_KEY = 'cet6_pron_mic_v1';
+function ppSavedDeviceId() {
+  try { return localStorage.getItem(PP_MIC_KEY) || ''; } catch (e) { return ''; }
+}
+function ppSaveDeviceId(id) {
+  _ppState.deviceId = id || '';
+  try { if (id) localStorage.setItem(PP_MIC_KEY, id); else localStorage.removeItem(PP_MIC_KEY); } catch (e) {}
+}
+function ppMicConstraints() {
+  return _ppState.deviceId ? { audio: { deviceId: { exact: _ppState.deviceId } } } : { audio: true };
+}
+// 设备列表：授权前 label 为空，用「输入设备 N」占位；拿到权限后再刷新一次即可看到名称
+function ppRefreshMicList() {
+  if (!navigator.mediaDevices || typeof navigator.mediaDevices.enumerateDevices !== 'function') return;
+  navigator.mediaDevices.enumerateDevices().then(function(list) {
+    var mics = (list || []).filter(function(d) { return d.kind === 'audioinput'; });
+    var row = document.getElementById('ppMicRow');
+    var sel = document.getElementById('ppMicSel');
+    if (!row || !sel) return;
+    if (mics.length < 2) { row.style.display = 'none'; return; }   // 只有一个设备就没必要给选择
+    var html = '<option value="">系统默认</option>';
+    for (var i = 0; i < mics.length; i++) {
+      var label = mics[i].label || ('输入设备 ' + (i + 1));
+      html += '<option value="' + _ppEsc(mics[i].deviceId) + '"'
+        + (mics[i].deviceId === _ppState.deviceId ? ' selected' : '') + '>' + _ppEsc(label) + '</option>';
+    }
+    sel.innerHTML = html;
+    row.style.display = 'flex';
+  }).catch(function() {});
+}
 function ppEnsureMic() {
   return new Promise(function(resolve) {
     if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
       resolve({ ok: true, skipped: true });
       return;
     }
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+    navigator.mediaDevices.getUserMedia(ppMicConstraints()).then(function(stream) {
       _ppState.stream = stream;
       ppStartMeter(stream);
+      ppRefreshMicList();          // 授权后 label 才有内容，这里再刷新一次
       resolve({ ok: true, stream: stream });
     }).catch(function(err) {
+      // 选定的设备不在了（拔掉/换设备）→ 清掉选择，回退到系统默认重试一次
+      if (err && (err.name === 'OverconstrainedError' || err.name === 'NotFoundError') && _ppState.deviceId) {
+        ppSaveDeviceId('');
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+          _ppState.stream = stream;
+          ppStartMeter(stream);
+          ppRefreshMicList();
+          resolve({ ok: true, stream: stream, fallback: true });
+        }).catch(function(e2) {
+          resolve({ ok: false, error: (e2 && e2.name) || 'Error', message: ppMicErrorMessage(e2) });
+        });
+        return;
+      }
       resolve({ ok: false, error: (err && err.name) || 'Error', message: ppMicErrorMessage(err) });
     });
+  });
+}
+// 采样若干毫秒内的最大电平——判断"到底有没有声音进来"要看整段时间的峰值，
+// 不能只看判断时刻的瞬时值：先说后停会被误判成"一直没有输入"。
+function ppMicProbe(ms) {
+  return new Promise(function(resolve) {
+    var best = 0, t0 = Date.now();
+    var timer = setInterval(function() {
+      if (_ppState.peak > best) best = _ppState.peak;
+      if (_ppState.maxPeak > best) best = _ppState.maxPeak;
+      if (Date.now() - t0 >= ms) { clearInterval(timer); resolve(best); }
+    }, 60);
   });
 }
 function ppStartMeter(stream) {
@@ -6718,6 +6807,7 @@ function ppStartMeter(stream) {
     src.connect(an);
     _ppState.analyser = an;
     _ppState.peak = 0;
+    _ppState.maxPeak = 0;
     var buf = new Uint8Array(an.fftSize);
     var tick = function() {
       if (!_ppState.analyser) return;
@@ -6729,6 +6819,7 @@ function ppStartMeter(stream) {
           if (v > peak) peak = v;
         }
         _ppState.peak = Math.max(_ppState.peak * 0.85, peak);
+        if (_ppState.peak > _ppState.maxPeak) _ppState.maxPeak = _ppState.peak;
         ppDrawLevel(_ppState.peak);
       } catch (e) {}
       _ppState.meterTimer = requestAnimationFrame(tick);
@@ -6736,13 +6827,6 @@ function ppStartMeter(stream) {
     tick();
     var meter = document.getElementById('ppMeter');
     if (meter) meter.classList.add('on');
-    // 静音告警：开始跟读 2.5 秒后仍没有任何输入电平 → 明确告诉用户是"没有声音进来"
-    _ppState.silenceTimer = setTimeout(function() {
-      if (!_ppState.listening || _ppState.peak >= 0.02) return;
-      ppSetStatus(ppSilenceHint());
-      var fill = document.getElementById('ppMeterFill');
-      if (fill) fill.classList.add('low');
-    }, 2500);
   } catch (e) {
     // 环境不支持音频分析（或拿到的是假流）时静默降级：不影响语音识别本身
   }
@@ -6752,6 +6836,108 @@ function ppSilenceHint() {
   return '麦克风一直没有声音输入：请检查「设置 → 系统 → 声音 → 输入」的默认设备，'
     + '以及该设备属性里「允许应用和 Windows 将此设备用于音频」是否为“允许”；'
     + '蓝牙耳机还需确认它已切到“免手操/通话”模式。';
+}
+// 「检测麦克风」：只开麦看电平，不做识别；用整段最大电平判断有没有声音进来
+function ppToggleMicCheck() {
+  if (_ppState.checking) {
+    _ppState.checking = false;
+    if (_ppState.checkTimer) { clearInterval(_ppState.checkTimer); _ppState.checkTimer = null; }
+    ppReleaseMic();
+    ppSetStatus('已停止检测。');
+    return;
+  }
+  ppSetStatus('正在打开麦克风…');
+  ppEnsureMic().then(function(mic) {
+    if (!mic.ok) { ppSetStatus(mic.message); return; }
+    _ppState.checking = true;
+    var t0 = Date.now();
+    ppSetStatus('请对着麦克风说几秒钟…（检测 ' + 6 + ' 秒）');
+    _ppState.checkTimer = setInterval(function() {
+      var best = Math.max(_ppState.maxPeak || 0, _ppState.peak || 0);
+      if (Date.now() - t0 >= 6000) {
+        clearInterval(_ppState.checkTimer); _ppState.checkTimer = null;
+        _ppState.checking = false;
+        ppReleaseMic();
+        if (best >= 0.02) {
+          ppSetStatus('✅ 麦克风有声音输入（峰值电平 ' + Math.min(100, Math.round(best * 140)) + '%）：'
+            + '设备与权限都正常；若"开始跟读"仍识别不出内容，多半是语音识别服务/网络问题，可改用「⏺ 录音对比」自评。');
+        } else {
+          ppSetStatus('❌ ' + ppSilenceHint());
+        }
+      } else {
+        ppSetStatus('请对着麦克风说几秒钟…剩余 ' + Math.ceil((6000 - (Date.now() - t0)) / 1000) + ' 秒');
+      }
+    }, 250);
+  });
+}
+// 「录音对比」：本地录一段自己的朗读并回放，完全不依赖云端识别（离线也能用）
+function ppToggleRecord() {
+  if (_ppState.recording) {
+    try { if (_ppState.recorder && _ppState.recorder.state !== 'inactive') _ppState.recorder.stop(); } catch (e) {}
+    return;
+  }
+  if (typeof window.MediaRecorder !== 'function') {
+    ppSetStatus('当前浏览器不支持录音（MediaRecorder）。可改用「检测麦克风」确认设备状态，再跟读自评。');
+    return;
+  }
+  ppSetStatus('正在打开麦克风…');
+  ppEnsureMic().then(function(mic) {
+    if (!mic.ok) { ppSetStatus(mic.message); return; }
+    var rec;
+    try { rec = new MediaRecorder(_ppState.stream); } catch (e) {
+      ppSetStatus('无法开始录音：' + (e && e.message ? e.message : '浏览器限制'));
+      ppReleaseMic();
+      return;
+    }
+    _ppState.recorder = rec;
+    _ppState.chunks = [];
+    _ppState.recording = true;
+    var btn2 = document.getElementById('ppRecBtn2');
+    if (btn2) btn2.textContent = '\u23F9 停止录音';
+    ppSetStatus('正在录音…请朗读 ' + _ppState.word + '（最长 6 秒，再点一次可提前结束）');
+    rec.ondataavailable = function(ev) { if (ev.data && ev.data.size) _ppState.chunks.push(ev.data); };
+    rec.onstop = function() {
+      _ppState.recording = false;
+      if (btn2) btn2.textContent = '\u23FA 录音对比';
+      if (_ppState.recTimer) { clearInterval(_ppState.recTimer); _ppState.recTimer = null; }
+      try {
+        var blob = new Blob(_ppState.chunks || [], { type: (rec.mimeType || 'audio/webm') });
+        if (_ppState.playbackUrl) { try { URL.revokeObjectURL(_ppState.playbackUrl); } catch (e) {} }
+        _ppState.playbackUrl = URL.createObjectURL(blob);
+        var pb = document.getElementById('ppPlayMineBtn');
+        if (pb) pb.style.display = '';
+        ppSetStatus('录音完成（' + Math.max(1, Math.round(blob.size / 1024)) + ' KB）。点「\u25B6 播放我的录音」听自己的发音，'
+          + '再点「\u{1F50A} 听标准发音」对照，然后用下方按钮自评。');
+      } catch (e) {
+        ppSetStatus('录音完成，但生成回放失败：' + (e && e.message ? e.message : '未知错误'));
+      }
+      ppReleaseMic();   // 录音结束就释放麦克风，避免与识别/其它程序抢占
+    };
+    try { rec.start(); } catch (e) {
+      _ppState.recording = false;
+      if (btn2) btn2.textContent = '\u23FA 录音对比';
+      ppSetStatus('无法开始录音：' + (e && e.message ? e.message : '浏览器限制'));
+      ppReleaseMic();
+      return;
+    }
+    _ppState.recTimer = setTimeout(function() {
+      try { if (_ppState.recorder && _ppState.recorder.state !== 'inactive') _ppState.recorder.stop(); } catch (e) {}
+    }, 6000);
+  });
+}
+function ppPlayMyRecording() {
+  if (!_ppState.playbackUrl) { ppSetStatus('还没有录音，先点「⏺ 录音对比」。'); return; }
+  try {
+    var a = new Audio(_ppState.playbackUrl);
+    a.play().catch(function() {});
+  } catch (e) {}
+}
+// 释放麦克风：电平表、AudioContext、MediaStream 一起收掉（让给识别服务或其它程序）
+function ppReleaseMic() {
+  ppStopMeter();
+  if (_ppState.checkTimer) { clearInterval(_ppState.checkTimer); _ppState.checkTimer = null; }
+  _ppState.checking = false;
+  _ppState.maxPeak = 0;
 }
 function ppDrawLevel(peak) {
   var pct = Math.max(0, Math.min(100, Math.round(peak * 140)));
@@ -6781,22 +6967,32 @@ function ppListen() {
   // 同一个按钮兼作「开始跟读 / 结束跟读」：正在收声时再点一次 = 主动结束
   if (_ppState.listening) { ppStopListening(true); return; }
   if (_ppState.pending) return;   // 麦克风检查进行中，忽略重复点击
+  if (_ppState.recording) ppToggleRecord();   // 正在录音时先收掉，避免两路同时抓麦克风
   _ppState.pending = true;
-  ppSetStatus('正在检查麦克风…');
-  // 麦克风检查失败不阻断识别：提示具体原因后仍然尝试一次语音识别
-  // （浏览器语音服务会再要一次权限，且权限刚被放开时这里可能只是缓存了旧状态）。
-  // 1.5 秒没有结果也继续，避免设备弹窗挂起时按钮看起来"没反应"。
+  _ppState.micWarn = '';
+  ppSetStatus('正在检查麦克风…（约 1 秒）');
   var started = false;
-  var go = function(mic) {
+  var go = function(mic, probe) {
     if (started) return;
     started = true;
     _ppState.pending = false;
-    // 麦克风检查失败不阻断识别，但把原因挂到监听提示里，避免被"正在听…"覆盖掉就再也看不到
-    _ppState.micWarn = (mic && !mic.ok && mic.message) ? mic.message : '';
+    if (mic && !mic.ok && mic.message) {
+      _ppState.micWarn = mic.message;                     // 权限/设备错误：原样转达
+    } else if (mic && mic.ok && !mic.skipped && typeof probe === 'number' && probe < 0.02) {
+      _ppState.micWarn = ppSilenceHint();                 // 电平整段为 0：设备没送来声音
+    }
+    // 关键：开始识别前把麦克风让出去。蓝牙耳机/单麦克风设备同时只能被一路抓取，
+    // 自己一边开着 AudioContext 一边让识别服务收声，很容易两边都拿不到干净音频。
+    ppReleaseMic();
     ppStartRecognition(Ctor);
   };
+  // 1.5 秒还没有结果就当作"检查不出来"，直接进入跟读：避免设备弹窗挂起时按钮像"没反应"
   setTimeout(function() { go({ ok: true }); }, 1500);
-  ppEnsureMic().then(go, function() { go({ ok: true }); });
+  ppEnsureMic().then(function(mic) {
+    if (started) { ppReleaseMic(); return; }
+    if (!mic.ok || mic.skipped) { go(mic); return; }
+    ppMicProbe(900).then(function(peak) { go(mic, peak); });
+  }, function() { go({ ok: true }); });
 }
 function ppStartRecognition(Ctor) {
   var btn = document.getElementById('ppRecBtn');
