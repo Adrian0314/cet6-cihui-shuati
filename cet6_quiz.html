@@ -433,6 +433,32 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
 .opt-btn{min-height:58px;background:var(--surface2);border:1px solid transparent;border-radius:7px;padding:14px 16px}
 .opt-btn>span:last-child{min-width:0;overflow-wrap:anywhere}
 .option-pos{display:inline-block;margin:0 5px;color:var(--accent);font-size:.78em;font-weight:700;white-space:nowrap}
+/* 朗读 / 发音练习 按钮：同一行、同高（尺寸只由 .pron-pill 决定），发音练习加 .wide 略宽 */
+.pron-pill-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.pron-pill{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:4px 12px;font-size:1.05em;line-height:1.5;background:var(--surface2);border:1px solid var(--border);border-radius:20px;cursor:pointer;color:var(--text);user-select:none;-webkit-tap-highlight-color:transparent;transition:border-color 150ms,background 150ms}
+.pron-pill:hover{border-color:var(--accent)}
+.pron-pill.wide{padding-left:16px;padding-right:16px}
+.pron-pill.disabled{opacity:.55;cursor:not-allowed}
+.pp-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:9999;padding:16px}
+.pp-overlay.open{display:flex}
+.pp-panel{width:min(440px,100%);max-height:86vh;overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 18px 14px;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+.pp-head{display:flex;align-items:center;justify-content:space-between;font-weight:700;font-size:1.02em;margin-bottom:10px}
+.pp-close{cursor:pointer;color:var(--text2);font-size:.95em;padding:2px 6px;border-radius:6px}
+.pp-close:hover{background:var(--surface2);color:var(--text)}
+.pp-word{font-size:1.5em;font-weight:700;margin-bottom:4px;word-break:break-word}
+.pp-ipa{font-size:.62em;color:var(--text2);font-weight:400;margin-left:6px}
+.pp-tip{font-size:.82em;color:var(--text2);margin-bottom:12px;line-height:1.5}
+.pp-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.pp-btn{padding:8px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;color:var(--text);cursor:pointer;font-size:.9em}
+.pp-btn.primary{border-color:var(--accent);color:var(--accent)}
+.pp-btn.disabled{opacity:.5;cursor:not-allowed}
+.pp-status{font-size:.84em;color:var(--text2);min-height:1.3em;margin-bottom:6px;word-break:break-word}
+.pp-result{font-size:.95em;font-weight:600;min-height:1.3em;margin-bottom:8px;word-break:break-word}
+.pp-result.ok{color:var(--green,#3fb950)}
+.pp-result.near{color:var(--accent2,#d29922)}
+.pp-result.bad{color:var(--red,#f85149)}
+.pp-manual{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.pp-stats{font-size:.78em;color:var(--text2);border-top:1px solid var(--border);padding-top:8px}
 .opt-btn:hover{border-color:var(--accent);background:rgba(15,118,110,.08)}
 .opt-btn .ol{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;border-radius:5px;background:var(--surface);color:var(--accent);border:1px solid var(--border)}
 .opt-btn.correct{border-color:var(--green)!important;background:rgba(22,163,74,.1)!important}
@@ -574,6 +600,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div class="rb"><strong>🧠 记忆模式：</strong>做完一题即从队列移除，答错的词按当前词库的书中记忆规律自动排期回来复习。打开网页时若有到期单词，做题页顶部会显示复习横幅，点击"开始复习"一键清债；复习采用四选一快刷，复习中跳过视同答错。复习只从首次作答开始计，历史数据不迁移。</div>
       <div class="rb"><strong>🔊 朗读发音：</strong>点击喇叭按钮时优先使用普通媒体音频，以便跟随视频/音乐的蓝牙输出；词条里的合并写法（如 vigo(u)r、hono(u)r、theatre/-ter）会先规范化为标准拼写再发音，避免音频接口报错；美式音源失败时会在同一媒体通道内改用英式音源重试。仅当完全离线或两个音源都不可达时，才回退到系统 TTS（系统 TTS 走系统语音通道，输出设备可能不跟随蓝牙耳机）。</div>
       <div class="rb"><strong>🔊 自动朗读：</strong>开始做题前可在“练习设置”中切换“自动朗读：开/关”，开关会保存到本机。开启后仅在“看英文 → 选中文”模式下，每显示一道新题自动朗读一次；答题反馈或局部刷新不会让同一道题重复朗读。切换到“看中文 → 选英文”或关闭开关后不会自动朗读。手机浏览器若限制后台/非用户操作播放，仍可点击题面旁的“🔊 朗读”按钮。</div>
+      <div class="rb"><strong>🎤 发音练习：</strong>「朗读」右侧的「发音练习」按钮在<strong>做题页</strong>和<strong>词库的单词详解</strong>里都有。点开后先自动播一遍标准发音，再点「开始跟读」朗读单词，浏览器会做语音识别并自动比对：完全一致提示「发音正确」，只差一两个字母提示「很接近」，差别大则显示识别到的读音，便于对照纠正；每个词的练习次数与读对次数会记在本机。若浏览器不支持语音识别、未授权麦克风或离线，按钮会自动降级为「跟读 + 自评」，功能不失效。</div>
       <div class="rb"><strong>💾 中途退出：</strong>做题过程中会即时保存当前题位、已答数量和已选答案；手机切到后台、刷新页面或关闭网页时还会通过页面生命周期事件再保存一次，因此重新打开后点击顶部“继续做题”即可接着完成同一队列。手机从其他应用返回后，恢复保护会持续忽略浏览器补发的旧“不会，跳过”事件：首次真实点击选项可正常作答，只有实际按下跳过按钮才会执行跳过。跳过点击还必须落在真实起手之后 1.5 秒内（pointer/touch 按下或抬起落在跳过按钮上），且起手必须发生在切回前台之后——浏览器补发的旧触摸（含完整指针/触摸序列重放）会被整事件取消，无论是否命中恢复保护窗口都会被拒绝，切后台很久再回来，点击选项不会被误判为跳过，跳过按钮也不会再无故闪动。4 周 25 天计划会同时保存当日进度，复习提醒也会显示实际的已完成题数和待完成题数；当天新 Unit 的全部单词学完后会记录为已完成，不会再次生成同一 Unit 的整组复习；复习队列中断后重新开始时只推送当天尚未答过的词，已练过的题不会重复出现；进入新的一天后，未完成的做题队列和已完成的 Unit 会原样延续，不会清空——第二天打开“继续做题”或“开始复习”接着上次继续即可；只有当该日任务全部完成、计划推进到新的一天后，属于旧任务的已答完队列才会在重进时自动清除。</div>
       <div class="rb"><strong>🧠 智能练习：</strong>这不是生成式 AI，而是按规则自动安排优先级：先练重点词和已经到期的复习词，再练从未做过、错误率较高或答错次数较多的词。系统从当前词库和 Unit 筛选范围中取词，覆盖当前筛选范围内的全部单词（按优先级排序），并沿用当前的做题方向、题目类型和闯关模式。通过智能练习或普通“开始做题”完成的 4 周 25 天计划 Unit，只要当天全部单词都答过一遍，同样会计入打卡进度。智能练习不是只练错题；只练错题请使用“重做当前模式错题”，智能练习答错的单词仍会进入错题本。</div>
       <div class="rb" style="text-align:center;margin-top:8px;"><span style="color:var(--accent2);cursor:pointer;text-decoration:underline;" onclick="document.getElementById('rulesCard').classList.toggle('collapsed')">点击收起 ▲</span></div>
@@ -3780,7 +3807,9 @@ function getWordDetailHTML(word, poolName, options) {
   // 派生词行：仅当内容含英文单词时显示（防止纯中文释义误标为派生词）
   if (word.derivative && /[A-Za-z]{2,}/.test(word.derivative)) parts.push(['\u{1F331}', '\u6D3E\u751F\u8BCD', word.derivative, '']);
   if (parts.length === 0) return includeGroupInfo ? getWordGroupInfoHTML(word, poolName) : '';
-  var html = '<div class="word-detail open"><div class="wd-head" onclick="this.parentElement.classList.toggle(\'open\')">\u{1F4D6} \u5355\u8BCD\u8BE6\u89E3 <span class="wd-arrow">\u25BE</span></div><div class="wd-body">';
+  var html = '<div class="word-detail open"><div class="wd-head" onclick="this.parentElement.classList.toggle(\'open\')">\u{1F4D6} \u5355\u8BCD\u8BE6\u89E3 <span class="wd-arrow">\u25BE</span></div><div class="wd-body">'
+    // 查单词场景也提供「朗读 / 发音练习」这一对按钮；做题反馈区（detailOnly）已有顶部按钮，不重复插入
+    + ((options && options.detailOnly) ? '' : pronPracticePillRow(word.word, word.pronunciation));
   // 派生词渲染辅助:解析"单词+音标"序列,在音标后插入朗读按钮(🔊,点击朗读单词)
   // 变体词如 stabilise/-ize 统一为主形式;无音标词不加按钮;解析失败原样输出
   function derivativeHtml(t) {
@@ -4444,7 +4473,7 @@ function renderQuizCard() {
       '<div class="q-word" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qText + '</div>' +
       (qPron ? '<div class="q-pron" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qPron + ' <span onclick="speakWord(\'' + word.word.replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:1.2em;" title="朗读发音">\u{1F50A}</span></div>' : '') +
       '</div><div class="word-info-actions">' + quizFavoriteHTML + '</div></div>' +
-      (mode === 'en2cn' && !qPron ? '<div style="margin-bottom:16px"><span onclick="speakWord(\'' + word.word.replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:1.1em;padding:4px 10px;background:var(--surface2);border-radius:20px;border:1px solid var(--border);display:inline-block;" title="朗读发音">\u{1F50A} 朗读</span></div>' : '') +
+      (mode === 'en2cn' && !qPron ? pronPracticePillRow(word.word, word.pronunciation) : '') +
       dictInputHTML +
       '</div>' +
       '<div class="quiz-actions">' +
@@ -4510,7 +4539,7 @@ function renderQuizCard() {
       '<div class="q-word" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qText + '</div>' +
       (qPron ? '<div class="q-pron" style="animation:slideUp 200ms cubic-bezier(0.4,0,0.2,1) both">' + qPron + '</div>' : '') +
       '</div><div class="word-info-actions">' + quizFavoriteHTML + '</div></div>' +
-      (mode === 'en2cn' ? '<div style="margin-bottom:16px"><span onclick="speakWord(\'' + word.word.replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:1.05em;padding:4px 12px;background:var(--surface2);border-radius:20px;border:1px solid var(--border);display:inline-block;" title="朗读发音">\u{1F50A} 朗读</span></div>' : '') +
+      (mode === 'en2cn' ? pronPracticePillRow(word.word, word.pronunciation) : '') +
       '<div class="options">' + optHTML + '</div>' +
       fbHTML +
       (answered || isSkip ? feedbackDetailsHTML(word, mode) : '') +
@@ -6427,6 +6456,220 @@ if (window.speechSynthesis) {
     };
   } catch(e) {}
 }
+
+// ============ 发音练习（跟读 + 语音识别比对）============
+// 入口按钮与「朗读」并排（.pron-pill-row），练习页与查单词详解页共用 pronPracticePillRow() 渲染，
+// 高度由 .pron-pill 统一决定；发音练习按钮加 .wide 稍宽，整体与相邻元素居中对齐。
+// 语音识别走浏览器自带的 SpeechRecognition；不支持／未授权／离线时降级为「跟读 + 自评」，功能不失效。
+var PRON_STORE_KEY = 'cet6_pron_practice_v1';
+var _ppEsc = function(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+};
+// 只保留字母后比对：忽略大小写、空格、连字符、撇号与音标差异
+function pronNormalize(s) { return String(s == null ? '' : s).toLowerCase().replace(/[^a-z]/g, ''); }
+function pronStatsAll() {
+  try { return JSON.parse(localStorage.getItem(PRON_STORE_KEY) || '{}') || {}; } catch (e) { return {}; }
+}
+function pronStatsGet(word) {
+  var rec = pronStatsAll()[String(word || '').toLowerCase()];
+  return rec || { tries: 0, oks: 0 };
+}
+function pronStatsBump(word, ok) {
+  var rec = { tries: 1, oks: ok ? 1 : 0 };
+  try {
+    var all = pronStatsAll();
+    var k = String(word || '').toLowerCase();
+    rec = all[k] || { tries: 0, oks: 0 };
+    rec.tries += 1;
+    if (ok) rec.oks += 1;
+    rec.last = Date.now();
+    all[k] = rec;
+    localStorage.setItem(PRON_STORE_KEY, JSON.stringify(all));
+  } catch (e) {}
+  return rec;
+}
+// 比对识别结果与目标词，返回 {level:'ok'|'near'|'bad', text, dist}
+function pronVerdict(target, heard) {
+  var t = pronNormalize(target), h = pronNormalize(heard);
+  if (!t) return { level: 'bad', text: '目标词为空', dist: 99 };
+  if (!h) return { level: 'bad', text: '没有听到声音，请靠近麦克风再试一次', dist: 99 };
+  if (t === h) return { level: 'ok', text: '发音正确！', dist: 0 };
+  var d = (typeof levenshtein === 'function') ? levenshtein(t, h) : Math.abs(t.length - h.length);
+  var tol = Math.max(1, Math.round(t.length * 0.25));
+  if (d <= tol) return { level: 'near', text: '很接近了，再读一遍会更准', dist: d };
+  return { level: 'bad', text: '听到的与目标词不同：' + heard, dist: d };
+}
+function pronRecognitionCtor() {
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+function pronUnsupportedMsg() {
+  return '当前浏览器不支持语音识别（或没有麦克风权限）：请点「听标准发音」跟读，读完后用下面的按钮自评。';
+}
+// 两个按钮的统一渲染入口（练习页 / 查单词详解页共用）。用 data-* + 事件委托，
+// 避免把含撇号、引号的单词与音标拼进 onclick 字符串。
+function pronPracticePillRow(wordText, ipa) {
+  if (!wordText) return '';
+  return '<div class="pron-pill-row">' +
+    '<span class="pron-pill" data-pron-speak="' + _ppEsc(wordText) + '" title="朗读发音">\u{1F50A} 朗读</span>' +
+    '<span class="pron-pill wide" id="pronPracticeBtn" data-pron-practice="' + _ppEsc(wordText) + '"' +
+    (ipa ? ' data-pron-ipa="' + _ppEsc(ipa) + '"' : '') + ' title="跟读练习发音">\u{1F3A4} 发音练习</span>' +
+    '</div>';
+}
+document.addEventListener('click', function(e) {
+  var el = e.target && e.target.closest ? e.target.closest('[data-pron-speak],[data-pron-practice]') : null;
+  if (!el) return;
+  if (el.hasAttribute('data-pron-speak')) { speakWord(el.getAttribute('data-pron-speak') || ''); return; }
+  openPronPractice(el.getAttribute('data-pron-practice') || '', el.getAttribute('data-pron-ipa') || '');
+});
+var _ppState = { word: '', ipa: '', rec: null, listening: false };
+function ppSetStatus(text) {
+  var el = document.getElementById('ppStatus');
+  if (el) el.textContent = text || '';
+}
+function ppPanelHTML(word, ipa) {
+  var st = pronStatsGet(word);
+  return '<div class="pp-head"><span>\u{1F3A4} 发音练习</span><span class="pp-close" id="ppCloseBtn" title="关闭（Esc）">\u2715</span></div>' +
+    '<div class="pp-word">' + _ppEsc(word) + (ipa ? '<span class="pp-ipa">' + _ppEsc(ipa) + '</span>' : '') + '</div>' +
+    '<div class="pp-tip">先点「听标准发音」，再点「开始跟读」，读完会自动比对；识别不准时可用下方按钮自评。</div>' +
+    '<div class="pp-actions">' +
+    '<button class="pp-btn" id="ppPlayBtn">\u{1F50A} 听标准发音</button>' +
+    '<button class="pp-btn primary" id="ppRecBtn">\u{1F3A4} 开始跟读</button>' +
+    '</div>' +
+    '<div class="pp-status" id="ppStatus"></div>' +
+    '<div class="pp-result" id="ppResult"></div>' +
+    '<div class="pp-manual">' +
+    '<button class="pp-btn" id="ppSelfOk">\u2705 读对了（自评）</button>' +
+    '<button class="pp-btn" id="ppSelfAgain">\u{1F501} 再练一次</button>' +
+    '</div>' +
+    '<div class="pp-stats" id="ppStats">' +
+    (st.tries ? '本词已练 ' + st.tries + ' 次，读对 ' + st.oks + ' 次' : '本词还没有练习记录') + '</div>';
+}
+function openPronPractice(word, ipa) {
+  if (!word) return;
+  _ppState.word = word;
+  _ppState.ipa = ipa || '';
+  _ppState.listening = false;
+  var el = document.getElementById('pronPracticePanel');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'pronPracticePanel';
+    el.className = 'pp-overlay';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-label', '发音练习');
+    el.addEventListener('click', function(ev) { if (ev.target === el) closePronPractice(); });
+    document.body.appendChild(el);
+  }
+  el.innerHTML = '<div class="pp-panel">' + ppPanelHTML(word, ipa) + '</div>';
+  el.classList.add('open');
+  var byId = function(id) { return document.getElementById(id); };
+  byId('ppPlayBtn').addEventListener('click', function() { speakWord(word); });
+  byId('ppRecBtn').addEventListener('click', ppListen);
+  byId('ppCloseBtn').addEventListener('click', closePronPractice);
+  byId('ppSelfOk').addEventListener('click', function() { ppFinish({ level: 'ok', text: '已按自评记录为「读对了」', dist: 0 }, ''); });
+  byId('ppSelfAgain').addEventListener('click', function() {
+    speakWord(word);
+    ppSetStatus('再听一遍标准发音，然后点「开始跟读」。');
+  });
+  if (!pronRecognitionCtor()) {
+    var rb = byId('ppRecBtn');
+    if (rb) { rb.disabled = true; rb.classList.add('disabled'); }
+    ppSetStatus(pronUnsupportedMsg());
+  } else {
+    ppSetStatus('提示：先听一遍，再点「开始跟读」。');
+  }
+  speakWord(word);   // 打开面板即播一遍标准发音，便于跟读
+}
+function closePronPractice() {
+  var el = document.getElementById('pronPracticePanel');
+  if (el) el.classList.remove('open');
+  try { if (_ppState.rec) _ppState.rec.abort(); } catch (e) {}
+  _ppState.listening = false;
+}
+// 展示结果 + 记录练习次数
+function ppFinish(verdict, heard) {
+  var ok = verdict.level === 'ok';
+  var st = pronStatsBump(_ppState.word, ok);
+  var res = document.getElementById('ppResult');
+  if (res) {
+    res.className = 'pp-result ' + verdict.level;
+    res.textContent = (verdict.level === 'ok' ? '\u2705 ' : (verdict.level === 'near' ? '\u26A0\uFE0F ' : '\u274C ')) + verdict.text;
+  }
+  ppSetStatus(heard ? '识别到的读音：' + heard : '');
+  var stats = document.getElementById('ppStats');
+  if (stats) stats.textContent = '本词已练 ' + st.tries + ' 次，读对 ' + st.oks + ' 次';
+  return st;
+}
+function ppJudge(alts) {
+  if (!alts || !alts.length) { ppSetStatus('没有听到声音，请靠近麦克风再试一次。'); return; }
+  var best = null;
+  for (var i = 0; i < alts.length; i++) {
+    var v = pronVerdict(_ppState.word, alts[i]);
+    if (!best || v.dist < best.verdict.dist) best = { verdict: v, heard: alts[i] };
+  }
+  ppFinish(best.verdict, best.heard);
+}
+function ppListen() {
+  var Ctor = pronRecognitionCtor();
+  var btn = document.getElementById('ppRecBtn');
+  if (!Ctor) { ppSetStatus(pronUnsupportedMsg()); return; }
+  if (_ppState.listening) { try { _ppState.rec.stop(); } catch (e) {} return; }
+  var rec;
+  try { rec = new Ctor(); } catch (e) { ppSetStatus(pronUnsupportedMsg()); return; }
+  rec.lang = 'en-US';
+  rec.interimResults = false;
+  rec.maxAlternatives = 3;
+  rec.continuous = false;
+  _ppState.rec = rec;
+  _ppState.listening = true;
+  if (btn) btn.textContent = '\u23F9 结束跟读';
+  ppSetStatus('正在听…请朗读 ' + _ppState.word);
+  rec.onresult = function(ev) {
+    var alts = [];
+    try {
+      var start = (ev && typeof ev.resultIndex === 'number') ? ev.resultIndex : 0;
+      for (var i = start; i < ev.results.length; i++) {
+        var r = ev.results[i];
+        for (var j = 0; j < r.length; j++) {
+          if (r[j] && r[j].transcript) alts.push(String(r[j].transcript).trim());
+        }
+      }
+    } catch (e) {}
+    if (!alts.length && ev && ev.results && ev.results[0] && ev.results[0][0]) {
+      alts.push(String(ev.results[0][0].transcript || '').trim());
+    }
+    ppJudge(alts);
+  };
+  rec.onerror = function(ev) {
+    _ppState.listening = false;
+    if (btn) btn.textContent = '\u{1F3A4} 开始跟读';
+    var code = (ev && ev.error) || '';
+    if (code === 'not-allowed' || code === 'service-not-allowed') {
+      ppSetStatus('麦克风未授权：请在浏览器地址栏允许麦克风后重试，或用下方按钮自评。');
+    } else if (code === 'network') {
+      ppSetStatus('语音识别需要联网，当前网络不可用；可点「听标准发音」跟读后自评。');
+    } else {
+      ppSetStatus('这次没能识别成功（' + (code || '未知原因') + '），可以再试一次，或用下方按钮自评。');
+    }
+  };
+  rec.onend = function() {
+    _ppState.listening = false;
+    if (btn) btn.textContent = '\u{1F3A4} 开始跟读';
+  };
+  try {
+    rec.start();
+  } catch (e) {
+    _ppState.listening = false;
+    if (btn) btn.textContent = '\u{1F3A4} 开始跟读';
+    ppSetStatus('无法启动语音识别，请点「听标准发音」跟读后自评。');
+  }
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    var el = document.getElementById('pronPracticePanel');
+    if (el && el.classList.contains('open')) closePronPractice();
+  }
+});
 
 // ============ DAILY GOAL ============
 var _goalToastShown = false;
