@@ -11,7 +11,7 @@
  *   - 两库都没有的词保留导图识别值（查看器端自动回退）
  *
  * 用法：node build-core-words.js
- * 说明：词库数据更新后重新运行本脚本，再运行 build-offline-viewer.js 同步离线版。
+ * 说明：词库数据更新后重新运行本脚本，再运行 build-offline-viewer.js 同步单文件版。
  * ============================================================ */
 import fs from 'node:fs';
 import path from 'node:path';

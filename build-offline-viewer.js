@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /* ============================================================
- * 生成离线单文件版词群导图查看器：
- *   输入：word-maps-viewer.html（在线版模板）+ unit-maps.js
+ * 生成单文件版词群导图查看器：
+ *   输入：word-maps-viewer.html（网页版模板）+ unit-maps.js
  *   输出：word-maps-viewer-offline.html（数据内联，单文件拷贝即用）
  *
  * 用法：node build-offline-viewer.js
- * 说明：数据更新后重新运行本脚本即可同步离线版。
+ * 说明：数据更新后重新运行本脚本即可同步单文件版。
  * ============================================================ */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,9 +19,9 @@ const dataPath = path.join(siteDir, 'unit-maps.js');
 const corePath = path.join(siteDir, 'core-words.js');
 const outPath = path.join(siteDir, 'word-maps-viewer-offline.html');
 
-const tpl = fs.readFileSync(tplPath, 'utf8');
-const data = fs.readFileSync(dataPath, 'utf8');
-const core = fs.readFileSync(corePath, 'utf8');
+const tpl = fs.readFileSync(tplPath, 'utf8').replace(/\r\n/g, '\n');
+const data = fs.readFileSync(dataPath, 'utf8').replace(/\r\n/g, '\n');
+const core = fs.readFileSync(corePath, 'utf8').replace(/\r\n/g, '\n');
 
 const marker = '<script src="unit-maps.js"></script>';
 const markerCore = '<script src="core-words.js"></script>';
@@ -30,8 +30,8 @@ if (!tpl.includes(marker) || !tpl.includes(markerCore)) {
   process.exit(1);
 }
 
-const inlineData = '<script>\n// 数据内联自 unit-maps.js（离线单文件版，由 build-offline-viewer.js 生成）\nwindow.__UNIT_MAPS_DATA_INLINE__ = true;\n' + data + '\n</script>';
-const inlineCore = '<script>\n// 词库索引内联自 core-words.js（离线单文件版，由 build-offline-viewer.js 生成）\n' + core + '\n</script>';
+const inlineData = '<script>\n// 数据内联自 unit-maps.js（单文件版，由 build-offline-viewer.js 生成）\nwindow.__UNIT_MAPS_DATA_INLINE__ = true;\n' + data + '\n</script>';
+const inlineCore = '<script>\n// 词库索引内联自 core-words.js（单文件版，由 build-offline-viewer.js 生成）\n' + core + '\n</script>';
 
 let out = tpl.replace(marker, inlineData).replace(markerCore, inlineCore);
 fs.writeFileSync(outPath, out);

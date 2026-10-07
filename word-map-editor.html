@@ -371,7 +371,7 @@ body.dragging-node, body.dragging-node *{cursor:grabbing !important;-webkit-user
     <label>单词 word</label>
     <div style="display:flex;gap:6px">
       <input id="aw-word" list="word-datalist" style="flex:1" placeholder="输入要添加的生词">
-      <button onclick="fetchFromDict()" title="从本地词典服务抓取（需先运行 node dict-server.js），服务离线时尝试直连有道">📥 从有道词典抓取</button>
+      <button onclick="fetchFromDict()" title="从本地词典服务抓取（需先运行 node dict-server.js），服务未启动时尝试直连有道">📥 从有道词典抓取</button>
     </div>
     <div id="aw-server-status"></div>
     <div class="imp-msg" id="aw-msg"></div>
@@ -2240,11 +2240,11 @@ function applyBatchRel() {
  * 讲解字段与做题网站 cet6_quiz.html 词库 ALL_WORDS 完全一致，
  * 可加入导图词群 / 写入内存词库 / 生成词库记录 JSON。
  * 需要本地词典服务 dict-server.js（node dict-server.js），
- * 服务离线时可粘贴有道 jsonapi 原始 JSON 手动解析。
+ * 服务未启动时可粘贴有道 jsonapi 原始 JSON 手动解析。
  * ============================================================ */
 var DICT_SERVER = 'http://127.0.0.1:17989';
 
-/* 检测词典服务是否在线，并在弹窗顶部给出状态提示 */
+/* 检测词典服务是否可用，并在弹窗顶部给出状态提示 */
 function checkDictServer() {
   var el = document.getElementById('aw-server-status');
   if (!el) return;
@@ -2257,7 +2257,7 @@ function checkDictServer() {
       if (!el) return;
       if (ok) {
         el.className = 'server-on';
-        el.textContent = '✓ 词典服务在线：' + DICT_SERVER + '（可直接抓取）';
+        el.textContent = '✓ 词典服务可用：' + DICT_SERVER + '（可直接抓取）';
       } else {
         el.className = 'server-off';
         el.textContent = '✗ 词典服务未启动。请双击「打开词群编辑器.bat」一键启动服务+编辑器；' +
@@ -3030,7 +3030,7 @@ function autoImport() {
     });
 }
 
-/* 打开页面时若词典服务在线则自动导入（服务离线静默跳过，不打扰手动选择） */
+/* 打开页面时若词典服务可用则自动导入（服务未启动静默跳过，不打扰手动选择） */
 function tryAutoImportOnLoad() {
   fetch(DICT_SERVER + '/ping')
     .then(function(r) { return r.ok; })

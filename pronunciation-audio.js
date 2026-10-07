@@ -1,5 +1,21 @@
 // A single selected microphone stream supplies both playback and recognition.
-// Buffer PCM, not decoded MediaRecorder blobs: cloud failure must not waste the user's take.
+// Keep captured PCM for recognition and MediaRecorder audio for playback.
+function ppShowUnknown(message) {
+  var res = document.getElementById('ppResult');
+  if (res) { res.className = 'pp-result near'; res.textContent = '❔ 无法判断（未计入读对或读错）'; }
+  _ppState.gotResult = true;
+  ppListenIdle('🎤 再读一次');
+  ppSetStatus(message);
+}
+function ppWordVerdict(target, heard) {
+  var matched = pronNormalize(target) === pronNormalize(heard);
+  return { level: matched ? 'ok' : 'bad', text: matched ? '目标词匹配成功' : '未匹配目标词，识别为：' + heard, dist: matched ? 0 : 99 };
+}
+function ppRefreshModelState() {
+  if (PP_VOSK.model) ppVoskState('识别资源：已就绪', 'ok');
+  else if (PP_VOSK.modelPromise) ppVoskState('识别资源：加载中…', 'busy');
+  else ppVoskState('识别资源：首次练习时自动准备');
+}
 _ppState.session = 0;
 _ppState.transcribeCancel = null;
 
@@ -94,22 +110,19 @@ function ppEndCapture() {
   }
 }
 function ppBeginCapture(follow) {
-  var engine = ppEngineGet();
-  if (engine === 'online' && !ppOnlineCanStart()) return;
   ppCancelSession();
   var token = _ppState.session;
   _ppState.pending = true;
   _ppState.gotResult = false;
-  ppClearAssessment();
   ppAudioButtons(true);
   var result = document.getElementById('ppResult');
   if (result) { result.textContent = ''; result.className = 'pp-result'; }
   ppRecStatusSet('');
   ppSetStatus('正在打开所选麦克风…');
-  // Online success never loads the offline model. Offline starts loading in parallel.
-  var modelReady = engine === 'vosk' ? ppVoskEnsureModel(function(p) {
-    if (token === _ppState.session) ppVoskState('离线模型：下载中 ' + Math.round(p * 100) + '%', 'busy');
-  }) : null;
+  // Prepare recognition while microphone permission is being requested.
+  var modelReady = ppVoskEnsureModel(function(p) {
+    if (token === _ppState.session) ppVoskState('识别资源：下载中 ' + Math.round(p * 100) + '%', 'busy');
+  });
   if (modelReady) modelReady.catch(function() {});
   ppEnsureMic(token).then(function(mic) {
     if (token !== _ppState.session) return;
@@ -160,7 +173,7 @@ function ppBeginCapture(follow) {
       } catch (e) { ppRecStatusSet('生成回放失败：' + e.message); }
       var st = ppVoiceStats(pcm, rate);
       ppRecStatusSet('录音已保存，可点「▶ 播放我的录音」回听。' + (st && st.peak > 0.004 ? '检测到音频输入。' : '输入电平较低，请检查麦克风。'));
-      ppRecognizeTake(pcm, rate, token, engine, modelReady);
+      ppRecognizeTake(pcm, rate, token, modelReady);
     };
     recorder.start();
     _ppState.pending = false;
@@ -180,39 +193,28 @@ function ppBeginCapture(follow) {
     ppSetStatus('无法开始录音：' + (err.message || '浏览器限制'));
   });
 }
-function ppRecognizeOfflineTake(pcm, rate, token, modelReady, prefix) {
-  prefix = prefix || '';
+function ppRecognizeTake(pcm, rate, token, modelReady) {
+  ppAudioButtons(true);
   if (!pcm.length) {
-    ppShowUnknown('没有采集到 PCM 数据；这不等于没有录到声音。请回听并保持页面在前台重试。', prefix);
+    ppShowUnknown('没有采集到音频数据；这不等于没有录到声音。请回听并保持页面在前台重试。');
     return Promise.resolve();
   }
-  ppSetStatus(prefix + '正在用离线模型判断目标词…首次需下载约 39 MB 模型。');
+  ppSetStatus('正在识别这段朗读…首次使用需准备约 39 MB 识别资源。');
   return (modelReady || ppVoskEnsureModel()).then(function(model) {
     if (token !== _ppState.session) return;
     return ppTranscribePCM(pcm, rate, token, model);
   }).then(function(text) {
     if (token !== _ppState.session) return;
     if (!text) {
-      ppShowUnknown('录音已保存，但离线模型未识别出文字；这不等于没有录到声音。请回听后重试，也可自评。', prefix);
+      ppShowUnknown('录音已保存，但未识别出文字；这不等于没有录到声音。请回听后重试，也可自评。');
       return;
     }
     var heard = ppPickBestHeard(_ppState.word, text);
-    ppFinish(ppOfflineVerdict(_ppState.word, heard), heard);
-    ppSetStatus(prefix + '离线模型识别到：' + text + '（仅目标词匹配判断，无音素评分）' + (prefix ? '。本机降级处理，没有再次上传录音。' : '。本机识别，录音未上传。'));
+    ppFinish(ppWordVerdict(_ppState.word, heard), heard);
+    ppSetStatus('识别到：' + text + '。请结合标准发音和录音回放对照练习。');
   }).catch(function(err) {
     if (token !== _ppState.session) return;
-    ppShowUnknown('录音已保存，但离线识别失败：' + (err.message || '模型加载失败') + '。可回放自评，或重试加载离线模型。', prefix);
-  });
-}
-function ppRecognizeTake(pcm, rate, token, engine, modelReady) {
-  ppAudioButtons(true);
-  if (engine !== 'online') return ppRecognizeOfflineTake(pcm, rate, token, modelReady, '');
-  if (!pcm.length) { ppShowUnknown('未采集到可上传的 PCM 数据，请保持页面在前台并重试。', '在线评估：'); return Promise.resolve(); }
-  return ppAssessOnline(pcm, rate, token).catch(function(err) {
-    if (token !== _ppState.session) return;
-    ppClearAssessment();
-    // Reuse the exact same PCM; never retry uploading or fabricate assessment scores.
-    return ppRecognizeOfflineTake(pcm, rate, token, null, '在线评估失败：' + (err.message || '服务不可用') + '。本次仅提供离线读词判断。');
+    ppShowUnknown('录音已保存，但识别失败：' + (err.message || '资源加载失败') + '。可回放自评，或重试准备识别资源。');
   });
 }
 function ppResamplePCM(pcm, fromRate) {
@@ -257,7 +259,7 @@ function ppTranscribePCM(pcm, rate, token, model) {
       }
       rec.on('result', function(msg) { response(msg, false); });
       rec.on('partialresult', function(msg) { response(msg, true); });
-      rec.on('error', function(msg) { finish(new Error(msg.error || '离线识别器异常')); });
+      rec.on('error', function(msg) { finish(new Error(msg.error || '识别器异常')); });
       try {
         rec.setWords(false);
         for (var i = 0; i < audio.length; i += block) rec.acceptWaveformFloat(audio.subarray(i, i + block), 16000);

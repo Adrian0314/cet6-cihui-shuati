@@ -1,4 +1,0 @@
-#!/bin/bash
-cd /var/user
-export PORT=9000
-exec /var/lang/node20/bin/node /var/user/server.mjs

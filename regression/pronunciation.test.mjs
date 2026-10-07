@@ -24,13 +24,13 @@ before(async () => {
 });
 after(async () => { await browser?.close(); await new Promise(r => server?.close(r)); });
 
-async function panel(engine) {
+async function panel(legacyMode) {
   const page = await browser.newPage();
   await page.goto(base + '/cet6_quiz.html');
-  await page.evaluate(engine => {
+  await page.evaluate(legacyMode => {
     speechSynthesis.cancel();
     window.speakWord = () => {};
-    if (engine) localStorage.setItem('cet6_pron_mode_v3', engine);
+    if (legacyMode) localStorage.setItem('cet6_pron_mode_v3', legacyMode);
     window.fakeFeeds = 0;
     window.Vosk = { createModel: async () => ({ KaldiRecognizer: class {
       constructor() { this.handlers = {}; this.feeds = 0; }
@@ -47,16 +47,59 @@ async function panel(engine) {
     } }) };
     window.ppVoskResolveModel = async () => 'test-model';
     openPronPractice('prestige', '/preˈstiːʒ/');
-  }, engine);
+  }, legacyMode);
   return page;
 }
 async function waitFor(page, fn, timeout = 6000) { await page.waitForFunction(fn, null, { timeout }); }
 
 // Regression for the reported mismatch: playback worked but no audio reached ASR.
-test('new and migrated users default to the locally available recognition engine', async () => {
+test('new users have one practice flow without service controls', async () => {
   const page = await panel();
-  try { assert.equal(await page.evaluate(() => ppEngineGet()), 'vosk'); }
-  finally { await page.close(); }
+  try {
+    assert.equal(await page.locator('#ppEngOnline, #ppEngVosk, #ppOnlineSettings, #ppAssessment').count(), 0);
+    assert.doesNotMatch(await page.locator('#pronPracticePanel').innerText(), /离线|在线评估|线上评估/);
+    assert.equal(await page.locator('#ppRecBtn').isEnabled(), true);
+  } finally { await page.close(); }
+});
+
+test('legacy online preference and endpoint cannot trigger requests or prevent recognition', async () => {
+  const page = await panel('online');
+  const errors = [], requests = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('request', request => requests.push({ url: request.url(), method: request.method() }));
+  try {
+    await page.evaluate(() => {
+      localStorage.setItem('cet6_pron_assessment_endpoint_tencent_v2', 'https://retired-assessment.invalid');
+      openPronPractice('prestige', '');
+    });
+    await page.click('#ppRecBtn');
+    await waitFor(page, () => _ppState.listening);
+    await page.waitForTimeout(450);
+    await page.click('#ppRecBtn');
+    await waitFor(page, () => _ppState.gotResult);
+    assert.match(await page.locator('#ppResult').innerText(), /匹配成功/);
+    assert.ok(await page.evaluate(() => fakeFeeds > 0));
+    assert.equal(requests.some(request => request.method === 'POST' || /assessment|retired-assessment/.test(request.url)), false);
+    assert.deepEqual(errors, []);
+  } finally { await page.close(); }
+});
+
+test('practice controls fit a narrow screen in light and dark themes', async () => {
+  const page = await panel();
+  try {
+    await page.setViewportSize({ width: 390, height: 844 });
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate(theme => applyTheme(theme), theme);
+      const bounds = await page.locator('.pp-panel').boundingBox();
+      assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390);
+      assert.equal(await page.locator('.pp-panel').evaluate(el => el.scrollWidth <= el.clientWidth + 1), true);
+      for (const id of ['ppRecBtn', 'ppRecBtn2', 'ppModelLoadBtn', 'ppModelFileBtn', 'ppSelfOk']) {
+        assert.equal(await page.locator('#' + id).isVisible(), true);
+        const button = await page.locator('#' + id).boundingBox();
+        assert.ok(button.x >= 0 && button.x + button.width <= 390, `${theme}: ${id}`);
+      }
+    }
+  } finally { await page.close(); }
 });
 test('recording comparison transcribes the same captured audio while keeping playback', async () => {
   const page = await panel('vosk');
@@ -69,6 +112,14 @@ test('recording comparison transcribes the same captured audio while keeping pla
     assert.ok(await page.evaluate(() => fakeFeeds > 0));
     assert.equal(await page.locator('#ppPlayMineBtn').isVisible(), true);
     assert.match(await page.locator('#ppResult').innerText(), /匹配成功/);
+    await page.evaluate(() => {
+      const NativeAudio = window.Audio;
+      window.Audio = function(...args) { window.lastPlayback = new NativeAudio(...args); return window.lastPlayback; };
+    });
+    await page.click('#ppPlayMineBtn');
+    await waitFor(page, () => window.lastPlayback && !window.lastPlayback.paused && window.lastPlayback.currentTime > 0);
+    assert.equal(await page.evaluate(() => lastPlayback.error), null);
+    assert.match(await page.evaluate(() => lastPlayback.src), /^blob:/);
   } finally { await page.close(); }
 });
 
@@ -197,7 +248,7 @@ test('model failure preserves playback and presents an actionable error', async 
 });
 
 
-test('real microphone capture recognizes prestige, keeps playback, and reloads the cached model offline', { timeout: 120000 }, async () => {
+test('real microphone capture recognizes prestige, keeps playback, and reloads the cached model when requests are unavailable', { timeout: 120000 }, async () => {
   const inputBrowser = await chromium.launch({ args: [
     '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream',
     `--use-file-for-fake-audio-capture=${resolve(root, 'regression/fixtures/prestige.wav')}`,
@@ -227,4 +278,22 @@ test('real microphone capture recognizes prestige, keeps playback, and reloads t
     assert.equal(await page.evaluate(() => PP_VOSK.modelSrc), 'cache');
     assert.equal(await page.evaluate(() => pronStatsGet('prestige').oks), 2);
   } finally { await inputBrowser.close(); }
+});
+
+
+test('self-assessment stops recording and cannot be replaced by a later capture result', async () => {
+  const page = await panel();
+  try {
+    await page.click('#ppRecBtn');
+    await waitFor(page, () => _ppState.listening);
+    await page.waitForTimeout(450);
+    await page.click('#ppSelfOk');
+    await page.waitForTimeout(500);
+    assert.match(await page.locator('#ppResult').innerText(), /自评/);
+    assert.equal(await page.evaluate(() => pronStatsGet('prestige').tries), 1);
+    assert.equal(await page.evaluate(() => pronStatsGet('prestige').oks), 1);
+    assert.equal(await page.evaluate(() => _ppState.stream), null);
+    assert.equal(await page.evaluate(() => _ppState.recording || _ppState.pending), false);
+    assert.equal(await page.evaluate(() => fakeFeeds), 0);
+  } finally { await page.close(); }
 });

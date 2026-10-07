@@ -153,7 +153,7 @@ svg text{user-select:none}
 <body>
 
 <header>
-  <h1>🗺️ 词群导图查看器<span class="tag" id="modeTag">在线版</span></h1>
+  <h1>🗺️ 词群导图查看器<span class="tag" id="modeTag">网页版</span></h1>
   <div class="controls">
     <div class="control-row" aria-label="导图工具栏">
       <select id="unitSel" title="选择单元"></select>
@@ -877,7 +877,7 @@ function init(){
   if (DATA_ERR) {
     var e = $('err');
     e.style.display = 'block';
-    e.innerHTML = '<b>加载失败：</b>未找到词群导图数据。<br>请确认 <code>unit-maps.js</code> 与本页面在同一目录。<br>若使用的是离线单文件版，请重新生成或使用在线版：<br><a href="https://adrian0314.github.io/cet6-cihui-shuati/word-maps-viewer.html" style="color:var(--accent)">在线版链接</a>';
+    e.innerHTML = '<b>加载失败：</b>未找到词群导图数据。<br>请确认 <code>unit-maps.js</code> 与本页面在同一目录。<br>若使用的是单文件版，请重新生成或使用网页版：<br><a href="https://adrian0314.github.io/cet6-cihui-shuati/word-maps-viewer.html" style="color:var(--accent)">网页版链接</a>';
     $('stage').style.display = 'none';
     return;
   }
@@ -887,7 +887,7 @@ function init(){
   }
   // 模式标识
   if (location.protocol === 'file:') {
-    $('modeTag').textContent = window.__UNIT_MAPS_DATA_INLINE__ ? '离线单文件版' : '离线版（依赖 data 目录）';
+    $('modeTag').textContent = window.__UNIT_MAPS_DATA_INLINE__ ? '单文件版' : '文件版';
   }
   fillUnits();
   fillGroups();

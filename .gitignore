@@ -21,9 +21,8 @@ vosk/_test.wav
 # 本机识别的部署依赖，不能只提交 JS 而遗漏模型（否则 GitHub Pages 返回 404）
 !vosk/vosk-model-small-en-us-0.15.tar.gz
 
-# Online assessment secrets and local Worker state must never be published.
+# Never publish local environment secrets.
 .dev.vars
 .dev.vars.*
 .env
 .env.*
-.wrangler/
