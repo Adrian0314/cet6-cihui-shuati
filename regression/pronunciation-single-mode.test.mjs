@@ -20,7 +20,7 @@ test('retired cloud deployment and frontend assets are removed', async () => {
   }
   const sw = await source('sw.js');
   assert.equal(/pronunciation-(assessment|config)/.test(sw), false);
-  assert.match(sw, /cet6-cihui-shuati-v41/);
+  assert.match(sw, /var CACHE_NAME = 'cet6-cihui-shuati-v\d+';/);
 });
 
 test('public descriptions do not advertise alternate connectivity modes', async () => {
@@ -42,14 +42,18 @@ test('cache migration clears previous interface assets but preserves recognition
   const { runInNewContext } = await import('node:vm');
   const handlers = {}, removed = [];
   const modelCache = 'cet6-vosk-model-small-en-us-0.15';
-  runInNewContext(await source('sw.js'), {
+  const sw = await source('sw.js');
+  const currentCache = sw.match(/var CACHE_NAME = '([^']+)'/)[1];
+  const currentVersion = Number(currentCache.match(/-v(\d+)$/)[1]);
+  const previousCache = currentCache.replace(/-v\d+$/, '-v' + (currentVersion - 1));
+  runInNewContext(sw, {
     self: {
       addEventListener: (type, fn) => { handlers[type] = fn; },
       clients: { claim() {} },
       location: { origin: 'https://example.test' }
     },
     caches: {
-      keys: async () => ['cet6-cihui-shuati-v40', 'cet6-cihui-shuati-v41', modelCache],
+      keys: async () => [previousCache, currentCache, modelCache],
       delete: async name => { removed.push(name); }
     },
     URL
@@ -57,7 +61,7 @@ test('cache migration clears previous interface assets but preserves recognition
   let finished;
   handlers.activate({ waitUntil: promise => { finished = promise; } });
   await finished;
-  assert.deepEqual(removed, ['cet6-cihui-shuati-v40']);
+  assert.deepEqual(removed, [previousCache]);
   for (const url of [
     'https://example.test/vosk/vosk-model-small-en-us-0.15.tar.gz',
     'https://external.test/resource.js'
