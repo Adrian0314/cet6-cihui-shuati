@@ -6477,7 +6477,7 @@ if (window.speechSynthesis) {
 // ============ 发音练习（跟读 + 语音识别比对）============
 // 入口按钮与「朗读」并排（.pron-pill-row），练习页与查单词详解页共用 pronPracticePillRow() 渲染，
 // 高度由 .pron-pill 统一决定；发音练习按钮加 .wide 稍宽，整体与相邻元素居中对齐。
-// 语音识别走浏览器自带的 SpeechRecognition；不支持／未授权／离线时降级为「跟读 + 自评」，功能不失效。
+// 默认本机识别；浏览器服务失败时用同一段 PCM 录音回退，生命周期见 pronunciation-audio.js。
 var PRON_STORE_KEY = 'cet6_pron_practice_v1';
 var _ppEsc = function(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -6543,48 +6543,9 @@ var _ppState = { word: '', ipa: '', rec: null, listening: false, stoppedByUser: 
                  pending: false, stream: null, ac: null, analyser: null, meterTimer: null, silenceTimer: null, peak: 0,
                  maxPeak: 0, checking: false, checkTimer: null, deviceId: '', recorder: null, chunks: null,
                  recording: false, recTimer: null, playbackUrl: '', recRms: [], recSampler: null, engine: 'browser' };
-// 跟读状态机：listening=正在收声；gotResult=本轮是否已拿到识别结果；stoppedByUser=本轮是否被用户点了「结束跟读」。
-// 这三个标记必须由本页自己维护并与识别器生命周期同步——只靠 onend/onresult 回调更新界面的话，
-// 一旦回调不来（权限弹窗挂起、识别服务无响应、只给 onresult 不给 onend），界面就会永远卡在「正在听…」，
-// 表现为「点结束跟读没反应」。详见 test_pron_practice_regression.py 的 test_07/08。
+// PCM 录音与识别共用输入设备；用 session 隔离旧回调，防止关闭/换词后覆盖新一轮结果。
 function ppClearWatchdog() {
   if (_ppState.watchdog) { clearTimeout(_ppState.watchdog); _ppState.watchdog = null; }
-}
-function ppListenIdle(label) {
-  ppClearWatchdog();
-  ppReleaseMic();          // 收掉麦克风占用：电平表、AudioContext、MediaStream 一起释放
-  ppVoskRelease();         // 离线引擎若在跑，也一并释放
-  PP_VOSK.running = false;
-  _ppState.listening = false;
-  _ppState.rec = null;
-  var b = document.getElementById('ppRecBtn');
-  if (b) b.textContent = label || '\u{1F3A4} 开始跟读';
-}
-// 用户主动点「结束跟读」（或面板关闭前）走这里：先自己把界面切到"已结束"，再通知识别器停止，
-// 并设看门狗——浏览器 1.2 秒内不给结果就自行收尾，界面不会再卡死。
-function ppStopListening(userInitiated) {
-  if (!_ppState.listening) return;
-  var rec = _ppState.rec;
-  _ppState.stoppedByUser = !!userInitiated;
-  ppClearWatchdog();
-  // ① 立即给出可见反馈，不等浏览器回调
-  _ppState.listening = false;
-  var b = document.getElementById('ppRecBtn');
-  if (b) b.textContent = '\u{1F3A4} 再读一次';
-  if (userInitiated) ppSetStatus('已结束跟读，正在分析刚才的朗读…');
-  // ② 通知识别器停止（不同实现可能只支持 stop 或只支持 abort）
-  try { if (rec && typeof rec.stop === 'function') rec.stop(); } catch (e) {}
-  // ③ 看门狗：既没结果也没回调时兜底收尾
-  _ppState.watchdog = setTimeout(function() {
-    _ppState.watchdog = null;
-    if (_ppState.gotResult) return;
-    try { if (rec && typeof rec.abort === 'function') rec.abort(); } catch (e) {}
-    _ppState.rec = null;
-    ppListenIdle('\u{1F3A4} 再读一次');
-    ppSetStatus(_ppState.stoppedByUser
-      ? '已结束跟读，没有识别到内容，请再试一次。（若多次都没结果，通常是浏览器语音识别服务当前不可用：可点「\u23FA 录音对比」做本地人声检测并自评）'
-      : '没有听到声音，请靠近麦克风再试一次。');
-  }, 1200);
 }
 function ppSetStatus(text) {
   var el = document.getElementById('ppStatus');
@@ -6594,7 +6555,7 @@ function ppPanelHTML(word, ipa) {
   var st = pronStatsGet(word);
   return '<div class="pp-head"><span>\u{1F3A4} 发音练习</span><span class="pp-close" id="ppCloseBtn" title="关闭（Esc）">\u2715</span></div>' +
     '<div class="pp-word">' + _ppEsc(word) + (ipa ? '<span class="pp-ipa">' + _ppEsc(ipa) + '</span>' : '') + '</div>' +
-    '<div class="pp-tip">先点「听标准发音」，再点「开始跟读」，读完会自动比对；识别不准时可用下方按钮自评。<br>不确定麦克风有没有声音时，点「\u{1F39A} 检测麦克风」看<strong>实时输入电平</strong>；点「\u23FA 录音对比」会<strong>在本地检测有没有人声</strong>并让你回放自己的朗读（不联网、不做云端识别）。<br>识别引擎可在下面切换：<strong>浏览器识别</strong>依赖云端服务（需联网）；<strong>离线模型</strong>在本机运行，加载一次后可断网使用。</div>' +
+    '<div class="pp-tip">先听标准发音，再点「开始跟读」；读完点「结束跟读」，会识别并比对，也可回放刚才的录音。<br>「⏺ 录音对比」同样会自动识别，不再只检测音量。默认使用<strong>本机离线模型</strong>：首次自动下载约 39 MB，缓存后可断网使用，音频不上传。<br>可选「浏览器」云端识别；若服务未返回文字，会自动用<strong>同一段录音</strong>改为本机识别，无需重读。<br>不确定麦克风有没有输入时，点「检测麦克风」；识别文字比对并非音素级发音评分，识别不准时可自评。</div>' +
     // 识别引擎选择：浏览器云端识别 / 本地离线模型（vosk-browser）
     '<div class="pp-engines"><span>识别引擎</span>' +
     '<button class="pp-engine" id="ppEngBrowser" data-engine="browser">\u{1F310} 浏览器（需联网）</button>' +
@@ -6615,11 +6576,11 @@ function ppPanelHTML(word, ipa) {
     // 两条不依赖云端识别的辅助通道：① 只看麦克风有没有声音 ② 录下来自己回放对比
     '<div class="pp-actions pp-tools">' +
     '<button class="pp-btn" id="ppCheckBtn" title="只看麦克风有没有声音，不做识别">\u{1F39A} 检测麦克风</button>' +
-    '<button class="pp-btn" id="ppRecBtn2" title="录下自己的朗读并回放，不需要联网识别">\u23FA 录音对比</button>' +
+    '<button class="pp-btn" id="ppRecBtn2" title="录音、回放并自动在本机识别，不上传音频">\u23FA 录音对比</button>' +
     '<button class="pp-btn" id="ppPlayMineBtn" style="display:none">\u25B6 播放我的录音</button>' +
     '</div>' +
     '<div class="pp-micsel" id="ppMicRow" style="display:none"><span>输入设备</span><select id="ppMicSel"></select></div>' +
-    // 录音对比有独立状态行：它做的是"本地人声检测 + 回放"，不该复用跟读的识别结果文案
+    // 录音状态与识别文字分开显示，录音有声音不等于识别成功。
     '<div class="pp-status" id="ppRecStatus"></div>' +
     '<div class="pp-manual">' +
     '<button class="pp-btn" id="ppSelfOk">\u2705 读对了（自评）</button>' +
@@ -6630,6 +6591,7 @@ function ppPanelHTML(word, ipa) {
 }
 function openPronPractice(word, ipa) {
   if (!word) return;
+  ppCancelSession();
   _ppState.word = word;
   _ppState.ipa = ipa || '';
   // 每次打开面板都重置跟读状态机，避免上一轮的 listening/结果标记残留
@@ -6688,36 +6650,16 @@ function openPronPractice(word, ipa) {
   ppRefreshMicList();   // 已授权时可直接列出设备名；未授权时先隐藏，授权后会自动刷新
   ppEngineSet(ppEngineGet());   // 同步识别引擎按钮与模型状态行
   byId('ppSelfOk').addEventListener('click', function() {
-    ppStopListening(true);   // 自评前先收掉正在进行的跟读
+    ppCancelSession();   // 自评不得被延迟到达的识别结果覆盖
     ppFinish({ level: 'ok', text: '已按自评记录为「读对了」', dist: 0 }, '');
   });
   byId('ppSelfAgain').addEventListener('click', function() {
-    ppStopListening(true);
+    ppCancelSession();
     speakWord(word);
     ppSetStatus('再听一遍标准发音，然后点「开始跟读」。');
   });
-  if (!pronRecognitionCtor()) {
-    var rb = byId('ppRecBtn');
-    if (rb) { rb.disabled = true; rb.classList.add('disabled'); }
-    ppSetStatus(pronUnsupportedMsg());
-  } else {
-    ppSetStatus('提示：先听一遍，再点「开始跟读」。');
-  }
+  ppSetStatus('提示：先听一遍，再点「开始跟读」。默认使用本机识别，首次需下载约 39 MB 模型；录音也会自动识别。');
   speakWord(word);   // 打开面板即播一遍标准发音，便于跟读
-}
-function closePronPractice() {
-  var el = document.getElementById('pronPracticePanel');
-  if (el) el.classList.remove('open');
-  // 收尾：先按"用户主动结束"结束跟读，再停录音、释放麦克风
-  ppStopListening(true);
-  try { if (_ppState.rec) _ppState.rec.abort(); } catch (e) {}
-  try { if (_ppState.recorder && _ppState.recorder.state !== 'inactive') _ppState.recorder.stop(); } catch (e) {}
-  if (_ppState.recTimer) { clearInterval(_ppState.recTimer); _ppState.recTimer = null; }
-  _ppState.recording = false;
-  try { if (PP_VOSK.running) { PP_VOSK.running = false; try { PP_VOSK.rec.retrieveFinalResult(); } catch (e) {} } } catch (e) {}
-  ppReleaseMic();
-  ppRecStatusSet('');
-  ppListenIdle('\u{1F3A4} 开始跟读');
 }
 // 展示结果 + 记录练习次数
 function ppFinish(verdict, heard) {
@@ -6797,33 +6739,28 @@ function ppRefreshMicList() {
     row.style.display = 'flex';
   }).catch(function() {});
 }
-function ppEnsureMic() {
-  return new Promise(function(resolve) {
-    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
-      resolve({ ok: true, skipped: true });
-      return;
+function ppEnsureMic(token) {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.resolve({ ok: true, skipped: true });
+  return navigator.mediaDevices.getUserMedia(ppMicConstraints()).catch(function(err) {
+    if (err && (err.name === 'OverconstrainedError' || err.name === 'NotFoundError') && _ppState.deviceId) {
+      if (token != null && token !== _ppState.session) throw err;
+      ppSaveDeviceId('');
+      return navigator.mediaDevices.getUserMedia({ audio: true });
     }
-    navigator.mediaDevices.getUserMedia(ppMicConstraints()).then(function(stream) {
-      _ppState.stream = stream;
-      ppStartMeter(stream);
-      ppRefreshMicList();          // 授权后 label 才有内容，这里再刷新一次
-      resolve({ ok: true, stream: stream });
-    }).catch(function(err) {
-      // 选定的设备不在了（拔掉/换设备）→ 清掉选择，回退到系统默认重试一次
-      if (err && (err.name === 'OverconstrainedError' || err.name === 'NotFoundError') && _ppState.deviceId) {
-        ppSaveDeviceId('');
-        navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
-          _ppState.stream = stream;
-          ppStartMeter(stream);
-          ppRefreshMicList();
-          resolve({ ok: true, stream: stream, fallback: true });
-        }).catch(function(e2) {
-          resolve({ ok: false, error: (e2 && e2.name) || 'Error', message: ppMicErrorMessage(e2) });
-        });
-        return;
-      }
-      resolve({ ok: false, error: (err && err.name) || 'Error', message: ppMicErrorMessage(err) });
-    });
+    throw err;
+  }).then(function(stream) {
+    // A permission dialog may resolve AFTER closing or switching the word/engine.
+    // Stop only this late stream; never overwrite/stop the newer session's stream.
+    if (token != null && token !== _ppState.session) {
+      stream.getTracks().forEach(function(t) { t.stop(); });
+      return { ok: false, cancelled: true };
+    }
+    _ppState.stream = stream;
+    ppStartMeter(stream);
+    ppRefreshMicList();
+    return { ok: true, stream: stream };
+  }).catch(function(err) {
+    return { ok: false, message: ppMicErrorMessage(err) };
   });
 }
 // 采样若干毫秒内的最大电平——判断"到底有没有声音进来"要看整段时间的峰值，
@@ -6892,121 +6829,6 @@ function ppSilenceHint() {
   return '麦克风一直没有声音输入：请检查「设置 → 系统 → 声音 → 输入」的默认设备，'
     + '以及该设备属性里「允许应用和 Windows 将此设备用于音频」是否为“允许”；'
     + '蓝牙耳机还需确认它已切到“免手操/通话”模式。';
-}
-// 「检测麦克风」：只开麦看电平，不做识别；用整段最大电平判断有没有声音进来
-function ppToggleMicCheck() {
-  if (_ppState.checking) {
-    _ppState.checking = false;
-    if (_ppState.checkTimer) { clearInterval(_ppState.checkTimer); _ppState.checkTimer = null; }
-    ppReleaseMic();
-    ppSetStatus('已停止检测。');
-    return;
-  }
-  ppSetStatus('正在打开麦克风…');
-  ppEnsureMic().then(function(mic) {
-    if (!mic.ok) { ppSetStatus(mic.message); return; }
-    _ppState.checking = true;
-    var t0 = Date.now();
-    ppSetStatus('请对着麦克风说几秒钟…（检测 ' + 6 + ' 秒）');
-    _ppState.checkTimer = setInterval(function() {
-      var best = Math.max(_ppState.maxPeak || 0, _ppState.peak || 0);
-      if (Date.now() - t0 >= 6000) {
-        clearInterval(_ppState.checkTimer); _ppState.checkTimer = null;
-        _ppState.checking = false;
-        ppReleaseMic();
-        if (best >= 0.02) {
-          ppSetStatus('✅ 麦克风有声音输入（峰值电平 ' + Math.min(100, Math.round(best * 140)) + '%）：'
-            + '设备与权限都正常；若"开始跟读"仍识别不出内容，多半是语音识别服务/网络问题，可改用「⏺ 录音对比」自评。');
-        } else {
-          ppSetStatus('❌ ' + ppSilenceHint());
-        }
-      } else {
-        ppSetStatus('请对着麦克风说几秒钟…剩余 ' + Math.ceil((6000 - (Date.now() - t0)) / 1000) + ' 秒');
-      }
-    }, 250);
-  });
-}
-// 「录音对比」：本地录一段自己的朗读并回放，完全不依赖云端识别（离线也能用）
-function ppToggleRecord() {
-  if (_ppState.recording) {
-    try { if (_ppState.recorder && _ppState.recorder.state !== 'inactive') _ppState.recorder.stop(); } catch (e) {}
-    return;
-  }
-  if (typeof window.MediaRecorder !== 'function') {
-    ppRecStatusSet('当前浏览器不支持录音（MediaRecorder）。可改用「检测麦克风」确认设备状态，再跟读自评。');
-    return;
-  }
-  ppSetStatus('');                       // 清掉上一次「开始跟读」留下的旧提示，避免误读成录音的结论
-  ppRecStatusSet('正在打开麦克风…');
-  ppEnsureMic().then(function(mic) {
-    if (!mic.ok) { ppRecStatusSet(mic.message); return; }
-    var rec;
-    try { rec = new MediaRecorder(_ppState.stream); } catch (e) {
-      ppRecStatusSet('无法开始录音：' + (e && e.message ? e.message : '浏览器限制'));
-      ppReleaseMic();
-      return;
-    }
-    _ppState.recorder = rec;
-    _ppState.chunks = [];
-    _ppState.recRms = [];                                   // 录音期间攒的音量包络（供本地人声检测）
-    _ppState.recording = true;
-    if (_ppState.recSampler) { clearInterval(_ppState.recSampler); }
-    _ppState.recSampler = setInterval(ppSampleRecFrame, 20); // 独立于 rAF，切后台也能攒样本
-    var btn2 = document.getElementById('ppRecBtn2');
-    if (btn2) btn2.textContent = '\u23F9 停止录音';
-    ppRecStatusSet('正在录音…请朗读 ' + _ppState.word + '（最长 6 秒，再点一次可提前结束）');
-    rec.ondataavailable = function(ev) { if (ev.data && ev.data.size) _ppState.chunks.push(ev.data); };
-    rec.onstop = function() {
-      _ppState.recording = false;
-      if (btn2) btn2.textContent = '\u23FA 录音对比';
-      if (_ppState.recTimer) { clearInterval(_ppState.recTimer); _ppState.recTimer = null; }
-      if (_ppState.recSampler) { clearInterval(_ppState.recSampler); _ppState.recSampler = null; }
-      var blob = null;
-      try {
-        blob = new Blob(_ppState.chunks || [], { type: (rec.mimeType || 'audio/webm') });
-        if (_ppState.playbackUrl) { try { URL.revokeObjectURL(_ppState.playbackUrl); } catch (e) {} }
-        _ppState.playbackUrl = URL.createObjectURL(blob);
-        var pb = document.getElementById('ppPlayMineBtn');
-        if (pb) pb.style.display = '';
-      } catch (e) {
-        ppRecStatusSet('录音完成，但生成回放失败：' + (e && e.message ? e.message : '未知错误'));
-        ppReleaseMic();
-        return;
-      }
-      ppReleaseMic();   // 录音结束先释放麦克风，再做本地分析，避免与其它程序抢占
-      ppRecStatusSet('录音完成（' + Math.max(1, Math.round(blob.size / 1024)) + ' KB），正在本地分析有没有人声…');
-      // 关键：录音对比的正确性由"本地人声检测"保证，不依赖云端识别，也不依赖对录音文件的解码。
-      // 优先用录音期间实时攒下的音量包络；拿不到（例如后台标签页暂停了采样）才退回解码分析。
-      var liveFrames = _ppState.recRms || [];
-      var finish = function(st, viaDecode) {
-        var v = ppVoiceVerdict(st);
-        var tail = ' 点「\u25B6 播放我的录音」听自己的发音，再点「\u{1F50A} 听标准发音」对照，然后用下方按钮自评。';
-        if (v.level === 'ok') {
-          tail += '（本功能做的是本地人声检测，不做云端识别；要自动判断读音对错请用「\u{1F3A4} 开始跟读」'
-            + (ppIsBluetoothMic() ? '；若跟读一直没有结果，可在「输入设备」里改用内置麦克风——蓝牙免手操是 16 kHz 窄带，识别成功率明显更低' : '') + '）';
-        }
-        if (viaDecode) tail += '（录音期间采样不足，已改用录音文件分析）';
-        ppRecStatusSet((v.level === 'ok' ? '\u2705 ' : '\u274C ') + v.text + tail);
-      };
-      if (liveFrames.length >= 5) {
-        finish(ppVadFromFrames(liveFrames, 0.02), false);
-      } else {
-        ppAnalyzeRecording(blob).then(function(st) {
-          finish(st || ppVadFromFrames([], 0.02), true);
-        });
-      }
-    };
-    try { rec.start(); } catch (e) {
-      _ppState.recording = false;
-      if (btn2) btn2.textContent = '\u23FA 录音对比';
-      ppRecStatusSet('无法开始录音：' + (e && e.message ? e.message : '浏览器限制'));
-      ppReleaseMic();
-      return;
-    }
-    _ppState.recTimer = setTimeout(function() {
-      try { if (_ppState.recorder && _ppState.recorder.state !== 'inactive') _ppState.recorder.stop(); } catch (e) {}
-    }, 6000);
-  });
 }
 function ppPlayMyRecording() {
   if (!_ppState.playbackUrl) { ppSetStatus('还没有录音，先点「⏺ 录音对比」。'); return; }
@@ -7098,14 +6920,6 @@ function ppAnalyzeRecording(blob) {
     }).catch(function() { resolve(null); });
   });
 }
-// 释放麦克风：电平表、AudioContext、MediaStream 一起收掉（让给识别服务或其它程序）
-function ppReleaseMic() {
-  ppStopMeter();
-  if (_ppState.checkTimer) { clearInterval(_ppState.checkTimer); _ppState.checkTimer = null; }
-  if (_ppState.recSampler) { clearInterval(_ppState.recSampler); _ppState.recSampler = null; }
-  _ppState.checking = false;
-  _ppState.maxPeak = 0;
-}
 function ppDrawLevel(peak) {
   var pct = Math.max(0, Math.min(100, Math.round(peak * 140)));
   var fill = document.getElementById('ppMeterFill');
@@ -7128,22 +6942,11 @@ function ppStopMeter() {
   var meter = document.getElementById('ppMeter');
   if (meter) meter.classList.remove('on');
 }
-// ============ 离线识别引擎：vosk-browser（Vosk WASM，模型跑在本机）============
-// 为什么要有它：浏览器的 SpeechRecognition 走云端服务，网络受限/离线时只"听"不返回。
-// vosk-browser 把 Vosk 编译成 WASM（worker 与 wasm 内联在单个 vosk.js 里），
-// 模型是 tar.gz 压缩包；装好之后整条识别链路都在本机执行，断网也能用。
-//
-// 三段链路：
-//   ① 模型加载：库 <script> 懒加载 → 模型解析顺序 = 缓存(blob) → 同源文件 → 在线地址(需 CORS)
-//      → 首次拿到后写入 Cache Storage，之后直接走缓存（离线可用）。
-//   ② 音频输入：getUserMedia → AudioContext(sampleRate=16000) → ScriptProcessor(4096)
-//      → recognizer.acceptWaveform(inputBuffer)。刻意不用 MediaRecorder：
-//      实测 webm/opus 录音用 decodeAudioData 只能解出很短一段，直接喂 PCM 才可靠。
-//   ③ 结果输出：on('partialresult') 实时回显、on('result') 累积文本，停止时 retrieveFinalResult()
-//      → 与目标词做归一化比对（复用 pronVerdict）。
+// ============ 本机模型准备：vosk-browser（Vosk WASM）============
+// 音频采集与云端回退在 pronunciation-audio.js；这里负责运行库、缓存和模型加载。
 var PP_VOSK = {
   libUrl: 'vosk/vosk.js',
-  modelPath: 'vosk/vosk-model-small-en-us-0.15.tar.gz',   // 与站点同源的模型（可选，放了就自动用）
+  modelPath: 'vosk/vosk-model-small-en-us-0.15.tar.gz',   // 必须随 GitHub Pages 部署，首次加载后缓存
   modelUrl: '',                                           // 可选在线地址，必须带 CORS 头
   cacheName: 'cet6-vosk-model-v1',
   cacheKey: 'vosk-model-small-en-us-0.15.tar.gz',
@@ -7217,7 +7020,7 @@ function ppVoskResolveModel(onProgress) {
       PP_VOSK.modelSrc = path ? 'same-origin' : 'online';
       return ppVoskDownload(url, onProgress).then(function(blob) {
         return ppVoskCacheOpen().then(function(cache) {
-          cache.put(PP_VOSK.cacheKey, new Response(blob, { headers: { 'Content-Type': 'application/gzip' } }));
+          return cache.put(PP_VOSK.cacheKey, new Response(blob, { headers: { 'Content-Type': 'application/gzip' } }));
         }).catch(function() {}).then(function() { return URL.createObjectURL(blob); });
       });
     });
@@ -7234,7 +7037,7 @@ function ppVoskEnsureModel(onProgress) {
     return ppVoskResolveModel(onProgress);
   }).then(function(modelUrl) {
     ppVoskState('离线模型：解析中（首次约几秒）…', 'busy');
-    return window.Vosk.createModel(modelUrl);
+    return ppVoskCreateModel(modelUrl);
   }).then(function(model) {
     PP_VOSK.model = model;
     ppVoskState('离线模型：✅ 已就绪（' + (PP_VOSK.modelSrc === 'cache' ? '来自本机缓存' : PP_VOSK.modelSrc === 'same-origin' ? '已缓存到本机' : '已下载并缓存') + '，可断网使用）', 'ok');
@@ -7258,7 +7061,7 @@ function ppVoskUseLocalFile(file, onProgress) {
   }).catch(function() {});
   PP_VOSK.modelSrc = 'local-file';
   ppVoskState('离线模型：解析中…', 'busy');
-  ppVoskLoadLib().then(function() { return window.Vosk.createModel(blobUrl); }).then(function(model) {
+  ppVoskLoadLib().then(function() { return ppVoskCreateModel(blobUrl); }).then(function(model) {
     PP_VOSK.model = model;
     PP_VOSK.modelPromise = Promise.resolve(model);
     ppVoskState('离线模型：✅ 已就绪（来自本机文件，已缓存，可断网使用）', 'ok');
@@ -7281,155 +7084,16 @@ function ppPickBestHeard(target, text) {
   }
   return best;
 }
-// ③ 结果输出：把识别文本转成判定（复用 pronVerdict + 练习记录）
-function ppVoskFinish() {
-  var heard = ppPickBestHeard(_ppState.word, PP_VOSK.text);
-  if (!PP_VOSK.text) {
-    ppSetStatus('离线模型没有识别到内容：请靠近麦克风、放慢语速再读一遍。');
-    return;
-  }
-  var v = pronVerdict(_ppState.word, heard || PP_VOSK.text);
-  var res = document.getElementById('ppResult');
-  if (res) {
-    res.className = 'pp-result ' + v.level;
-    res.textContent = (v.level === 'ok' ? '\u2705 ' : (v.level === 'near' ? '\u26A0\uFE0F ' : '\u274C ')) + v.text;
-  }
-  var st = pronStatsBump(_ppState.word, v.level === 'ok');
-  var stats = document.getElementById('ppStats');
-  if (stats) stats.textContent = '本词已练 ' + st.tries + ' 次，读对 ' + st.oks + ' 次';
-  ppSetStatus('离线模型识别到：' + PP_VOSK.text + '（本机识别，未联网）');
-}
-// 释放离线识别占用的麦克风与音频节点
-function ppVoskRelease() {
-  if (PP_VOSK.finishTimer) { clearInterval(PP_VOSK.finishTimer); PP_VOSK.finishTimer = null; }
-  try { if (PP_VOSK.proc) PP_VOSK.proc.disconnect(); } catch (e) {}
-  try { if (PP_VOSK.gain) PP_VOSK.gain.disconnect(); } catch (e) {}
-  try { if (PP_VOSK.src) PP_VOSK.src.disconnect(); } catch (e) {}
-  try { if (PP_VOSK.ac && PP_VOSK.ac.close) PP_VOSK.ac.close(); } catch (e) {}
-  try {
-    if (PP_VOSK.stream && PP_VOSK.stream.getTracks) {
-      PP_VOSK.stream.getTracks().forEach(function(t) { try { t.stop(); } catch (e) {} });
-    }
-  } catch (e) {}
-  PP_VOSK.stream = null; PP_VOSK.ac = null; PP_VOSK.proc = null; PP_VOSK.gain = null; PP_VOSK.src = null;
-}
-// ② 音频输入 + 识别主循环
-function ppVoskStart() {
-  if (PP_VOSK.running) return;
-  PP_VOSK.text = ''; PP_VOSK.partial = '';
-  ppSetStatus('离线模型：准备中…');
-  ppVoskEnsureModel(function(p) {
-    ppVoskState('离线模型：下载中 ' + Math.round(p * 100) + '%', 'busy');
-  }).then(function(model) {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      ppSetStatus('浏览器不支持麦克风采集。');
-      return;
-    }
-    var constraints = { audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } };
-    if (_ppState.deviceId) constraints.audio.deviceId = { exact: _ppState.deviceId };
-    return navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
-      PP_VOSK.stream = stream;
-      var AC = window.AudioContext || window.webkitAudioContext;
-      // 直接按 16 kHz 建 AudioContext：Vosk 的声学模型就是 16 kHz，让浏览器替我们重采样
-      PP_VOSK.ac = new AC({ sampleRate: 16000 });
-      PP_VOSK.rec = new model.KaldiRecognizer(PP_VOSK.ac.sampleRate);
-      PP_VOSK.rec.setWords(false);
-      // worker 里的识别器是异步构造的：早期版本若在就绪前灌音频，会出现"什么都识别不到"。
-      // 这里显式接住错误事件（库会把 worker 的异常发到识别器上），并在接入音频前留一点时间。
-      PP_VOSK.rec.on('error', function(msg) {
-        var e = (msg && msg.error) ? msg.error : '未知错误';
-        ppSetStatus('离线模型内部报错：' + e + '（可重试，或切回浏览器引擎）');
-      });
-      PP_VOSK.rec.on('result', function(msg) {
-        var t = (msg && msg.result && msg.result.text) ? String(msg.result.text).trim() : '';
-        if (t) PP_VOSK.text = (PP_VOSK.text ? PP_VOSK.text + ' ' : '') + t;
-      });
-      PP_VOSK.rec.on('partialresult', function(msg) {
-        var p = (msg && msg.result && msg.result.partial) ? String(msg.result.partial).trim() : '';
-        if (p) { PP_VOSK.partial = p; ppSetStatus('离线模型正在听：' + p); }
-      });
-      PP_VOSK.src = PP_VOSK.ac.createMediaStreamSource(PP_VOSK.stream);
-      PP_VOSK.proc = PP_VOSK.ac.createScriptProcessor(4096, 1, 1);
-      // 浏览器通常会给到 16 kHz（我们在构造 AudioContext 时就是这么要求的）；
-      // 万一没有遵守，就自己线性重采样到 16 kHz 再喂——Vosk 的声学模型固定是 16 kHz，
-      // 采样率对不上会让识别结果直接变空（这个坑在测试里踩过一次）。
-      PP_VOSK.needResample = PP_VOSK.ac.sampleRate !== 16000;
-      PP_VOSK.proc.onaudioprocess = function(ev) {
-        try {
-          if (!PP_VOSK.needResample) { PP_VOSK.rec.acceptWaveform(ev.inputBuffer); return; }
-          var input = ev.inputBuffer.getChannelData(0);
-          var from = ev.inputBuffer.sampleRate, ratio = from / 16000;
-          var outLen = Math.max(1, Math.floor(input.length / ratio));
-          var out = new Float32Array(outLen);
-          for (var i = 0; i < outLen; i++) {
-            var pos = i * ratio, i0 = Math.floor(pos), frac = pos - i0;
-            var a = input[i0] || 0, b = input[i0 + 1] || a;
-            out[i] = a + (b - a) * frac;
-          }
-          PP_VOSK.rec.acceptWaveformFloat(out, 16000);
-        } catch (e) {}
-      };
-      PP_VOSK.gain = PP_VOSK.ac.createGain();
-      PP_VOSK.gain.gain.value = 0;              // 静音输出：只为让 onaudioprocess 持续触发，避免回授
-      PP_VOSK.src.connect(PP_VOSK.proc);
-      PP_VOSK.proc.connect(PP_VOSK.gain);
-      PP_VOSK.gain.connect(PP_VOSK.ac.destination);
-      PP_VOSK.running = true;
-      _ppState.listening = true;
-      var b = document.getElementById('ppRecBtn');
-      if (b) b.textContent = '\u23F9 结束跟读';
-      ppRecStatusSet('');
-      // 先播 0.3 秒静音做"预热"，让 worker 把识别器建好，再开始接收真实语音
-      try { PP_VOSK.rec.acceptWaveformFloat(new Float32Array(4800), 16000); } catch (e) {}
-      PP_VOSK.readyAt = Date.now() + 300;
-      ppSetStatus('离线模型准备中…（约 0.3 秒）');
-      setTimeout(function() {
-        if (PP_VOSK.running) ppSetStatus('正在听…（离线模型）请朗读 ' + _ppState.word);
-      }, 300);
-    });
-  }).catch(function(err) {
-    _ppState.listening = false;
-    var b = document.getElementById('ppRecBtn');
-    if (b) b.textContent = '\u{1F3A4} 开始跟读';
-    ppSetStatus('离线识别没能启动：' + (err && err.message ? err.message : '未知错误')
-      + '　可先切回「\u{1F310} 浏览器」引擎，或用「\u23FA 录音对比」自评。');
-  });
-}
-function ppVoskStop() {
-  if (!PP_VOSK.running) return;
-  var b = document.getElementById('ppRecBtn');
-  if (b) b.textContent = '\u{1F3A4} 再读一次';
-  _ppState.listening = false;
-  ppSetStatus('离线模型正在识别…（本机计算，通常 1～3 秒）');
-  try { PP_VOSK.rec.retrieveFinalResult(); } catch (e) {}
-  // 关键：WASM 识别是"边解码边出结果"，实测 8 秒音频要 4～8 秒才全部出完。
-  // 原来固定等 600ms 必然拿不到结果（表现为"什么都识别不到"）。这里改成
-  // 等结果到达，最多等 8 秒；超时就用已经拿到的部分结果兜底，避免白读。
-  var waited = 0;
-  var finish = function() {
-    if (PP_VOSK.finishTimer) { clearInterval(PP_VOSK.finishTimer); PP_VOSK.finishTimer = null; }
-    ppVoskRelease();
-    PP_VOSK.running = false;
-    if (!PP_VOSK.text && PP_VOSK.partial) PP_VOSK.text = PP_VOSK.partial;   // 兜底：用最后一个部分结果
-    ppVoskFinish();
-  };
-  PP_VOSK.finishTimer = setInterval(function() {
-    waited += 300;
-    if (PP_VOSK.text) { finish(); return; }
-    if (waited >= 8000) { finish(); return; }
-    if (waited % 900 === 0) ppSetStatus('离线模型正在识别…已等 ' + Math.round(waited / 1000) + ' 秒（本机计算）');
-  }, 300);
-}
-function ppVoskToggle() {
-  if (PP_VOSK.running) ppVoskStop(); else ppVoskStart();
-}
 // ---------- 识别引擎切换 ----------
-var PP_ENGINE_KEY = 'cet6_pron_engine_v1';
+// v2 deliberately migrates old cloud defaults to the now-deployed local engine.
+var PP_ENGINE_KEY = 'cet6_pron_engine_v2';
 function ppEngineGet() {
-  try { return localStorage.getItem(PP_ENGINE_KEY) === 'vosk' ? 'vosk' : 'browser'; } catch (e) { return 'browser'; }
+  try { return localStorage.getItem(PP_ENGINE_KEY) === 'browser' ? 'browser' : 'vosk'; } catch (e) { return 'vosk'; }
 }
 function ppEngineSet(eng) {
-  _ppState.engine = (eng === 'vosk') ? 'vosk' : 'browser';
+  var next = (eng === 'browser') ? 'browser' : 'vosk';
+  if (next !== _ppState.engine) { ppCancelSession(); ppListenIdle(); }
+  _ppState.engine = next;
   try { localStorage.setItem(PP_ENGINE_KEY, _ppState.engine); } catch (e) {}
   var eb = document.getElementById('ppEngBrowser'), ev = document.getElementById('ppEngVosk');
   if (eb) eb.classList.toggle('on', _ppState.engine === 'browser');
@@ -7443,111 +7107,6 @@ function ppEngineSet(eng) {
   }
 }
 
-function ppListen() {
-  // 选中「离线模型」时走本机识别链路（完全不碰 SpeechRecognition）
-  if (ppEngineGet() === 'vosk') { ppVoskToggle(); return; }
-  var Ctor = pronRecognitionCtor();
-  if (!Ctor) { ppSetStatus(pronUnsupportedMsg()); return; }
-  // 同一个按钮兼作「开始跟读 / 结束跟读」：正在收声时再点一次 = 主动结束
-  if (_ppState.listening) { ppStopListening(true); return; }
-  if (_ppState.pending) return;   // 麦克风检查进行中，忽略重复点击
-  if (_ppState.recording) ppToggleRecord();   // 正在录音时先收掉，避免两路同时抓麦克风
-  _ppState.pending = true;
-  _ppState.micWarn = '';
-  ppRecStatusSet('');                         // 清掉录音对比的旧提示，两套状态互不干扰
-  ppSetStatus('正在检查麦克风…（约 1 秒）');
-  var started = false;
-  var go = function(mic, probe) {
-    if (started) return;
-    started = true;
-    _ppState.pending = false;
-    if (mic && !mic.ok && mic.message) {
-      _ppState.micWarn = mic.message;                     // 权限/设备错误：原样转达
-    } else if (mic && mic.ok && !mic.skipped && typeof probe === 'number' && probe < 0.02) {
-      _ppState.micWarn = ppSilenceHint();                 // 电平整段为 0：设备没送来声音
-    }
-    // 关键：开始识别前把麦克风让出去。蓝牙耳机/单麦克风设备同时只能被一路抓取，
-    // 自己一边开着 AudioContext 一边让识别服务收声，很容易两边都拿不到干净音频。
-    ppReleaseMic();
-    ppStartRecognition(Ctor);
-  };
-  // 1.5 秒还没有结果就当作"检查不出来"，直接进入跟读：避免设备弹窗挂起时按钮像"没反应"
-  setTimeout(function() { go({ ok: true }); }, 1500);
-  ppEnsureMic().then(function(mic) {
-    if (started) { ppReleaseMic(); return; }
-    if (!mic.ok || mic.skipped) { go(mic); return; }
-    ppMicProbe(900).then(function(peak) { go(mic, peak); });
-  }, function() { go({ ok: true }); });
-}
-function ppStartRecognition(Ctor) {
-  var btn = document.getElementById('ppRecBtn');
-  // 开始新一轮前先收掉上一实例，避免浏览器抛 InvalidStateError 或旧实例回调串到本轮
-  if (_ppState.rec) { try { _ppState.rec.abort(); } catch (e) {} }
-  _ppState.rec = null;
-  ppClearWatchdog();
-  var rec;
-  try { rec = new Ctor(); } catch (e) { ppSetStatus(pronUnsupportedMsg()); return; }
-  rec.lang = 'en-US';
-  rec.interimResults = false;
-  rec.maxAlternatives = 3;
-  rec.continuous = false;
-  _ppState.rec = rec;
-  _ppState.listening = true;
-  _ppState.stoppedByUser = false;
-  _ppState.gotResult = false;
-  if (btn) btn.textContent = '\u23F9 结束跟读';
-  ppSetStatus('正在听…请朗读 ' + _ppState.word + (_ppState.micWarn ? '\u3000⚠ ' + _ppState.micWarn : ''));
-  rec.onresult = function(ev) {
-    var alts = [];
-    try {
-      var start = (ev && typeof ev.resultIndex === 'number') ? ev.resultIndex : 0;
-      for (var i = start; i < ev.results.length; i++) {
-        var r = ev.results[i];
-        for (var j = 0; j < r.length; j++) {
-          if (r[j] && r[j].transcript) alts.push(String(r[j].transcript).trim());
-        }
-      }
-    } catch (e) {}
-    if (!alts.length && ev && ev.results && ev.results[0] && ev.results[0][0]) {
-      alts.push(String(ev.results[0][0].transcript || '').trim());
-    }
-    _ppState.gotResult = true;
-    ppClearWatchdog();
-    ppJudge(alts);
-  };
-  rec.onerror = function(ev) {
-    ppClearWatchdog();
-    var code = (ev && ev.error) || '';
-    var stopped = _ppState.stoppedByUser;
-    ppListenIdle('\u{1F3A4} 再读一次');
-    if (code === 'not-allowed' || code === 'service-not-allowed') {
-      ppSetStatus('麦克风未授权：请在浏览器地址栏允许麦克风后重试，或用下方按钮自评。');
-    } else if (code === 'network') {
-      ppSetStatus('语音识别需要联网，当前网络不可用；可点「听标准发音」跟读后自评。');
-    } else if (code === 'aborted' && stopped) {
-      ppSetStatus('已结束跟读。');
-    } else {
-      ppSetStatus('这次没能识别成功（' + (code || '未知原因') + '），可以再试一次，或用下方按钮自评。');
-    }
-  };
-  rec.onend = function() {
-    var hadResult = _ppState.gotResult;
-    var stopped = _ppState.stoppedByUser;
-    ppClearWatchdog();
-    ppListenIdle('\u{1F3A4} 再读一次');
-    if (!hadResult) {
-    ppSetStatus(stopped
-      ? '已结束跟读，没有识别到内容，请再试一次。（若多次都没结果，多是浏览器语音识别服务不可用：可点「\u23FA 录音对比」做本地检测并自评）'
-      : '没有听到声音，请靠近麦克风再试一次。');
-    }
-  };
-  try {
-    rec.start();
-  } catch (e) {
-    ppListenIdle('\u{1F3A4} 开始跟读');
-    ppSetStatus('无法启动语音识别，请点「听标准发音」跟读后自评。');
-  }
-}
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
     var el = document.getElementById('pronPracticePanel');
@@ -8356,5 +7915,6 @@ initBackToTop();
     </div>
   </div>
 </div>
+<script src="pronunciation-audio.js"></script>
 </body>
 </html>
