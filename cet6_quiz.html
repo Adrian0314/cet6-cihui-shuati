@@ -561,6 +561,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
 //# sourceMappingURL=chart.umd.js.map
 </script>
 <script>window._chartAvailable = typeof Chart !== 'undefined';</script>
+<link rel="stylesheet" href="pronunciation-assessment.css">
 </head>
 <body>
 <div class="container">
@@ -6477,7 +6478,7 @@ if (window.speechSynthesis) {
 // ============ 发音练习（跟读 + 语音识别比对）============
 // 入口按钮与「朗读」并排（.pron-pill-row），练习页与查单词详解页共用 pronPracticePillRow() 渲染，
 // 高度由 .pron-pill 统一决定；发音练习按钮加 .wide 稍宽，整体与相邻元素居中对齐。
-// 默认本机识别；浏览器服务失败时用同一段 PCM 录音回退，生命周期见 pronunciation-audio.js。
+// 默认本机识别；在线评估失败时用同一段 PCM 录音回退，生命周期见 pronunciation-audio.js。
 var PRON_STORE_KEY = 'cet6_pron_practice_v1';
 var _ppEsc = function(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -6506,23 +6507,6 @@ function pronStatsBump(word, ok) {
   } catch (e) {}
   return rec;
 }
-// 比对识别结果与目标词，返回 {level:'ok'|'near'|'bad', text, dist}
-function pronVerdict(target, heard) {
-  var t = pronNormalize(target), h = pronNormalize(heard);
-  if (!t) return { level: 'bad', text: '目标词为空', dist: 99 };
-  if (!h) return { level: 'bad', text: '没有听到声音，请靠近麦克风再试一次', dist: 99 };
-  if (t === h) return { level: 'ok', text: '发音正确！', dist: 0 };
-  var d = (typeof levenshtein === 'function') ? levenshtein(t, h) : Math.abs(t.length - h.length);
-  var tol = Math.max(1, Math.round(t.length * 0.25));
-  if (d <= tol) return { level: 'near', text: '很接近了，再读一遍会更准', dist: d };
-  return { level: 'bad', text: '听到的与目标词不同：' + heard, dist: d };
-}
-function pronRecognitionCtor() {
-  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
-}
-function pronUnsupportedMsg() {
-  return '当前浏览器不支持语音识别（或没有麦克风权限）：请点「听标准发音」跟读，读完后用下面的按钮自评。';
-}
 // 两个按钮的统一渲染入口（练习页 / 查单词详解页共用）。用 data-* + 事件委托，
 // 避免把含撇号、引号的单词与音标拼进 onclick 字符串。
 function pronPracticePillRow(wordText, ipa) {
@@ -6542,7 +6526,7 @@ document.addEventListener('click', function(e) {
 var _ppState = { word: '', ipa: '', rec: null, listening: false, stoppedByUser: false, gotResult: false, watchdog: null,
                  pending: false, stream: null, ac: null, analyser: null, meterTimer: null, silenceTimer: null, peak: 0,
                  maxPeak: 0, checking: false, checkTimer: null, deviceId: '', recorder: null, chunks: null,
-                 recording: false, recTimer: null, playbackUrl: '', recRms: [], recSampler: null, engine: 'browser' };
+                 recording: false, recTimer: null, playbackUrl: '', recRms: [], recSampler: null, engine: 'vosk' };
 // PCM 录音与识别共用输入设备；用 session 隔离旧回调，防止关闭/换词后覆盖新一轮结果。
 function ppClearWatchdog() {
   if (_ppState.watchdog) { clearTimeout(_ppState.watchdog); _ppState.watchdog = null; }
@@ -6553,41 +6537,31 @@ function ppSetStatus(text) {
 }
 function ppPanelHTML(word, ipa) {
   var st = pronStatsGet(word);
-  return '<div class="pp-head"><span>\u{1F3A4} 发音练习</span><span class="pp-close" id="ppCloseBtn" title="关闭（Esc）">\u2715</span></div>' +
+  return '<div class="pp-head"><span>🎤 发音练习</span><span class="pp-close" id="ppCloseBtn" title="关闭（Esc）">✕</span></div>' +
     '<div class="pp-word">' + _ppEsc(word) + (ipa ? '<span class="pp-ipa">' + _ppEsc(ipa) + '</span>' : '') + '</div>' +
-    '<div class="pp-tip">先听标准发音，再点「开始跟读」；读完点「结束跟读」，会识别并比对，也可回放刚才的录音。<br>「⏺ 录音对比」同样会自动识别，不再只检测音量。默认使用<strong>本机离线模型</strong>：首次自动下载约 39 MB，缓存后可断网使用，音频不上传。<br>可选「浏览器」云端识别；若服务未返回文字，会自动用<strong>同一段录音</strong>改为本机识别，无需重读。<br>不确定麦克风有没有输入时，点「检测麦克风」；识别文字比对并非音素级发音评分，识别不准时可自评。</div>' +
-    // 识别引擎选择：浏览器云端识别 / 本地离线模型（vosk-browser）
-    '<div class="pp-engines"><span>识别引擎</span>' +
-    '<button class="pp-engine" id="ppEngBrowser" data-engine="browser">\u{1F310} 浏览器（需联网）</button>' +
-    '<button class="pp-engine" id="ppEngVosk" data-engine="vosk">\u{1F4F4} 离线模型</button>' +
-    '</div>' +
+    '<div class="pp-tip">先听标准发音，再开始跟读；读完结束录音，按所选模式判断。两种模式都保留录音回放，识别不确定时也可自评。</div>' +
+    '<div class="pp-engines" aria-label="评估模式"><button class="pp-engine" id="ppEngVosk" data-engine="vosk">📴 离线读词判断</button>' +
+    '<button class="pp-engine" id="ppEngOnline" data-engine="online">🌐 在线发音评估</button></div>' +
+    '<div class="pp-mode-hint" id="ppModeHint"></div>' + ppOnlineSettingsHTML() +
     '<div class="pp-model" id="ppModelRow"><span id="ppModelState">离线模型：未加载</span>' +
     '<button class="pp-btn" id="ppModelLoadBtn">加载/下载模型</button>' +
-    '<button class="pp-btn" id="ppModelFileBtn" title="选本机已下载好的模型压缩包（tar.gz），完全离线可用">选择本机模型…</button>' +
-    '<input type="file" id="ppModelFile" accept=".gz,.tgz,application/gzip,application/x-gzip" style="display:none">' +
-    '</div>' +
-    '<div class="pp-actions">' +
-    '<button class="pp-btn" id="ppPlayBtn">\u{1F50A} 听标准发音</button>' +
-    '<button class="pp-btn primary" id="ppRecBtn">\u{1F3A4} 开始跟读</button>' +
-    '</div>' +
-    '<div class="pp-status" id="ppStatus"></div>' +
+    '<button class="pp-btn" id="ppModelFileBtn" title="选择本机模型压缩包（tar.gz），可完全离线使用">选择本机模型…</button>' +
+    '<input type="file" id="ppModelFile" accept=".gz,.tgz,application/gzip,application/x-gzip" style="display:none"></div>' +
+    '<div class="pp-actions"><button class="pp-btn" id="ppPlayBtn">🔊 听标准发音</button>' +
+    '<button class="pp-btn primary" id="ppRecBtn">🎤 开始跟读</button></div>' +
+    '<div class="pp-status" id="ppStatus" role="status" aria-live="polite"></div>' +
     '<div class="pp-meter" id="ppMeter"><span>输入电平</span><span class="pp-meter-track"><span class="pp-meter-fill" id="ppMeterFill"></span></span><span class="pp-meter-val" id="ppMeterVal">—</span></div>' +
     '<div class="pp-result" id="ppResult"></div>' +
-    // 两条不依赖云端识别的辅助通道：① 只看麦克风有没有声音 ② 录下来自己回放对比
-    '<div class="pp-actions pp-tools">' +
-    '<button class="pp-btn" id="ppCheckBtn" title="只看麦克风有没有声音，不做识别">\u{1F39A} 检测麦克风</button>' +
-    '<button class="pp-btn" id="ppRecBtn2" title="录音、回放并自动在本机识别，不上传音频">\u23FA 录音对比</button>' +
-    '<button class="pp-btn" id="ppPlayMineBtn" style="display:none">\u25B6 播放我的录音</button>' +
-    '</div>' +
+    '<section id="ppAssessment" class="pp-report" hidden aria-label="在线发音评估报告"></section>' +
+    '<div class="pp-actions pp-tools"><button class="pp-btn" id="ppCheckBtn" title="只检测麦克风输入，不做识别">🎚 检测麦克风</button>' +
+    '<button class="pp-btn" id="ppRecBtn2">⏺ 录音对比</button>' +
+    '<button class="pp-btn" id="ppPlayMineBtn" style="display:none">▶ 播放我的录音</button></div>' +
     '<div class="pp-micsel" id="ppMicRow" style="display:none"><span>输入设备</span><select id="ppMicSel"></select></div>' +
-    // 录音状态与识别文字分开显示，录音有声音不等于识别成功。
     '<div class="pp-status" id="ppRecStatus"></div>' +
-    '<div class="pp-manual">' +
-    '<button class="pp-btn" id="ppSelfOk">\u2705 读对了（自评）</button>' +
-    '<button class="pp-btn" id="ppSelfAgain">\u{1F501} 再练一次</button>' +
-    '</div>' +
+    '<div class="pp-manual"><button class="pp-btn" id="ppSelfOk">✅ 读对了（自评）</button>' +
+    '<button class="pp-btn" id="ppSelfAgain">🔁 再练一次</button></div>' +
     '<div class="pp-stats" id="ppStats">' +
-    (st.tries ? '本词已练 ' + st.tries + ' 次，读对 ' + st.oks + ' 次' : '本词还没有练习记录') + '</div>';
+    (st.tries ? '本词已练 ' + st.tries + ' 次，达标/自评读对 ' + st.oks + ' 次' : '本词还没有练习记录') + '</div>';
 }
 function openPronPractice(word, ipa) {
   if (!word) return;
@@ -6620,12 +6594,14 @@ function openPronPractice(word, ipa) {
   byId('ppCheckBtn').addEventListener('click', ppToggleMicCheck);
   byId('ppRecBtn2').addEventListener('click', ppToggleRecord);
   byId('ppPlayMineBtn').addEventListener('click', ppPlayMyRecording);
-  // 识别引擎切换（浏览器云端识别 / 本机离线模型）
-  byId('ppEngBrowser').addEventListener('click', function() { ppEngineSet('browser'); ppSetStatus('已切换到「浏览器识别」：需要联网，且依赖浏览器的语音识别服务。'); });
-  byId('ppEngVosk').addEventListener('click', function() {
-    ppEngineSet('vosk');
-    ppSetStatus('已切换到「离线模型」：首次需要准备模型（约 39 MB），之后可断网使用。');
+  // 切换模式会取消当前采集/请求，旧结果不能写入下一轮。
+  byId('ppEngOnline').addEventListener('click', function() {
+    ppEngineSet('online'); ppSetStatus('在线发音评估：请先连接可信后端并同意上传录音。');
   });
+  byId('ppEngVosk').addEventListener('click', function() {
+    ppEngineSet('vosk'); ppSetStatus('离线读词判断：只判断目标词是否匹配，录音不上传。');
+  });
+  ppBindOnlineSettings();
   byId('ppModelLoadBtn').addEventListener('click', function() {
     ppVoskEnsureModel(function(p) { ppVoskState('离线模型：下载中 ' + Math.round(p * 100) + '%', 'busy'); })
       .then(function() {})
@@ -6650,15 +6626,15 @@ function openPronPractice(word, ipa) {
   ppRefreshMicList();   // 已授权时可直接列出设备名；未授权时先隐藏，授权后会自动刷新
   ppEngineSet(ppEngineGet());   // 同步识别引擎按钮与模型状态行
   byId('ppSelfOk').addEventListener('click', function() {
-    ppCancelSession();   // 自评不得被延迟到达的识别结果覆盖
+    ppCancelSession(); ppClearAssessment();   // 自评不得被延迟到达的识别结果覆盖
     ppFinish({ level: 'ok', text: '已按自评记录为「读对了」', dist: 0 }, '');
   });
   byId('ppSelfAgain').addEventListener('click', function() {
-    ppCancelSession();
+    ppCancelSession(); ppClearAssessment();
     speakWord(word);
     ppSetStatus('再听一遍标准发音，然后点「开始跟读」。');
   });
-  ppSetStatus('提示：先听一遍，再点「开始跟读」。默认使用本机识别，首次需下载约 39 MB 模型；录音也会自动识别。');
+  ppSetStatus(_ppState.engine === 'online' ? '在线评估：连接可信后端并同意上传后，开始跟读。' : '离线判断：先听一遍，再开始跟读；只判断目标词是否匹配。');
   speakWord(word);   // 打开面板即播一遍标准发音，便于跟读
 }
 // 展示结果 + 记录练习次数
@@ -6672,20 +6648,11 @@ function ppFinish(verdict, heard) {
   }
   ppSetStatus(heard ? '识别到的读音：' + heard : '');
   var stats = document.getElementById('ppStats');
-  if (stats) stats.textContent = '本词已练 ' + st.tries + ' 次，读对 ' + st.oks + ' 次';
+  if (stats) stats.textContent = '本词已练 ' + st.tries + ' 次，达标/自评读对 ' + st.oks + ' 次';
   // 结果已出：本轮结束，按钮恢复可再次跟读（否则会一直是「结束跟读」的假状态）
   _ppState.gotResult = true;
   ppListenIdle('\u{1F3A4} 再读一次');
   return st;
-}
-function ppJudge(alts) {
-  if (!alts || !alts.length) { ppSetStatus('没有听到声音，请靠近麦克风再试一次。'); return; }
-  var best = null;
-  for (var i = 0; i < alts.length; i++) {
-    var v = pronVerdict(_ppState.word, alts[i]);
-    if (!best || v.dist < best.verdict.dist) best = { verdict: v, heard: alts[i] };
-  }
-  ppFinish(best.verdict, best.heard);
 }
 // ---------- 麦克风自检 ----------
 // 用户的典型故障是「耳机能听、但网页收不到麦克风声音」。原因可能在系统默认输入设备、
@@ -6943,7 +6910,7 @@ function ppStopMeter() {
   if (meter) meter.classList.remove('on');
 }
 // ============ 本机模型准备：vosk-browser（Vosk WASM）============
-// 音频采集与云端回退在 pronunciation-audio.js；这里负责运行库、缓存和模型加载。
+// 音频采集与在线回退在 pronunciation-audio.js；这里负责运行库、缓存和模型加载。
 var PP_VOSK = {
   libUrl: 'vosk/vosk.js',
   modelPath: 'vosk/vosk-model-small-en-us-0.15.tar.gz',   // 必须随 GitHub Pages 部署，首次加载后缓存
@@ -7084,28 +7051,7 @@ function ppPickBestHeard(target, text) {
   }
   return best;
 }
-// ---------- 识别引擎切换 ----------
-// v2 deliberately migrates old cloud defaults to the now-deployed local engine.
-var PP_ENGINE_KEY = 'cet6_pron_engine_v2';
-function ppEngineGet() {
-  try { return localStorage.getItem(PP_ENGINE_KEY) === 'browser' ? 'browser' : 'vosk'; } catch (e) { return 'vosk'; }
-}
-function ppEngineSet(eng) {
-  var next = (eng === 'browser') ? 'browser' : 'vosk';
-  if (next !== _ppState.engine) { ppCancelSession(); ppListenIdle(); }
-  _ppState.engine = next;
-  try { localStorage.setItem(PP_ENGINE_KEY, _ppState.engine); } catch (e) {}
-  var eb = document.getElementById('ppEngBrowser'), ev = document.getElementById('ppEngVosk');
-  if (eb) eb.classList.toggle('on', _ppState.engine === 'browser');
-  if (ev) ev.classList.toggle('on', _ppState.engine === 'vosk');
-  var row = document.getElementById('ppModelRow');
-  if (row) row.style.display = _ppState.engine === 'vosk' ? 'flex' : 'none';
-  if (_ppState.engine === 'vosk') {
-    if (PP_VOSK.model) ppVoskState('离线模型：✅ 已就绪（可断网使用）', 'ok');
-    else if (PP_VOSK.modelPromise) ppVoskState('离线模型：加载中…', 'busy');
-    else ppVoskState('离线模型：未加载（点右侧按钮加载，或用「选择本机模型…」）');
-  }
-}
+// 模式切换与在线结果渲染由 pronunciation-assessment.js 提供。
 
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
@@ -7915,6 +7861,8 @@ initBackToTop();
     </div>
   </div>
 </div>
+<script src="pronunciation-config.js"></script>
+<script src="pronunciation-assessment.js"></script>
 <script src="pronunciation-audio.js"></script>
 </body>
 </html>

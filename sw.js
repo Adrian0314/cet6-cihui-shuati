@@ -1,6 +1,6 @@
 // CET-6 Quiz Service Worker — offline support (PWA)
 // v5: 安装阶段只缓存轻量资源；大词库和页面改为访问时按需缓存，避免微信内置浏览器首次打开长时间转圈
-var CACHE_NAME = 'cet6-cihui-shuati-v38';
+var CACHE_NAME = 'cet6-cihui-shuati-v39';
 var ASSETS = [
   './manifest.json',
   './icon-192.png',
@@ -37,13 +37,15 @@ self.addEventListener('activate', function(e) {
 self.addEventListener('fetch', function(e) {
   if (e.request.method !== 'GET') return;
   var url = e.request.url;
+  // Never intercept or cache cross-origin assessment/API requests.
+  if (new URL(url).origin !== self.location.origin) return;
   // 离线识别模型（约 39MB）由页面自己用 Cache Storage('cet6-vosk-model-*') 管理：
   // 这里直接放行，避免同一份 39MB 在两处各存一遍，也避免受 SW 版本升级影响。
   if (/vosk\/vosk-model-.*[.]tar[.]gz($|\?)/.test(url)) return;
   var isDoc = e.request.destination === 'document';
   // 文档与词库数据（full-words、core-words、unit-maps.js）走 network-first：保证拿到最新版，离线时回退缓存
   // 词库数据更新频繁（发音/词表修正），避免用户刷新后仍命中旧缓存
-  var isData = /(full-words|core-words|unit-maps|pronunciation-audio)[.]js/.test(url);
+  var isData = /(full-words|core-words|unit-maps|pronunciation-(audio|assessment|config))[.]js|pronunciation-assessment[.]css/.test(url);
   if (isDoc || isData) {
     e.respondWith(
       fetch(e.request).then(function(response) {

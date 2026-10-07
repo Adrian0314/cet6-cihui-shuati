@@ -30,7 +30,7 @@ async function panel(engine) {
   await page.evaluate(engine => {
     speechSynthesis.cancel();
     window.speakWord = () => {};
-    if (engine) localStorage.setItem('cet6_pron_engine_v2', engine);
+    if (engine) localStorage.setItem('cet6_pron_mode_v3', engine);
     window.fakeFeeds = 0;
     window.Vosk = { createModel: async () => ({ KaldiRecognizer: class {
       constructor() { this.handlers = {}; this.feeds = 0; }
@@ -68,22 +68,7 @@ test('recording comparison transcribes the same captured audio while keeping pla
     await waitFor(page, () => document.querySelector('#ppStatus').textContent.includes('prestige'));
     assert.ok(await page.evaluate(() => fakeFeeds > 0));
     assert.equal(await page.locator('#ppPlayMineBtn').isVisible(), true);
-    assert.match(await page.locator('#ppResult').innerText(), /正确/);
-  } finally { await page.close(); }
-});
-test('browser empty result falls back to the already recorded PCM without asking to reread', async () => {
-  const page = await panel('browser');
-  try {
-    await page.evaluate(() => {
-      window.SpeechRecognition = class { start() {} stop() { this.onend?.(); } abort() {} };
-    });
-    await page.click('#ppRecBtn');
-    await waitFor(page, () => _ppState.listening);
-    await page.waitForTimeout(700);
-    await page.click('#ppRecBtn');
-    await waitFor(page, () => document.querySelector('#ppStatus').textContent.includes('prestige'), 10000);
-    assert.ok(await page.evaluate(() => fakeFeeds > 0));
-    assert.equal(await page.locator('#ppPlayMineBtn').isVisible(), true);
+    assert.match(await page.locator('#ppResult').innerText(), /匹配成功/);
   } finally { await page.close(); }
 });
 
@@ -123,49 +108,11 @@ test('wrong and empty transcripts never become a false success', async () => {
       await page.waitForTimeout(450);
       await page.click('#ppRecBtn');
       await waitFor(page, () => !_ppState.pending);
-      assert.doesNotMatch(await page.locator('#ppResult').innerText(), /正确/);
+      assert.doesNotMatch(await page.locator('#ppResult').innerText(), /匹配成功/);
       assert.equal(await page.evaluate(() => pronStatsGet('prestige').oks), 0);
       if (!text) assert.match(await page.locator('#ppStatus').innerText(), /不等于没有录到声音/);
     } finally { await page.close(); }
   }
-});
-test('a cloud final result arriving after the old 1.2 second deadline is still used once', async () => {
-  const page = await panel('browser');
-  try {
-    await page.evaluate(() => {
-      window.SpeechRecognition = class {
-        start(track) { if (!(track instanceof MediaStreamTrack)) throw Error('missing selected track'); }
-        stop() { setTimeout(() => this.onresult?.({ results: [[{ transcript: 'prestige' }]] }), 1800); }
-        abort() {}
-      };
-    });
-    await page.click('#ppRecBtn');
-    await waitFor(page, () => _ppState.listening);
-    await page.waitForTimeout(450);
-    await page.click('#ppRecBtn');
-    await waitFor(page, () => _ppState.gotResult);
-    assert.equal(await page.evaluate(() => fakeFeeds), 0);
-    assert.equal(await page.evaluate(() => pronStatsGet('prestige').tries), 1);
-    assert.match(await page.locator('#ppResult').innerText(), /正确/);
-  } finally { await page.close(); }
-});
-test('cloud network errors do not discard the microphone recording', async () => {
-  const page = await panel('browser');
-  try {
-    await page.evaluate(() => {
-      window.SpeechRecognition = class {
-        start() { setTimeout(() => this.onerror?.({ error: 'network' }), 20); }
-        stop() {} abort() {}
-      };
-    });
-    await page.click('#ppRecBtn');
-    await waitFor(page, () => _ppState.cloudError === 'network');
-    assert.equal(await page.evaluate(() => _ppState.recording), true);
-    await page.waitForTimeout(450);
-    await page.click('#ppRecBtn');
-    await waitFor(page, () => _ppState.gotResult);
-    assert.ok(await page.evaluate(() => fakeFeeds > 0));
-  } finally { await page.close(); }
 });
 test('closing during inference isolates the next word and frees the recognizer', async () => {
   const page = await panel('vosk');
@@ -229,7 +176,7 @@ test('lack of Web Speech support does not disable local recognition', async () =
     await page.waitForTimeout(450);
     await page.click('#ppRecBtn');
     await waitFor(page, () => _ppState.gotResult);
-    assert.match(await page.locator('#ppResult').innerText(), /正确/);
+    assert.match(await page.locator('#ppResult').innerText(), /匹配成功/);
   } finally { await page.close(); }
 });
 test('model failure preserves playback and presents an actionable error', async () => {
@@ -266,7 +213,7 @@ test('real microphone capture recognizes prestige, keeps playback, and reloads t
     await page.click('#ppRecBtn');
     await waitFor(page, () => _ppState.gotResult, 60000);
     assert.match(await page.locator('#ppStatus').innerText(), /prestige/);
-    assert.match(await page.locator('#ppResult').innerText(), /正确/);
+    assert.match(await page.locator('#ppResult').innerText(), /匹配成功/);
     assert.equal(await page.locator('#ppPlayMineBtn').isVisible(), true);
     assert.equal(await page.evaluate(() => _ppState.stream), null);
     await page.evaluate(() => { PP_VOSK.model.terminate(); PP_VOSK.model = PP_VOSK.modelPromise = null; });

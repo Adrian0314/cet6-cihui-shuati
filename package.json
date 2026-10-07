@@ -2,7 +2,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "node --test regression/pronunciation.test.mjs"
+    "test": "node --test regression/*.test.mjs"
   },
   "dependencies": {
     "@playwright/test": "^1.61.0"
