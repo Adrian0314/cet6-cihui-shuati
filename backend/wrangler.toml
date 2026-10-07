@@ -1,13 +1,12 @@
+# Optional compatibility deployment. Recommended domestic deployment: tencent-scf.zip.
 name = "cet6-pronunciation-assessment"
 main = "pronunciation-worker.js"
 compatibility_date = "2026-10-07"
 
 [vars]
 ALLOWED_ORIGIN = "https://adrian0314.github.io"
-# Replace with the endpoint shown in your Azure Speech resource. No path or trailing query.
-SPEECH_ENDPOINT = ""
 
-# Secrets (never put their values here): SPEECH_KEY, ASSESSMENT_ACCESS_TOKEN
+# Secrets: TENCENT_SECRET_ID, TENCENT_SECRET_KEY, ASSESSMENT_ACCESS_TOKEN
 [observability]
 enabled = false
 

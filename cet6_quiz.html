@@ -6541,7 +6541,7 @@ function ppPanelHTML(word, ipa) {
     '<div class="pp-word">' + _ppEsc(word) + (ipa ? '<span class="pp-ipa">' + _ppEsc(ipa) + '</span>' : '') + '</div>' +
     '<div class="pp-tip">先听标准发音，再开始跟读；读完结束录音，按所选模式判断。两种模式都保留录音回放，识别不确定时也可自评。</div>' +
     '<div class="pp-engines" aria-label="评估模式"><button class="pp-engine" id="ppEngVosk" data-engine="vosk">📴 离线读词判断</button>' +
-    '<button class="pp-engine" id="ppEngOnline" data-engine="online">🌐 在线发音评估</button></div>' +
+    '<button class="pp-engine" id="ppEngOnline" data-engine="online">🌐 国内在线评估</button></div>' +
     '<div class="pp-mode-hint" id="ppModeHint"></div>' + ppOnlineSettingsHTML() +
     '<div class="pp-model" id="ppModelRow"><span id="ppModelState">离线模型：未加载</span>' +
     '<button class="pp-btn" id="ppModelLoadBtn">加载/下载模型</button>' +
@@ -6596,7 +6596,7 @@ function openPronPractice(word, ipa) {
   byId('ppPlayMineBtn').addEventListener('click', ppPlayMyRecording);
   // 切换模式会取消当前采集/请求，旧结果不能写入下一轮。
   byId('ppEngOnline').addEventListener('click', function() {
-    ppEngineSet('online'); ppSetStatus('在线发音评估：请先连接可信后端并同意上传录音。');
+    ppEngineSet('online'); ppSetStatus('腾讯云在线发音评估：请先连接可信后端并同意上传录音。');
   });
   byId('ppEngVosk').addEventListener('click', function() {
     ppEngineSet('vosk'); ppSetStatus('离线读词判断：只判断目标词是否匹配，录音不上传。');
@@ -6634,7 +6634,7 @@ function openPronPractice(word, ipa) {
     speakWord(word);
     ppSetStatus('再听一遍标准发音，然后点「开始跟读」。');
   });
-  ppSetStatus(_ppState.engine === 'online' ? '在线评估：连接可信后端并同意上传后，开始跟读。' : '离线判断：先听一遍，再开始跟读；只判断目标词是否匹配。');
+  ppSetStatus(_ppState.engine === 'online' ? '腾讯云在线评估：连接可信后端并同意上传后，开始跟读。' : '离线判断：先听一遍，再开始跟读；只判断目标词是否匹配。');
   speakWord(word);   // 打开面板即播一遍标准发音，便于跟读
 }
 // 展示结果 + 记录练习次数

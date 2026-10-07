@@ -37,3 +37,6 @@
 .pp-practice-advice{font-size:.82em;line-height:1.5;color:var(--text);margin:12px 0 0}
 .pp-btn:disabled{opacity:.55;cursor:not-allowed}
 @media(max-width:480px){.pp-panel{padding:14px 12px}.pp-score-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.pp-report-head{align-items:flex-start;flex-direction:column}.pp-engine{padding:7px 9px}}
+
+.pp-phoneme small{font-size:.65em;line-height:1.5;font-weight:400;color:var(--text2);overflow-wrap:anywhere}
+.pp-online-settings a{color:var(--accent);text-decoration:underline;text-underline-offset:2px;overflow-wrap:anywhere}

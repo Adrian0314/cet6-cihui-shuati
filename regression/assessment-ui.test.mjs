@@ -20,7 +20,8 @@ before(async () => {
   browser = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required'] });
 });
 after(async () => { await browser?.close(); await new Promise(r => server?.close(r)); });
-const report = { version: 1, provider: 'azure', status: 'success', reference: 'prestige', transcript: 'Prestige.', scores: { accuracy: 86, pronunciation: 84, fluency: 90, completeness: 100, prosody: null }, phonemeAlphabet: 'service', words: [{ word: 'prestige', accuracy: 86, errorType: 'None', phonemes: [{ phoneme: 'p', accuracy: 94 }, { phoneme: 'r', accuracy: 55 }], syllables: [] }] };
+// Contract-only mock. No live Tencent account is used by these browser tests.
+const report = { version: 1, provider: 'tencent', status: 'success', reference: 'prestige', transcript: '', transcriptKind: 'not-provided', scores: { accuracy: 86, pronunciation: 84, fluency: null, completeness: null, prosody: null }, phonemeAlphabet: 'service', words: [{ word: 'prestige', accuracy: 86, errorType: 'None', phonemes: [{ phoneme: 'p', accuracy: 94, stressExpected: false, stressDetected: false }, { phoneme: 'r', accuracy: 55, stressExpected: true, stressDetected: false }], syllables: [] }] };
 async function panel(online = false) {
   const page = await browser.newPage();
   await page.goto(base + '/cet6_quiz.html');
@@ -197,5 +198,56 @@ test('revoking upload consent cancels the current recording without a network re
     await page.uncheck('#ppOnlineConsent'); await page.waitForTimeout(200);
     assert.equal(requests,0); assert.equal(await page.evaluate(()=>_ppState.recording),false);
     assert.equal(await page.evaluate(()=>_ppState.stream),null); assert.equal(await page.evaluate(()=>pronStatsGet('prestige').tries),0);
+  } finally { await page.close(); }
+});
+
+test('domestic connection UI names Tencent, provides ZIP, and does not reuse old Azure endpoint', async () => {
+  const page = await panel();
+  try {
+    await page.evaluate(() => { localStorage.setItem('cet6_pron_assessment_endpoint_v1', 'https://old-azure.test/assess'); ppEngineSet('online'); });
+    assert.equal(await page.locator('#ppOnlineEndpoint').inputValue(), '');
+    assert.match(await page.locator('.pp-consent').innerText(), /腾讯云智聆/);
+    assert.equal(await page.locator('a[download]').getAttribute('href'), './backend/tencent-scf.zip');
+    assert.equal(await page.locator('#ppOnlineToken').getAttribute('placeholder'), '不是腾讯云 SecretKey');
+  } finally { await page.close(); }
+});
+test('Tencent mismatch is not misreported as silence, fake zero, offline match or a statistics pass', async () => {
+  const page = await panel(true);
+  try {
+    const data = structuredClone(report); data.status = 'mismatch'; data.scores.accuracy = null; data.scores.pronunciation = null; data.words[0].accuracy = null; data.words[0].errorType = 'NotRecorded';
+    await page.route('https://assessment.test/**', route => route.fulfill({ json: data }));
+    await consent(page); await take(page); await page.waitForFunction(() => _ppState.gotResult);
+    assert.match(await page.locator('#ppResult').innerText(), /未匹配目标词/); assert.equal(await page.evaluate(() => fakeFeeds), 0);
+    assert.equal(await page.evaluate(() => pronStatsGet('prestige').tries), 0);
+    assert.match(await page.locator('#ppAssessment').innerText(), /未检测到该词/); assert.equal(await page.locator('.pp-score.primary strong').innerText(), '未提供');
+    assert.equal(await page.locator('#ppPlayMineBtn').isVisible(), true);
+  } finally { await page.close(); }
+});
+test('old-provider and invalid stress/error schemas are rejected before rendering', async () => {
+  const page = await panel(true);
+  try {
+    const rejected = await page.evaluate(report => {
+      return ['provider', 'stress', 'error'].map(kind => {
+        const data = structuredClone(report);
+        if (kind === 'provider') data.provider = 'azure';
+        if (kind === 'stress') data.words[0].phonemes[0].stressDetected = 'true';
+        if (kind === 'error') data.words[0].errorType = 'fictional';
+        try { ppValidateReport(data, 'prestige'); return false; } catch { return true; }
+      });
+    }, report); assert.deepEqual(rejected, [true, true, true]);
+  } finally { await page.close(); }
+});
+test('Tencent stress and missing metrics render on mobile in light/dark without overflow', async () => {
+  const page = await panel(true);
+  try {
+    await page.setViewportSize({ width: 390, height: 844 });
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate(({ report, theme }) => { document.documentElement.setAttribute('data-theme', theme); ppShowAssessment(report); }, { report, theme });
+      assert.match(await page.locator('#ppAssessment').innerText(), /重音预期：有/); assert.match(await page.locator('#ppAssessment').innerText(), /重音检测：无/);
+      assert.equal(await page.locator('.pp-score').nth(2).locator('strong').innerText(), '未提供');
+      assert.equal(await page.evaluate(() => { const report = document.getElementById('ppAssessment'); return report.scrollWidth <= report.clientWidth; }), true);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    }
+    if (process.env.CET6_SCREENSHOT_PATH) await page.screenshot({ path: process.env.CET6_SCREENSHOT_PATH });
   } finally { await page.close(); }
 });
