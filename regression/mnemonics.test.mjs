@@ -7,7 +7,7 @@ const manifest = await loadRevisions();
 
 test('all reviewed mnemonic changes are applied in both dictionaries without changing other data', () => {
   validateRevisions(pools, manifest);
-  assert.equal(manifest.revisions.length, 202);
+  assert.equal(manifest.revisions.length, 210);
   assert.equal(pools.all.words.length, 6363);
   assert.equal(pools.full.words.length, 3324);
   assert.deepEqual(baselineFor(pools, manifest.revisions), manifest.baseline);

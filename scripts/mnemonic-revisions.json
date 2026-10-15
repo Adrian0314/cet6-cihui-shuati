@@ -1,11 +1,12 @@
 {
   "date": "2026-10-07",
+  "updated": "2026-10-15",
   "note": "人工复核修订清单；before 保留原文用于追溯，不能作为词源依据。",
   "baseline": {
     "all": {
       "count": 6363,
       "nonMemoHash": "fe92d489d6bfcecf43f11dc032fe7b17f8b42e9a7d6c02ba8a837319540f4d74",
-      "untouchedMemosHash": "36f2de3bfd70d3faeb1d9a61e8d5b74988700a22a3f4b8f0821b3d6c931952be"
+      "untouchedMemosHash": "30baf76a7b65281bd647777b6ae95d5c0b019a87eee013e2b1e397e1bba67b7f"
     },
     "full": {
       "count": 3324,
@@ -2531,7 +2532,9 @@
       "reason": "误拆",
       "memo": "提示 history 与 story 都能联系到过去的故事；这只是拼写联想，不是 his+story 的构词或词源 → 历史；历史课",
       "before": {
-        "all": ["构词 拆读 his + story：他的(his)故事(story)汇成历史 → 历史，历史课"]
+        "all": [
+          "构词 拆读 his + story：他的(his)故事(story)汇成历史 → 历史，历史课"
+        ]
       }
     },
     {
@@ -2539,8 +2542,108 @@
       "reason": "断链",
       "memo": "对照 propaganda 是为影响公众而反复传播的宣传；information 只是信息，宣传海报突出立场并劝人相信 → 宣传；鼓吹",
       "before": {
-        "all": ["[联想] pro-(提前) + pa(联想“爸”) + gan (联想“干”) + da(联想“大”)→爸爸提前说要干番大事业,还没行动就开始“鼓吹”了。"],
-        "full": ["[联想] pro-(提前) + pa(联想“爸”) + gan (联想“干”) + da(联想“大”)→爸爸提前说要干番大事业,还没行动就开始“鼓吹”了。"]
+        "all": [
+          "[联想] pro-(提前) + pa(联想“爸”) + gan (联想“干”) + da(联想“大”)→爸爸提前说要干番大事业,还没行动就开始“鼓吹”了。"
+        ],
+        "full": [
+          "[联想] pro-(提前) + pa(联想“爸”) + gan (联想“干”) + da(联想“大”)→爸爸提前说要干番大事业,还没行动就开始“鼓吹”了。"
+        ]
+      }
+    },
+    {
+      "word": "flirt",
+      "date": "2026-10-15",
+      "reason": "空泛释义",
+      "memo": "联想 聚会上只递眼色、不认真追求 → 调情；flirt with an idea 像与念头短暂调情：想过辞职，却未下决心 → 不认真地考虑",
+      "before": {
+        "all": [
+          "联想 flirt 是调情/不认真考虑"
+        ],
+        "full": []
+      }
+    },
+    {
+      "word": "foe",
+      "date": "2026-10-15",
+      "reason": "形近断链",
+      "memo": "对照 战场上 friend（朋友）与你并肩，foe 在对面向你进攻；记住 friend or foe?（是友是敌？）这句口令 → 敌人",
+      "before": {
+        "all": [
+          "联想 与 toe 形近；foe 是敌人(诗体)"
+        ],
+        "full": []
+      }
+    },
+    {
+      "word": "gear",
+      "date": "2026-10-15",
+      "reason": "空泛释义",
+      "memo": "联想 开车挂 first gear（一挡），齿轮咬合传动 → 排挡；齿轮。露营前把帐篷、睡袋等 camping gear 装进包 → 一套装备",
+      "before": {
+        "all": [
+          "联想 gear 是齿轮/装备"
+        ],
+        "full": []
+      }
+    },
+    {
+      "word": "fuss",
+      "date": "2026-10-15",
+      "reason": "空泛释义",
+      "memo": "联想 只洒了一滴水，却又尖叫又擦桌、把全家叫来忙；这时劝一句别 make a fuss：别为小事闹出大动静 → 大惊小怪；瞎忙一气",
+      "before": {
+        "all": [
+          "联想 fuss 是大惊小怪"
+        ],
+        "full": []
+      }
+    },
+    {
+      "word": "gauge",
+      "date": "2026-10-15",
+      "reason": "空泛释义",
+      "memo": "联想 开车先看 fuel gauge（油量表），指针显示剩多少油；判断别人心情，也像在读一块看不见的表 → 测量仪表；估计、判断",
+      "before": {
+        "all": [
+          "联想 gauge 是测量仪表/估计"
+        ],
+        "full": []
+      }
+    },
+    {
+      "word": "glamor",
+      "date": "2026-10-15",
+      "reason": "循环引用",
+      "memo": "联想 红毯上灯光闪耀、礼服夺目，观众看得移不开眼，像被施了魔法；这种让人着迷的吸引力就是 glamor → 魅力",
+      "before": {
+        "all": [
+          "联想 与 glamorous 同源 → 迷人的魔力 → 魅力；魔法"
+        ],
+        "full": []
+      }
+    },
+    {
+      "word": "foil",
+      "date": "2026-10-15",
+      "reason": "形近断链",
+      "memo": "联想 劫匪刚破门就被警卫堵住，整场抢劫泡汤：foil a robbery → 挫败、阻止；另用两幅画面记名词：铝箔包食物、配角衬主角 → 箔纸；陪衬者",
+      "before": {
+        "all": [
+          "联想 与 oil 形近；foil 是挫败/箔"
+        ],
+        "full": []
+      }
+    },
+    {
+      "word": "glamorous",
+      "date": "2026-10-15",
+      "reason": "循环引用",
+      "memo": "构词 红毯上礼服闪耀、令人移不开眼，是 glamor（魅力）；加 -ous 变成形容词，描写这样的明星或生活 → 迷人的；富有魅力的",
+      "before": {
+        "all": [
+          "构词 glamor(魅力) + -ous → 充满魅力的 → 迷人的"
+        ],
+        "full": []
       }
     }
   ]
