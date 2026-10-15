@@ -7,7 +7,7 @@ const manifest = await loadRevisions();
 
 test('all reviewed mnemonic changes are applied in both dictionaries without changing other data', () => {
   validateRevisions(pools, manifest);
-  assert.equal(manifest.revisions.length, 210);
+  assert.equal(manifest.revisions.length, 975);
   assert.equal(pools.all.words.length, 6363);
   assert.equal(pools.full.words.length, 3324);
   assert.deepEqual(baselineFor(pools, manifest.revisions), manifest.baseline);
@@ -60,4 +60,17 @@ test('heuristic audit selects candidates but preserves reviewed sensible mnemoni
   assert.match(soar, /烟花.*飞上天/);
   assert.ok(riskReasons(soar).length);
   assert.equal(manifest.revisions.some(item => item.word === 'soar'), false);
+});
+
+
+test('audit catches disconnected shape templates, unsupported root labels and truncated prompts without rewriting candidates', () => {
+  assert.ok(riskReasons('联想 与 case 形近，cash 是手中的现钱 → 现金').includes('形近后直接释义，需补充联系'));
+  assert.ok(riskReasons('联想 基础蔬菜词，pea 即豌豆').includes('释义重复，需补充记忆线索'));
+  assert.ok(riskReasons('联想 与 courage 同根 cour(心) → 法庭').includes('同源标签，需核查依据与词义联系'));
+  assert.ok(riskReasons('构词 inspect(检查)+-or(表示').includes('括号或结尾残缺，需核查原文'));
+  assert.ok(riskReasons('联想 na(那)+vi(六)+').includes('括号或结尾残缺，需核查原文'));
+  assert.deepEqual(riskReasons('联想 与 bag(包) 形近 → 挂在包上的小牌 → 标签'), []);
+  assert.deepEqual(riskReasons('对照 裁缝先买一匹 cloth，再剪裁缝成 clothes → 布；织物'), []);
+  // A flag requests review; a real relation can be flagged without being declared false.
+  assert.ok(riskReasons('联想 与 global 同源 → 地球；地球仪').includes('同源标签，需核查依据与词义联系'));
 });

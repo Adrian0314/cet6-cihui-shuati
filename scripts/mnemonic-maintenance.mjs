@@ -80,6 +80,12 @@ export function riskReasons(memo = '') {
   if (/发音类似[^→。]+[→。]/.test(memo)) reasons.push('音译后跳释义，需核查联系');
   if (/音译词|直接记住|直接记忆/.test(memo)) reasons.push('音译/直接记忆，需核查准确性');
   if (/indu\(|-egy\(|cru\(|tamin\(|auth\(|cas\(e\)|striken|-estic|pleaded.*pleading|anniversary.*不是.*anniversary/.test(memo)) reasons.push('可疑拆词或知识错误');
+  if (/(?:形近|形似|形同)[^→\n]{0,24}(?:本词|[A-Za-z][A-Za-z -]*)\s*(?:是|为|指|表)\s*[^→\n]+(?:→|$)/.test(memo)) reasons.push('形近后直接释义，需补充联系');
+  if (/^(?:联想|提示)\s+(?:基础[^，；,;→]{0,12}[，；,;]\s*)?[A-Za-z][A-Za-z '-]*\s*(?:即|是|指|表)\s*[^→]{1,40}$/.test(memo)) reasons.push('释义重复，需补充记忆线索');
+  if (/与[^。→\n]{1,65}(?:同源|同根)/.test(memo)) reasons.push('同源标签，需核查依据与词义联系');
+  const openings = (memo.match(/[(（]/g) || []).length;
+  const closings = (memo.match(/[)）]/g) || []).length;
+  if (openings !== closings || /[+＋]$/.test(memo.trim())) reasons.push('括号或结尾残缺，需核查原文');
   if (memo.length > 75) reasons.push('长故事/多段混搭，需核查负担');
   return reasons;
 }
