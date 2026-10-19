@@ -537,6 +537,276 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
   .quiz-card.fullscreen .opt-btn .ol{min-width:20px;width:20px;height:20px;font-size:.7em}
 }
 
+
+
+/* ============================================================
+ * 设计系统覆盖层 · Apple HIG + ui-ux-pro-max（2026-10）
+ * 置于原样式之后，靠「同特异性 + 后出现」生效；
+ * 原样式全部保留，这里只接管设计令牌与通用交互。
+ * ============================================================ */
+/* ============================================================================
+ * 设计系统覆盖层 · Apple HIG + ui-ux-pro-max（2026-10）
+ * ----------------------------------------------------------------------------
+ * 置于原样式之后，靠「同特异性 + 后出现」生效。
+ * 原样式（含词群导图 / 单词详解 / 发音练习 / 图表等模块）全部保留，
+ * 这里只接管设计令牌与通用交互。
+ *
+ * 注意：原主题机制用 :root[data-theme="light"|"dark"]，并有
+ * prefers-color-scheme 的深色回退；下面按同一套选择器覆盖，不另起机制。
+ * ========================================================================== */
+
+/* ---------- 1. 设计令牌（浅色 / 默认） ---------- */
+:root,
+:root[data-theme="light"] {
+  --bg:       #f2f2f7;
+  --surface:  #ffffff;
+  --surface2: #f4f4f7;
+  --text:     #1c1c1e;
+  --text2:    #64646a;
+  --accent:   #5b5bd6;
+  --accent2:  #8b8bf0;
+  --green:    #1d7f38;
+  --red:      #d70015;
+  --orange:   #b45309;
+  --blue:     #0062c4;
+  --pink:     #c62a92;
+  --border:   rgba(60, 60, 67, 0.14);
+
+  --radius: 16px;
+  --radius-sm: 10px;
+  --shadow: 0 1px 2px rgba(0,0,0,.05), 0 6px 18px rgba(0,0,0,.06);
+
+  --material-chrome: rgba(255,255,255,.72);
+  --material-card:    rgba(255,255,255,.90);
+  --edge-light: inset 0 1px 0 rgba(255,255,255,.85);
+  --tap: 44px;
+}
+
+/* ---------- 2. 设计令牌（深色） ---------- */
+:root[data-theme="dark"] {
+  --bg:       #000000;
+  --surface:  #1c1c1e;
+  --surface2: #2c2c2e;
+  --text:     #f5f5f7;
+  --text2:    #a8a8ad;
+  --accent:   #7d7aff;
+  --accent2:  #a5a5ff;
+  --green:    #30d158;
+  --red:      #ff453a;
+  --orange:   #ff9f0a;
+  --blue:     #0a84ff;
+  --pink:     #ff6482;
+  --border:   rgba(84, 84, 88, 0.58);
+  --shadow:   0 1px 2px rgba(0,0,0,.5), 0 6px 20px rgba(0,0,0,.5);
+  --material-chrome: rgba(28,28,30,.76);
+  --material-card:    rgba(28,28,30,.90);
+  --edge-light: inset 0 1px 0 rgba(255,255,255,.09);
+}
+@media(prefers-color-scheme:dark){
+  :root:not([data-theme]) {
+    --bg:#000000; --surface:#1c1c1e; --surface2:#2c2c2e;
+    --text:#f5f5f7; --text2:#a8a8ad;
+    --accent:#7d7aff; --accent2:#a5a5ff;
+    --green:#30d158; --red:#ff453a; --orange:#ff9f0a;
+    --blue:#0a84ff; --pink:#ff6482;
+    --border:rgba(84,84,88,.58);
+    --shadow:0 1px 2px rgba(0,0,0,.5), 0 6px 20px rgba(0,0,0,.5);
+    --material-chrome: rgba(28,28,30,.76);
+    --material-card: rgba(28,28,30,.90);
+    --edge-light: inset 0 1px 0 rgba(255,255,255,.09);
+  }
+}
+
+/* ---------- 3. 排版（HIG：字距随尺寸收紧，正文中性） ---------- */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+               system-ui, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  line-height: 1.5;
+  letter-spacing: 0;
+  transition: background-color 460ms cubic-bezier(.32,.72,0,1),
+              color 460ms cubic-bezier(.32,.72,0,1);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ---------- 4. 焦点环：永不移除 ---------- */
+:focus { outline: none; }
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ---------- 5. 即时按压反馈（pointer-down 即响应） ---------- */
+.ctrl-btn, .tab-btn, .opt-btn, .mode-btn, .freq-chip, .hm-range,
+.gmap-back, .pp-btn, .pp-close, .back-to-top, #backToTopBtn, .wd-head {
+  transition:
+    transform        160ms cubic-bezier(.32,.72,0,1),
+    background-color 160ms cubic-bezier(.32,.72,0,1),
+    box-shadow       160ms cubic-bezier(.32,.72,0,1),
+    border-color     160ms cubic-bezier(.32,.72,0,1),
+    opacity          160ms cubic-bezier(.32,.72,0,1),
+    filter           160ms cubic-bezier(.32,.72,0,1);
+  -webkit-tap-highlight-color: transparent;
+}
+.ctrl-btn:active, .tab-btn:active, .opt-btn:active, .mode-btn:active,
+.freq-chip:active, .hm-range:active, .gmap-back:active,
+.pp-btn:active, .pp-close:active, .back-to-top:active, #backToTopBtn:active,
+.wd-head:active {
+  transform: scale(.965);
+  transition-duration: 80ms;
+}
+
+/* ---------- 6. 最小触达区 44pt ----------
+ * 只加高度，不改 display：.tab-btn 原本是 .tabs 的 flex 子项，
+ * 覆盖 display 会打乱 flex 分配并让标签文字重叠。 */
+.ctrl-btn, .mode-btn, .pp-btn, .gmap-back {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.tab-btn { min-height: 44px; }
+.back-to-top, #backToTopBtn { min-width: 44px; min-height: 44px; }
+
+/* .tabs 是 sticky 浮动栏（HIG：内容在其下滚动），补上材质与滚动边缘 */
+.tabs {
+  background: var(--material-chrome);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+}
+
+/* ---------- 7. 卡片：半透明材质 + 接触阴影 ----------
+ * 只用于浮在内容之上的表面（题目卡 / 单词详解 / 图表卡 / 手写板）。
+ * .header 是页头卡片，不是浮动栏，保持不透明实底。 */
+.panel, .quiz-card, .chart-half, .word-detail, .hw-panel {
+  background: var(--material-card);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow), 0 0 0 .5px var(--border);
+}
+
+/* ---------- 8. 主按钮：唯一高饱和填充，其余灰阶 ---------- */
+.ctrl-btn.accent, .mode-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  box-shadow: 0 4px 14px rgba(91,91,214,.32);
+}
+:root[data-theme="dark"] .ctrl-btn.accent,
+:root[data-theme="dark"] .mode-btn.active {
+  box-shadow: 0 4px 18px rgba(125,122,255,.36);
+}
+
+/* ---------- 9. 选项按钮：作答主交互面 ---------- */
+.opt-btn {
+  min-height: 60px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(0,0,0,.05), 0 0 0 1px var(--border);
+}
+.opt-btn.correct { box-shadow: inset 0 0 0 2px var(--green), 0 2px 10px rgba(0,0,0,.08); }
+.opt-btn.wrong   { box-shadow: inset 0 0 0 2px var(--red),   0 2px 10px rgba(0,0,0,.08); }
+.opt-btn.correct:disabled, .opt-btn.wrong:disabled { opacity: 1; }
+
+/* ---------- 10. 作答反馈：材质「到达」而非单纯淡入 ---------- */
+@keyframes material-arrive {
+  0%   { filter: brightness(1.45); transform: scale(1.02); }
+  60%  { filter: brightness(1.10); }
+  100% { filter: brightness(1);    transform: scale(1); }
+}
+.opt-flash-green { animation: material-arrive 460ms cubic-bezier(.32,.72,0,1) both; }
+.opt-shake { animation: shake-soft 460ms cubic-bezier(.32,.72,0,1) both; }
+@keyframes shake-soft {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
+
+/* ---------- 11. 单词大字：字距随尺寸收紧 ---------- */
+.q-word {
+  font-size: clamp(1.75rem, 6vw, 2.5rem);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.022em;
+}
+
+/* ---------- 12. 统计数字等宽对齐 ---------- */
+.sv, .sdv, .fdv { font-variant-numeric: tabular-nums; font-weight: 680; }
+
+/* ---------- 12.5 回顶按钮：真正的浮动材质表面 ---------- */
+.back-to-top, #backToTopBtn {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 6px 20px rgba(0,0,0,.18), 0 0 0 .5px var(--border);
+}
+
+/* ---------- 13. Toast：材质进场 ---------- */
+.toast {
+  background: var(--material-card);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  box-shadow: 0 18px 48px rgba(0,0,0,.16), 0 0 0 .5px var(--border);
+}
+
+/* ---------- 14. 使用指南折叠：网格行高动画 ---------- */
+.rules-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 460ms cubic-bezier(.32,.72,0,1),
+              opacity 320ms cubic-bezier(.32,.72,0,1);
+}
+.rules-body > * { min-height: 0; }
+.rules-card.collapsed .rules-body { grid-template-rows: 0fr; opacity: 0; overflow: hidden; }
+
+/* ---------- 15. 滚动条（仅精确指针） ---------- */
+@media (hover: hover) and (pointer: fine) {
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(120,120,128,.45);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(120,120,128,.7); background-clip: content-box; }
+}
+
+/* ---------- 16. 移动端安全区 ---------- */
+@media (max-width: 480px) {
+  .container { padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* ---------- 17. 降级：减少动效（保留可理解性反馈，去掉位移） ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .opt-flash-green, .opt-shake, .opt-entering { animation: none !important; }
+  .opt-btn.correct { background: var(--green); color: #fff; }
+  .opt-btn.wrong   { background: var(--red);   color: #fff; }
+  .ctrl-btn:active, .tab-btn:active, .opt-btn:active,
+  .mode-btn:active, .freq-chip:active { transform: none; }
+}
+
+/* ---------- 18. 降级：减少透明度 ---------- */
+@media (prefers-reduced-transparency: reduce) {
+  .panel, .quiz-card, .chart-half, .word-detail, .toast {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: var(--surface);
+  }
+}
+
+/* ---------- 19. 降级：高对比度 ---------- */
+@media (prefers-contrast: more) {
+  :root { --border: rgba(0,0,0,.45); --text2: #3a3a3c; }
+  :root[data-theme="dark"] { --border: rgba(255,255,255,.5); --text2: #d1d1d6; }
+  .panel, .quiz-card, .opt-btn, .ctrl-btn, .word-detail, .chart-half {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: var(--surface);
+    box-shadow: 0 0 0 1px var(--border);
+  }
+}
 </style>
 <script>/* Chart.js 4.4.0 内联 *//**
  * Skipped minification because the original files appears to be already minified.
