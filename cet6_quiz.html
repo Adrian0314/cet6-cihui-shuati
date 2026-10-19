@@ -664,6 +664,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
         <select class="setting-select" id="poolSelect">
           <option value="core">📗 大纲词汇（你还在背单词吗）</option>
           <option value="full">📚 核心词汇（艾宾浩斯打卡）</option>
+          <option value="c1500">🎯 六级1500核心词（2026年6月）</option>
         </select>
       </div>
       <div class="mode-row setting-item" id="gateRow">
@@ -814,6 +815,7 @@ body{background:var(--bg);color:var(--text);line-height:1.5}
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px;">
         <button class="ctrl-btn" id="browsePoolCore" onclick="setBrowsePool('core')" style="padding:5px 10px;font-size:0.8em;">📗 大纲词汇 Unit 1-14</button>
         <button class="ctrl-btn" id="browsePoolFull" onclick="setBrowsePool('full')" style="padding:5px 10px;font-size:0.8em;">📚 核心词汇 Unit 1-10</button>
+        <button class="ctrl-btn" id="browsePoolC1500" onclick="setBrowsePool('c1500')" style="padding:5px 10px;font-size:0.8em;">🎯 1500核心词 List 1-50</button>
       </div>
       <div id="browseUnits" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px;"></div>
     </div>
@@ -880,6 +882,56 @@ function loadDataScript(src, cb) {
 }
 
 var FULL_WORDS = null; // 核心词汇，外置 full-words.js 动态加载（详解已随数据合并）
+// ===== 1500 核心词：外置 core1500-words.js 动态加载（与 full-words.js 同一加载模式） =====
+var C1500_WORDS = null;
+var _c1500Loaded = false;
+var _c1500Loading = false;
+var _c1500Failed = false;
+var _c1500Waiters = [];
+function indexC1500Words() {
+  if (_c1500Loaded || !window.__C1500_WORDS_DATA__) return;
+  C1500_WORDS = repairWordData(window.__C1500_WORDS_DATA__);
+  _c1500Loaded = true;
+  C1500_WORDS.forEach(function(w) {
+    addWordIndex('c1500', w);
+  });
+}
+function ensureC1500Words(cb) {
+  if (_c1500Loaded) { if (cb) cb(); return; }
+  if (_c1500Failed) { if (cb) cb(); return; }  // 已加载失败，不再自动重试（调用方降级）
+  if (window.__C1500_WORDS_DATA__) { indexC1500Words(); if (cb) cb(); return; }
+  if (typeof cb === 'function') _c1500Waiters.push(cb);
+  if (_c1500Loading) return;
+  _c1500Loading = true;
+  loadDataScript('core1500-words.js', function() {
+    _c1500Loading = false;
+    if (window.__C1500_WORDS_DATA__) indexC1500Words();
+    else _c1500Failed = true;
+    var w = _c1500Waiters.splice(0);
+    w.forEach(function(f) { f(); });
+    if (currentPool === 'c1500' && typeof updateFreqCount === 'function') updateFreqCount();
+  });
+}
+
+// ===== 外置词库统一入口 =====
+function isExternalPool(poolName) { return poolName === 'full' || poolName === 'c1500'; }
+function isPoolLoaded(poolName) {
+  if (poolName === 'c1500') return !!C1500_WORDS;
+  if (poolName === 'full') return !!FULL_WORDS;
+  return true;
+}
+function ensurePool(poolName, cb) {
+  if (poolName === 'c1500') { ensureC1500Words(cb); return; }
+  if (poolName === 'full') { ensureFullWords(cb); return; }
+  if (typeof cb === 'function') cb();
+}
+// 指定词库（默认当前）的原始词表数组；外置词库未就绪时返回 []
+function poolWords(poolName) {
+  var pool = poolName || currentPool || 'core';
+  if (pool === 'c1500') { ensureC1500Words(); return C1500_WORDS || []; }
+  if (pool === 'full') { ensureFullWords(); return FULL_WORDS || []; }
+  return (typeof ALL_WORDS !== 'undefined' && ALL_WORDS) ? ALL_WORDS : [];
+}
 var _fullWordsLoaded = false;
 var _fullWordsLoading = false;
 var _fullWordsFailed = false;
@@ -914,6 +966,12 @@ function ensureFullWords(cb) {
 // === INDEX BUILDING ===
 // ============ PRE-COMPUTED INDEXES ============
 function addWordIndex(poolName, w) {
+  // 外置词库可能晚于索引初始化加载，缺失时按需建容器
+  if (!window._wordMaps[poolName]) {
+    window._wordMaps[poolName] = new Map();
+    window._prefixIdxByPool[poolName] = {};
+    window._posIdxByPool[poolName] = {};
+  }
   var maps = window._wordMaps[poolName];
   var prefixIdx = window._prefixIdxByPool[poolName];
   var posIdx = window._posIdxByPool[poolName];
@@ -933,9 +991,9 @@ function addWordIndex(poolName, w) {
 
 (function buildIndexes() {
   // Each pool starts at id=1, so every lookup index must be pool-scoped.
-  window._wordMaps = { core: new Map(), full: new Map() };
-  window._prefixIdxByPool = { core: {}, full: {} };
-  window._posIdxByPool = { core: {}, full: {} };
+  window._wordMaps = { core: new Map(), full: new Map(), c1500: new Map() };
+  window._prefixIdxByPool = { core: {}, full: {}, c1500: {} };
+  window._posIdxByPool = { core: {}, full: {}, c1500: {} };
   // Backward-compatible aliases for code and diagnostics that inspect core indexes.
   window._wordMap = window._wordMaps.core;
   window._prefixIdx = window._prefixIdxByPool.core;
@@ -1438,11 +1496,15 @@ function getDefaultState() {
 }
 
 function wordStateKey(id, poolName) {
-  return (poolName === 'full' ? 'full:' : 'core:') + String(id);
+  return (isKnownPool(poolName) ? poolName : 'core') + ':' + String(id);
 }
 
 function wordPoolFromStateKey(key) {
-  return String(key).indexOf('full:') === 0 ? 'full' : 'core';
+  var s = String(key);
+  for (var i = 0; i < POOL_IDS.length; i++) {
+    if (s.indexOf(POOL_IDS[i] + ':') === 0) return POOL_IDS[i];
+  }
+  return 'core';
 }
 
 function wordIdFromStateKey(key) {
@@ -1451,7 +1513,7 @@ function wordIdFromStateKey(key) {
 }
 
 function recordPool(record) {
-  return record && record.pool === 'full' ? 'full' : 'core';
+  return (record && isKnownPool(record.pool)) ? record.pool : 'core';
 }
 
 function recordWord(record) {
@@ -1553,8 +1615,11 @@ function normalizeState(input) {
       if (isFinite(Number(id)) && Number(id) > 0) wrong[target][finiteInt(id, 0, 1)] = true;
     });
   });
-  ['cn2en_core', 'en2cn_core', 'cn2en_full', 'en2cn_full'].forEach(function(key) {
-    if (!wrong[key]) wrong[key] = {};
+  ['cn2en', 'en2cn'].forEach(function(mode) {
+    POOL_IDS.forEach(function(poolName) {
+      var key = mode + '_' + poolName;
+      if (!wrong[key]) wrong[key] = {};
+    });
   });
   s.wrongWordIds = wrong;
 
@@ -1602,7 +1667,7 @@ function normalizeState(input) {
   s.ebbingPlan = normalizeEbbingPlan(s, new Date());
   s.suspendedQuiz = isPlainObject(s.suspendedQuiz) ? s.suspendedQuiz : null;
   if (s.suspendedQuiz) {
-    s.suspendedQuiz.poolType = s.suspendedQuiz.poolType === 'full' ? 'full' : 'core';
+    s.suspendedQuiz.poolType = isKnownPool(s.suspendedQuiz.poolType) ? s.suspendedQuiz.poolType : 'core';
     s.suspendedQuiz.ids = Array.isArray(s.suspendedQuiz.ids) ? s.suspendedQuiz.ids.map(function(id) { return finiteInt(id, 0, 1); }).filter(Boolean) : [];
     s.suspendedQuiz.answers = isPlainObject(s.suspendedQuiz.answers) ? s.suspendedQuiz.answers : {};
     s.suspendedQuiz.questionSnapshots = Array.isArray(s.suspendedQuiz.questionSnapshots) ? s.suspendedQuiz.questionSnapshots : [];
@@ -1616,8 +1681,8 @@ function normalizeState(input) {
 
   var p = isPlainObject(s.prefs) ? s.prefs : {};
   s.prefs = {
-    pool: p.pool === 'full' ? 'full' : 'core',
-    units: Array.isArray(p.units) && p.units.length ? (p.units.indexOf(0) !== -1 ? [0] : [finiteInt(p.units[0], 0, 0, 14)]) : [0],
+    pool: isKnownPool(p.pool) ? p.pool : 'core',
+    units: Array.isArray(p.units) && p.units.length ? (p.units.indexOf(0) !== -1 ? [0] : [finiteInt(p.units[0], 0, 0, maxUnitOfPool(isKnownPool(p.pool) ? p.pool : 'core') || 14)]) : [0],
     size: finiteInt(p.size, def.prefs.size, 1, 1000),
     gate: finiteInt(p.gate, def.prefs.gate, 1, 3),
     mode: p.mode === 'en2cn' ? 'en2cn' : 'cn2en',
@@ -1635,11 +1700,28 @@ var currentPool = 'full';       // 'core' | 'full'
 var selectedUnits = [0];        // [0]=全部; 其他为选中的Unit编号
 var gateLevel = 2;              // 闯关模式：1速记 / 2选择 / 3 Unit综合测
 
-// 词库元信息：pool → {name, units:[...]}
+// 词库元信息：pool → {name, short, units:[...], unitLabel, grid}
+//   core  大纲词汇《你还在背单词吗》    Unit 1-14，按 4周25天打卡表调度
+//   full  核心词汇《艾宾浩斯抗遗忘打卡》 Unit 1-10，按每词 8 格周期调度
+//   c1500 六级1500核心词（2026年6月）   List 1-50，按每词 8 格周期调度
+var POOL_IDS = ['core', 'full', 'c1500'];
 var POOL_META = {
-  core: { name: '📗 大纲词汇（你还在背单词吗·刘晓艳）', units: [1,2,3,4,5,6,7,8,9,10,11,12,13,14] },
-  full: { name: '📚 核心词汇（艾宾浩斯打卡）', units: [1,2,3,4,5,6,7,8,9,10] }
+  core: { name: '📗 大纲词汇（你还在背单词吗·刘晓艳）', short: '📗 大纲词汇', unitLabel: 'Unit', grid: false,
+          units: [1,2,3,4,5,6,7,8,9,10,11,12,13,14] },
+  full: { name: '📚 核心词汇（艾宾浩斯打卡）', short: '📚 核心词汇', unitLabel: 'Unit', grid: true,
+          units: [1,2,3,4,5,6,7,8,9,10] },
+  c1500: { name: '🎯 六级1500核心词（2026年6月）', short: '🎯 1500核心词', unitLabel: 'List', grid: true,
+          units: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,
+                  31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50] }
 };
+
+function isKnownPool(poolName) { return POOL_IDS.indexOf(poolName) !== -1; }
+// 「8 格周期」按词调度的词库（核心词汇 / 1500核心词）
+function isGridPool(poolName) { var m = POOL_META[poolName]; return !!(m && m.grid); }
+function poolLabel(poolName) { var m = POOL_META[poolName]; return m ? m.short : '📗 大纲词汇'; }
+function poolUnitLabel(poolName) { var m = POOL_META[poolName]; return m ? m.unitLabel : 'Unit'; }
+function poolUnits(poolName) { var m = POOL_META[poolName]; return m ? m.units : []; }
+function maxUnitOfPool(poolName) { var u = poolUnits(poolName); return u.length ? u[u.length - 1] : 0; }
 
 // 刘晓艳《你还在背单词吗》书末「艾宾浩斯抗遗忘复习打卡表」（4 周 25 天）。
 // 14 个 Unit 全部参与自动打卡：第 1-14 天每天新学一个 Unit（学 Unit N，复习 N-1/N-3/N-6/N-11），
@@ -1717,7 +1799,7 @@ function loadState() {
 
 // ============ POOL UTILS ============
 function getActivePool() {
-  var pool = (currentPool === 'core') ? ALL_WORDS : (ensureFullWords(), (FULL_WORDS || []));
+  var pool = poolWords(currentPool);
   // Filter by selected units
   var allUnits = (selectedUnits.length === 0 || selectedUnits.indexOf(0) !== -1);
   if (allUnits) return pool;
@@ -1732,8 +1814,25 @@ function getFullWordById(id) {
   return window._wordMaps.full.get(id) || null;
 }
 
-// Wrong-word tracking: keyed by mode + pool to separate core/full
+// Wrong-word tracking: keyed by mode + pool to separate each library
 function wwKey(mode, poolName) { return mode + '_' + (poolName || currentPool); }
+
+// 所有 词库×题型 的错题容器（清空/导入迁移/统计共用，新增词库时无需再手写键名）
+function allWrongWordBuckets() {
+  var buckets = {};
+  ['cn2en', 'en2cn'].forEach(function(mode) {
+    POOL_IDS.forEach(function(poolName) { buckets[mode + '_' + poolName] = {}; });
+  });
+  return buckets;
+}
+// 某题型在全部词库下的待重做错词总数
+function wrongWordCount(mode) {
+  var total = 0;
+  POOL_IDS.forEach(function(poolName) {
+    total += Object.keys((state.wrongWordIds || {})[mode + '_' + poolName] || {}).length;
+  });
+  return total;
+}
 
 function saveState() {
   try {
@@ -1772,11 +1871,10 @@ function escapeHTML(value) {
 
 function getWord(id, poolName) {
   var pool = poolName || currentPool || 'core';
-  if (pool === 'full') {
-    ensureFullWords();
-    return window._wordMaps.full.get(id) || null;
-  }
-  return window._wordMaps.core.get(id) || null;
+  if (!isKnownPool(pool)) pool = 'core';
+  ensurePool(pool);
+  var maps = window._wordMaps[pool];
+  return (maps && maps.get(id)) || null;
 }
 
 function favoriteKey(id, poolName) {
@@ -1876,10 +1974,10 @@ function renderFavorites() {
   }
   list.innerHTML = entries.map(function(entry) {
     var word = entry.word;
-    var poolLabel = entry.pool === 'full' ? '📚 核心词汇' : '📗 大纲词汇';
+    var entryPoolLabel = poolLabel(entry.pool);
     return '<div class="hi" style="border-left-color:var(--orange);display:flex;align-items:center;justify-content:space-between;gap:10px;">' +
       '<div><strong class="hw">' + escapeHTML(word.word) + '</strong> <span style="color:var(--text2);font-size:0.85em;">' + escapeHTML(word.pronunciation || '') + '</span>' +
-      '<div style="color:var(--text2);margin-top:3px;">' + escapeHTML(getChineseFull(word.meaning)) + ' · ' + poolLabel + '</div></div>' +
+      '<div style="color:var(--text2);margin-top:3px;">' + escapeHTML(getChineseFull(word.meaning)) + ' · ' + entryPoolLabel + '</div></div>' +
       '<button class="ctrl-btn favorite-toggle active" data-favorite-toggle data-favorite-key="' + entry.key + '" aria-pressed="true">★ 已标记</button></div>';
   }).join('');
 }
@@ -2128,8 +2226,8 @@ function getDistractors(correctWord, mode, count) {
 
   // === PRIORITY 3: Same prefix (first 3 chars) ===
   var pf3 = cw.substring(0, 3);
-  var indexPool = currentPool === 'full' ? 'full' : 'core';
-  var prefixPool = window._prefixIdxByPool[indexPool][pf3] || [];
+  var indexPool = isKnownPool(currentPool) ? currentPool : 'core';
+  var prefixPool = (window._prefixIdxByPool[indexPool] || {})[pf3] || [];
   sampleRandomIds(prefixPool, Math.min(prefixPool.length, 40)).forEach(function(id) {
     if (used[id]) return;
     var w = getWord(id, indexPool);
@@ -2143,7 +2241,7 @@ function getDistractors(correctWord, mode, count) {
   var pm = correctWord.meaning.match(/^([a-z]+)\./i);
   if (pm) {
     var pos = pm[1].toLowerCase();
-    var posPool = window._posIdxByPool[indexPool][pos] || [];
+    var posPool = (window._posIdxByPool[indexPool] || {})[pos] || [];
     sampleRandomIds(posPool, Math.min(posPool.length, 60)).forEach(function(id) {
       if (used[id]) return;
       var w = getWord(id, indexPool);
@@ -2547,7 +2645,7 @@ function finishQuiz() {
     var rate = done > 0 ? Math.round(rc / done * 100) : 0;
     card.innerHTML = '<div class="empty"><div class="ei">🧠</div><p>复习完成！共 ' + total + ' 题，已答 ' + done + ' 题，答对 ' + rc + ' 题（' + rate + '%）</p>' +
       '<p style="font-size:0.85em;color:var(--text2);margin-top:6px;">' +
-      (currentPool === 'full' ? '核心词汇已按书中 8 格周期（5分/30分/12时/1天/2天/4天/7天）推进，到期的词会再次出现' : '大纲词汇已按书中 4周25天打卡表，当天到期的 Unit 已标记复习完成') +
+      (isGridPool(currentPool) ? poolLabel(currentPool) + '已按 8 格周期（5分/30分/12时/1天/2天/4天/7天）推进，到期的词会再次出现' : '大纲词汇已按 4周25天打卡表，当天到期的 Unit 已标记复习完成') +
       '</p></div>' + quizCompletionControlsHTML();
   } else if (quizState.isMemory) {
     var mw = quizState.memWrong || 0;
@@ -2778,12 +2876,13 @@ function dueUnitsByEbbing(now) {
 }
 
 // 核心词汇：8格周期 → 到期未完成格的词
-function dueWordsByGrid() {
+function dueWordsByGrid(poolName) {
+  var pool = isKnownPool(poolName) ? poolName : (isGridPool(currentPool) ? currentPool : 'full');
   var st = state.stats;
   var now = Date.now();
   var due = [];
   Object.keys(st.wordAttempts).forEach(function(key) {
-    if (wordPoolFromStateKey(key) !== 'full') return;
+    if (wordPoolFromStateKey(key) !== pool) return;
     var wa = st.wordAttempts[key];
     if (!wa.learnedAt) return;
     var dueAt = fullGridDueAt(wa);
@@ -2842,13 +2941,14 @@ function dueUnitWordIds() {
 }
 
 function getDueWordIds() {
-  if (currentPool === 'full') return dueWordsByGrid();
+  if (isGridPool(currentPool)) return dueWordsByGrid(currentPool);
   return dueUnitWordIds();
 }
 
 // 核心词汇：某词的下一格进度文本
-function gridProgressText(wordId) {
-  var wa = state.stats.wordAttempts[wordStateKey(wordId, 'full')];
+function gridProgressText(wordId, poolName) {
+  var pool = isKnownPool(poolName) ? poolName : (isGridPool(currentPool) ? currentPool : 'full');
+  var wa = state.stats.wordAttempts[wordStateKey(wordId, pool)];
   if (!wa || !wa.learnedAt) return '';
   var grid = wa.grid || [];
   var done = grid.filter(function(g) { return !!g; }).length;
@@ -2874,7 +2974,7 @@ function memoryModeOn() {
   return btn ? btn.classList.contains('active') : false;
 }
 function startMemoryQuiz(mode) {
-  ensureFullWords();
+  ensurePool(currentPool);
   var st = state.stats;
   var learned = st.wordAttempts || {};
   // 已学词集合（按拼写，兼容核心词/全词两套 id）
@@ -2939,7 +3039,7 @@ function startReview() {
   if (isExpiredEbbingPlanSnapshot(state.suspendedQuiz)) discardSaved();
   // The full pool is loaded asynchronously. Defer review queue construction
   // until it is ready so a fast mobile tap cannot observe an empty due list.
-  if (currentPool === 'full' && !_fullWordsLoaded) {
+  if (isExternalPool(currentPool) && !isPoolLoaded(currentPool)) {
     if (window._startReviewLoading) return;
     window._startReviewLoading = true;
     var reviewBtn = document.querySelector('#reviewBar button[onclick="startReview()"]');
@@ -2948,22 +3048,22 @@ function startReview() {
       reviewBtn.dataset.reviewLoading = '1';
       reviewBtn.textContent = '加载词库中…';
     }
-    ensureFullWords(function() {
+    ensurePool(currentPool, function() {
       window._startReviewLoading = false;
       if (reviewBtn && reviewBtn.dataset.reviewLoading === '1') {
         reviewBtn.disabled = false;
         reviewBtn.textContent = '开始复习';
         delete reviewBtn.dataset.reviewLoading;
       }
-      if (!_fullWordsLoaded) {
-        alert('核心词汇数据加载失败，请检查网络后重试。');
+      if (!isPoolLoaded(currentPool)) {
+        alert(poolLabel(currentPool) + '数据加载失败，请检查网络后重试。');
         return;
       }
       startReview();
     });
     return;
   }
-  ensureFullWords();
+  ensurePool(currentPool);
   if (currentPool === 'core' && !state.ebbingActive) {
     alert('纯刷题模式：尚未开启 4周25天打卡表，无打卡复习。可点击「开始 4周25天打卡表」开启复习计划。');
     return;
@@ -3012,7 +3112,8 @@ function suspendedQuestionSnapshots(q) {
 
 function restoreSuspendedQuestions(sq) {
   if (!Array.isArray(sq.questionSnapshots)) return [];
-  var poolName = sq.poolType === 'full' ? 'full' : 'core';
+  var poolName = isKnownPool(sq.poolType) ? sq.poolType : 'core';
+  ensurePool(poolName);
   return sq.questionSnapshots.map(function(snapshot) {
     if (!snapshot || !Array.isArray(snapshot.optionIds)) return null;
     var word = getWord(snapshot.wordId, poolName);
@@ -3241,15 +3342,15 @@ function resumeQuiz() {
       resumeBtn.dataset.resumeLoading = '1';
       resumeBtn.textContent = '加载词库中…';
     }
-    ensureFullWords(function() {
+    ensurePool(sq.poolType || currentPool, function() {
       window._resumeQuizLoading = false;
       if (resumeBtn && resumeBtn.dataset.resumeLoading === '1') {
         resumeBtn.disabled = false;
         resumeBtn.textContent = '继续做题';
         delete resumeBtn.dataset.resumeLoading;
       }
-      if (!_fullWordsLoaded) {
-        alert('核心词汇数据加载失败，请检查网络后重试。');
+      if (!isPoolLoaded(sq.poolType || currentPool)) {
+        alert(poolLabel(sq.poolType || currentPool) + '数据加载失败，请检查网络后重试。');
         return;
       }
       resumeQuiz();
@@ -3774,8 +3875,8 @@ function getWordDetailHTML(word, poolName, options) {
   var parts = [];
   // 打卡进度按词条所属词库显示（核心词库才有 8 格打卡；不能用做题页 currentPool 判断，
   // 否则单词浏览器里浏览大纲词时会误用核心词库的 id 查进度）
-  if (poolName === 'full' && word.id) {
-    var gp = gridProgressText(word.id);
+  if (isGridPool(poolName) && word.id) {
+    var gp = gridProgressText(word.id, poolName);
     if (gp) parts.push(['\u{1F5D3}\uFE0F', '\u6253\u5361', gp, '']);
   }
   if (word.memo) parts.push(['\u{1F9E0}', '\u5DE7\u8BB0', word.memo, '']);
@@ -3903,6 +4004,8 @@ function ensureUnitMaps(cb) {
 function canUseNewMap(word) {
   if (!word || !word.unit) return false;
   if (!window.__UNIT_MAPS_DATA__) return false;
+  // 1500核心词按 List 1-50 编号，与大纲词汇 Unit 1-14 的导图数据不是同一套，禁用以免串用错图
+  if (currentPool === 'c1500') return false;
   if (currentPool === 'full' && !ALL_WORDS.some(function(coreWord) {
     return String(coreWord.word).toLowerCase() === String(word.word).toLowerCase();
   })) return false;
@@ -4164,12 +4267,12 @@ function groupMapSVG(word) {
     // 做题词的实际词群按书页划分定位（不依赖词库 group_id），并自动下钻到其所在层
     var loc = findMapGroup(unitMap, word.word);
     // 词在书页导图数据里找不到 → 不显示新版词群导图（避免出现不含当前词的图），回退旧版（旧版含当前词）
-    if (!loc) return currentPool === 'full' ? '' : legacyGroupMapSVG(word);
+    if (!loc) return currentPool === 'core' ? legacyGroupMapSVG(word) : '';
     var id = 'gmap-' + (++_gmapSeq);
     _gmapState[id] = { unit: word.unit, gid: loc.gid, stack: loc.path, active: word.word };
     return renderGroupMap(id);
   }
-  if (currentPool === 'full') return '';
+  if (currentPool !== 'core') return '';
   return legacyGroupMapSVG(word);
 }
 
@@ -4706,7 +4809,7 @@ function recordStat(word, mode, isCorrect, isClose, isDictation) {
   // ===== 双书记忆调度 =====
   var _now = Date.now();
   if (!wa.learnedAt) wa.learnedAt = _now; // 首次作答时间（8格周期起点）
-  if (statPool === 'full') {
+  if (isGridPool(statPool)) {
     if (!wa.grid) wa.grid = [0, 0, 0, 0, 0, 0, 0];
     // Both review entry points share one chained stage transition.
     if (quizState && (quizState.isReview || quizState.isMemory)) advanceFullGridReview(wa, isCorrect, _now);
@@ -4967,10 +5070,10 @@ function renderReviewBar() {
   if (!bar) return;
   if (quizActive && (quizState.isReview || quizState.isMemory)) { bar.classList.remove('show'); return; }
   var infoEl = document.getElementById('reviewInfo');
-  if (currentPool === 'full') {
-    var n = dueWordsByGrid().length;
+  if (isGridPool(currentPool)) {
+    var n = dueWordsByGrid(currentPool).length;
     if (n > 0) {
-      infoEl.textContent = '核心词汇今天有 ' + n + ' 个单词到期复习（8格打卡：5分/30分/12时/1天/2天/4天/7天）';
+      infoEl.textContent = poolLabel(currentPool) + '今天有 ' + n + ' 个单词到期复习（8格打卡：5分/30分/12时/1天/2天/4天/7天）';
       bar.classList.add('show');
     } else {
       bar.classList.remove('show');
@@ -5152,8 +5255,8 @@ function renderStatsPage() {
   var rate = total > 0 ? Math.round(correct / total * 100) : 0;
   var cn2enR = st.cn2en.attempts > 0 ? Math.round(st.cn2en.correct / st.cn2en.attempts * 100) : 0;
   var en2cnR = st.en2cn.attempts > 0 ? Math.round(st.en2cn.correct / st.en2cn.attempts * 100) : 0;
-  var cn2enW = (Object.keys(state.wrongWordIds['cn2en_core'] || {}).length) + (Object.keys(state.wrongWordIds['cn2en_full'] || {}).length);
-  var en2cnW = (Object.keys(state.wrongWordIds['en2cn_core'] || {}).length) + (Object.keys(state.wrongWordIds['en2cn_full'] || {}).length);
+  var cn2enW = wrongWordCount('cn2en');
+  var en2cnW = wrongWordCount('en2cn');
   var today = localDateKey(new Date());
   var td = st.dailyHistory[today] || { attempts: 0, correct: 0, wrong: 0 };
   var todayR = td.attempts > 0 ? Math.round(td.correct / td.attempts * 100) : 0;
@@ -5564,17 +5667,35 @@ function renderRadarChart() {
   var st = window.state ? window.state.stats : state.stats;
   var wa = st.wordAttempts || {};
 
-  // 按当前词库的 Unit 统计（原频率雷达）
-  var units = currentPool === 'core' ? [1,2,3,4,5,6,7,8,9,10,11,12,13,14] : [1,2,3,4,5,6,7,8,9,10];
-  var names = units.map(function(u) { return 'U' + u; });
+  // 按当前词库的单元统计（原频率雷达）
+  // 单元过多（如 1500核心词的 List 1-50）时按区间合并，避免 50 根雷达轴挤在一起
+  var allUnits = poolUnits(currentPool);
+  var poolIdx = POOL_IDS.indexOf(currentPool);
+  var unitPrefix = ['U', 'U', 'L'][poolIdx >= 0 ? poolIdx : 1] || 'U';
+  var buckets = [];
+  if (allUnits.length > 14) {
+    var groupSize = Math.ceil(allUnits.length / 10);
+    for (var bi = 0; bi < allUnits.length; bi += groupSize) {
+      buckets.push(allUnits.slice(bi, bi + groupSize));
+    }
+  } else {
+    allUnits.forEach(function(u) { buckets.push([u]); });
+  }
+  var units = buckets;
+  var names = buckets.map(function(group) {
+    return group.length > 1
+      ? unitPrefix + group[0] + '-' + group[group.length - 1]
+      : unitPrefix + group[0];
+  });
   var mastery = [];
 
   units.forEach(function(unit) {
     var correct = 0, total = 0;
+    var group = Array.isArray(unit) ? unit : [unit];
     Object.keys(wa).forEach(function(wid) {
       if (wordPoolFromStateKey(wid) !== currentPool) return;
       var w = getWord(wordIdFromStateKey(wid), currentPool);
-      if (w && (w.unit || 0) === unit) {
+      if (w && group.indexOf(w.unit || 0) !== -1) {
         correct += wa[wid].correct || 0;
         total += wa[wid].attempts || 0;
       }
@@ -5947,8 +6068,11 @@ function handleImport(file) {
       // 迁移：旧备份已有 ebbingStart → 视为已手动开启打卡表
       if (state.ebbingStart) state.ebbingActive = true;
       if (!state.wrongWordIds) state.wrongWordIds = {};
-      if (!state.wrongWordIds['cn2en_core']) state.wrongWordIds['cn2en_core'] = {};
-      if (!state.wrongWordIds['en2cn_core']) state.wrongWordIds['en2cn_core'] = {};
+      ['cn2en', 'en2cn'].forEach(function(mode) {
+        POOL_IDS.forEach(function(poolName) {
+          if (!state.wrongWordIds[mode + '_' + poolName]) state.wrongWordIds[mode + '_' + poolName] = {};
+        });
+      });
       if (!state.stats.wordAttempts) state.stats.wordAttempts = {};
       if (!state.stats.dailyHistory) state.stats.dailyHistory = {};
       if (!state.stats.dictation) state.stats.dictation = { attempts: 0, correct: 0, wrong: 0, close: 0 };
@@ -5956,7 +6080,8 @@ function handleImport(file) {
       if (!state.stats.en2cn_dict) state.stats.en2cn_dict = { attempts: 0, correct: 0, wrong: 0, close: 0 };
 
       // Restore pool/mode settings
-      if (data.currentPool === 'full' || data.currentPool === 'core') currentPool = data.currentPool;
+      if (isKnownPool(data.currentPool)) currentPool = data.currentPool;
+      if (data.currentPool && !isKnownPool(data.currentPool)) currentPool = 'core';
       if (Array.isArray(data.selectedUnits) && data.selectedUnits.length) selectedUnits = data.selectedUnits.indexOf(0) !== -1 ? [0] : [data.selectedUnits[0]];
       if (isFinite(Number(data.gateLevel))) gateLevel = finiteInt(data.gateLevel, gateLevel, 1, 3);
       if (data.currentMode === 'cn2en' || data.currentMode === 'en2cn') currentMode = data.currentMode;
@@ -5992,7 +6117,8 @@ function renderFreqStats() {
   if (!freqGrid) return;
   var st = state.stats;
   var wa = st.wordAttempts || {};
-  var units = currentPool === 'core' ? [1,2,3,4,5,6,7,8,9,10,11,12,13,14] : [1,2,3,4,5,6,7,8,9,10];
+  var units = poolUnits(currentPool);
+  var uLabel = poolUnitLabel(currentPool);
   var unitColors = ['#7c3aed', '#2563eb', '#059669', '#d97706', '#dc2626', '#0891b2', '#db2777', '#65a30d', '#ea580c', '#4f46e5', '#0d9488', '#ca8a04', '#9333ea', '#e11d48'];
   // 词→unit 映射（按词库）
   var wordUnitMap = {};
@@ -6021,7 +6147,7 @@ function renderFreqStats() {
     var rate = us.attempts > 0 ? Math.round(us.correct / us.attempts * 100) : 0;
     var c = unitColors[(u - 1) % unitColors.length];
     html += '<div class="fdc" style="border-left-color:' + c + '">' +
-      '<div class="fdv" style="color:' + c + '">Unit ' + u + '</div>' +
+      '<div class="fdv" style="color:' + c + '">' + uLabel + ' ' + u + '</div>' +
       '<div class="fdl">词数：' + us.words + ' | 练习：' + us.attempts + '题</div>' +
       '<div class="fdl">正确率：' + rate + '% | ✅' + us.correct + ' ❌' + us.wrong + '</div>' +
       '<div class="pbar"><div class="fill" style="transform:scaleX(' + (Math.max(rate, 3)/100) + ');background:' + c + '"></div></div>' +
@@ -6042,10 +6168,11 @@ function buildUnitChips() {
   var select = document.getElementById('unitSelect');
   if (!select) return;
   var units = POOL_META[currentPool] ? POOL_META[currentPool].units : [];
+  var uLabel = poolUnitLabel(currentPool);
   var currentUnit = selectedUnits.indexOf(0) !== -1 ? 0 : (selectedUnits[0] || 0);
   select.innerHTML = '<option value="0">全部单元</option>';
   units.forEach(function(u) {
-    select.insertAdjacentHTML('beforeend', '<option value="' + u + '">Unit ' + u + '</option>');
+    select.insertAdjacentHTML('beforeend', '<option value="' + u + '">' + uLabel + ' ' + u + '</option>');
   });
   select.value = String(currentUnit);
 }
@@ -6179,7 +6306,7 @@ document.getElementById('retryQuizBtn').addEventListener('click', function() {
 document.getElementById('clearWrongBtn').addEventListener('click', function() {
   if (confirm('确定要清空所有错题记录吗？（同时清空待重做的错题）此操作不可恢复！')) {
     state.wrongHistory = [];
-    state.wrongWordIds = { 'cn2en_core': {}, 'en2cn_core': {}, 'cn2en_full': {}, 'en2cn_full': {} };
+    state.wrongWordIds = allWrongWordBuckets();
     saveState();
     renderAll();
   }
@@ -6207,10 +6334,10 @@ if (poolSelect) poolSelect.addEventListener('change', function() {
       savePrefs();
       renderAll();  // 刷新打卡计划区等按 currentPool 变化的内容
     }
-    if (pool === 'full') {
-      // 核心词汇数据外置：先确保数据加载完成再切换，避免空白/报错；失败则提示不切换
-      ensureFullWords(function() {
-        if (!FULL_WORDS) { showImportMsg('核心词汇数据加载失败，请检查网络后重试', 'error'); return; }
+    if (isExternalPool(pool)) {
+      // 外置词库（核心词汇 / 1500核心词）：先确保数据加载完成再切换，避免空白/报错；失败则提示不切换
+      ensurePool(pool, function() {
+        if (!isPoolLoaded(pool)) { showImportMsg(poolLabel(pool) + '加载失败，请检查网络后重试', 'error'); return; }
         doSwitch();
       });
     } else {
@@ -7474,6 +7601,7 @@ function findBestDictWord(lower) {
   var list = [];
   if (typeof ALL_WORDS !== 'undefined' && ALL_WORDS) list = list.concat(ALL_WORDS);
   if (typeof FULL_WORDS !== 'undefined' && FULL_WORDS && FULL_WORDS.length) list = list.concat(FULL_WORDS);
+  if (typeof C1500_WORDS !== 'undefined' && C1500_WORDS && C1500_WORDS.length) list = list.concat(C1500_WORDS);
   var best = null, bestDist = 3;
   for (var i = 0; i < list.length; i++) {
     var w = list[i].word;
@@ -7495,14 +7623,13 @@ var _browsePool = 'core';
 var _browseUnit = 0; // 0 = 全部单元
 try {
   var _bpSaved = localStorage.getItem('cet6_browse_pool');
-  if (_bpSaved === 'full' || _bpSaved === 'core') _browsePool = _bpSaved;
+  if (isKnownPool(_bpSaved)) _browsePool = _bpSaved;
 } catch (e) {}
 function browsePoolWords() {
-  if (_browsePool === 'full') return FULL_WORDS || [];
-  return (typeof ALL_WORDS !== 'undefined' && ALL_WORDS) ? ALL_WORDS : [];
+  return poolWords(_browsePool);
 }
 function setBrowsePool(p) {
-  _browsePool = (p === 'full') ? 'full' : 'core';
+  _browsePool = isKnownPool(p) ? p : 'core';
   _browseUnit = 0;
   _browsePage = 0;
   try { localStorage.setItem('cet6_browse_pool', _browsePool); } catch (e) {}
@@ -7516,29 +7643,33 @@ function setBrowseUnit(u) {
 function renderBrowseUnitChips() {
   var box = document.getElementById('browseUnits');
   if (!box) return;
-  var maxUnit = _browsePool === 'full' ? 10 : 14;
-  var html = '<span style="color:var(--text2);font-size:0.78em;">单元</span>' +
+  var maxUnit = maxUnitOfPool(_browsePool) || 14;
+  var browseUnitLabel = poolUnitLabel(_browsePool);
+  var html = '<span style="color:var(--text2);font-size:0.78em;">' + browseUnitLabel + '</span>' +
     '<button class="ctrl-btn' + (_browseUnit === 0 ? ' accent' : '') + '" onclick="setBrowseUnit(0)" style="padding:3px 9px;font-size:0.78em;">全部</button>';
   for (var u = 1; u <= maxUnit; u++) {
-    html += '<button class="ctrl-btn' + (_browseUnit === u ? ' accent' : '') + '" onclick="setBrowseUnit(' + u + ')" style="padding:3px 9px;font-size:0.78em;">Unit ' + u + '</button>';
+    html += '<button class="ctrl-btn' + (_browseUnit === u ? ' accent' : '') + '" onclick="setBrowseUnit(' + u + ')" style="padding:3px 9px;font-size:0.78em;">' + browseUnitLabel + ' ' + u + '</button>';
   }
   box.innerHTML = html;
   var bc = document.getElementById('browsePoolCore');
   var bf = document.getElementById('browsePoolFull');
+  var bx = document.getElementById('browsePoolC1500');
   if (bc) bc.classList.toggle('accent', _browsePool === 'core');
   if (bf) bf.classList.toggle('accent', _browsePool === 'full');
+  if (bx) bx.classList.toggle('accent', _browsePool === 'c1500');
 }
 function renderBrowse() {
   var list = document.getElementById('browseList');
   if (!list) return;
   renderBrowseUnitChips();
-  if (_browsePool === 'full' && !FULL_WORDS) {
-    if (_fullWordsFailed) {
-      list.innerHTML = '<p style="text-align:center;color:var(--text2);padding:40px;">核心词汇加载失败，请检查网络后刷新</p>';
+  if (isExternalPool(_browsePool) && !isPoolLoaded(_browsePool)) {
+    var _bFailed = (_browsePool === 'c1500') ? _c1500Failed : _fullWordsFailed;
+    if (_bFailed) {
+      list.innerHTML = '<p style="text-align:center;color:var(--text2);padding:40px;">' + poolLabel(_browsePool) + '加载失败，请检查网络后刷新</p>';
       return;
     }
     list.innerHTML = '<p style="text-align:center;color:var(--text2);padding:40px;">词库加载中...</p>';
-    ensureFullWords(function() { renderBrowse(); });
+    ensurePool(_browsePool, function() { renderBrowse(); });
     return;
   }
   var words = browsePoolWords();
@@ -7571,7 +7702,8 @@ function renderBrowse() {
       '<span><strong>' + w.word + '</strong> <span style=\"color:var(--text2);font-size:0.85em\">' + (w.pronunciation || '') + '</span>' +
       '<span onclick=\"speakWord(&quot;' + w.word + '&quot;)\" style=\"cursor:pointer;font-size:0.95em;margin-left:8px;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;vertical-align:middle;border-radius:50%;transition:background 200ms;\" title=\"朗读发音\">\u{1F50A}</span></span>' +
       '<span><button class=\"ctrl-btn\" id=\"bdbtn-' + w.word + '\" style=\"padding:6px 12px;font-size:0.8em\" onclick=\"toggleBrowseDetail(&quot;' + w.word + '&quot;)\">\u67E5\u8BE2</button> ' +
-      '<button class=\"ctrl-btn\" style=\"padding:6px 12px;font-size:0.8em\" onclick=\"toggleBrowseMap(&quot;' + w.word + '&quot;)\">\u{1F5FA}\uFE0F 导图</button> ' +
+      // 1500核心词没有词群导图数据，不显示「导图」按钮，避免点了空白
+      ((_browsePool === 'c1500') ? '' : '<button class=\"ctrl-btn\" style=\"padding:6px 12px;font-size:0.8em\" onclick=\"toggleBrowseMap(&quot;' + w.word + '&quot;)\">\u{1F5FA}\uFE0F 导图</button> ') +
       '<button class=\"ctrl-btn favorite-toggle' + (isFavorite(w.id, _browsePool) ? ' active' : '') + '\" data-favorite-toggle data-favorite-key=\"' + favoriteKey(w.id, _browsePool) + '\" aria-pressed=\"' + (isFavorite(w.id, _browsePool) ? 'true' : 'false') + '\">' + (isFavorite(w.id, _browsePool) ? '★ 已标记' : '☆ 标记重点') + '</button></span></div>' +
       (_uinfo ? '<div style=\"color:var(--accent2);font-size:0.78em;margin-top:3px\">📁 ' + _uinfo + _star + '</div>' : '') +
       '<div style=\"color:var(--text2);font-size:0.85em;margin-top:2px\">' + posHtml + '</div>' +
@@ -7600,7 +7732,7 @@ function toggleBrowseDetail(word) {
   if (!box || !btn) return;
   if (box.style.display === 'none') {
     if (!box.innerHTML) {
-      // 按当前浏览词库精确匹配（不能用 id：核心词汇与大纲词汇 id 编号体系不同会冲突）
+      // 按当前浏览词库精确匹配（不能用 id：各词库 id 编号体系不同会冲突）
       var pool = _browsePool;
       var arr = browsePoolWords();
       var w = null;
@@ -7667,20 +7799,20 @@ function toggleBrowseMap(word) {
 // ============ SPACED REPETITION ============
 function checkSpacedRepetition() {
   if (quizActive) return; // 做题/复习中不弹窗
-  if (currentPool !== 'full' && !state.ebbingActive) return; // 纯刷题大纲词汇：不弹复习提醒
+  if (!isGridPool(currentPool) && !state.ebbingActive) return; // 纯刷题大纲词汇：不弹复习提醒
   var due = getDueWordIds();
   if (due.length === 0) return;
   var st = state.stats;
   var now = Date.now();
   var lines, title, desc;
-  if (currentPool === 'full') {
-    // 核心词汇：8格周期
-    title = '🧠 核心词汇复习提醒（8格打卡）';
+  if (isGridPool(currentPool)) {
+    // 8格周期词库（核心词汇 / 1500核心词）
+    title = '🧠 ' + poolLabel(currentPool).replace(/^[^\u4e00-\u9fff]+/, '') + '复习提醒（8格打卡）';
     desc = '以下单词已到书中的记忆周期复习点（5分/30分/12时/1天/2天/4天/7天）：';
     var dueInfo = due.slice(0, 5).map(function(id) {
-      var key = wordStateKey(id, 'full');
+      var key = wordStateKey(id, currentPool);
       var wa = st.wordAttempts[key] || {};
-      var w = getWord(id, 'full');
+      var w = getWord(id, currentPool);
       return (w ? w.word : '?') + ' (' + gridProgressText(id) + ')';
     });
     lines = dueInfo.join('\n');
@@ -7702,7 +7834,7 @@ function checkSpacedRepetition() {
       }).join('\n') + '\n合计待完成 ' + due.length + ' 题' : '';
     }
   }
-  if (currentPool === 'full' && due.length > 5) lines += '\n...还有 ' + (due.length - 5) + ' 个单词';
+  if (isGridPool(currentPool) && due.length > 5) lines += '\n...还有 ' + (due.length - 5) + ' 个单词';
   var modal = document.createElement('div');
   modal.id = 'reviewReminderModal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:400;display:flex;align-items:center;justify-content:center;';
@@ -7770,7 +7902,7 @@ updatePrefsSnapshot();  // 记录「上次已保存」的模式快照，退出�
 checkSuspendedQuiz();
 setTimeout(function() { showOnboarding(); }, 500);
 setTimeout(function() { checkSpacedRepetition(); }, 1200);
-if (currentPool === 'full' && !_fullWordsLoaded) {
+if (isExternalPool(currentPool) && !isPoolLoaded(currentPool)) {
   // 上次停在核心词汇：先加载外置数据再渲染，避免空白/报错
   ensureFullWords(function() { renderAll(); });
 } else {
