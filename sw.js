@@ -1,6 +1,6 @@
 // CET-6 Quiz Service Worker — resource caching (PWA)
 // v5: 安装阶段只缓存轻量资源；大词库和页面改为访问时按需缓存，避免微信内置浏览器首次打开长时间转圈
-var CACHE_NAME = 'cet6-cihui-shuati-v44';
+var CACHE_NAME = 'cet6-cihui-shuati-v45';  // v45: 新增 core1500-words.js（1500核心词）
 var ASSETS = [
   './manifest.json',
   './icon-192.png',
