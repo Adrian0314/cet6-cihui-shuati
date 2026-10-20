@@ -1,11 +1,11 @@
 {
   "date": "2026-10-07",
-  "updated": "2026-10-15",
-  "note": "人工复核修订清单；before 保留原文用于追溯，不能作为词源依据。",
+  "updated": "2026-10-20",
+  "note": "人工复核修订清单；before 保留原文用于追溯，不能作为词源依据。2026-10-20 追加：hearing 释义串行修正（原误填 bearing 的「影响;姿态;方位;支座」，已改为「n.听觉；听力；听审」），据 memo 与例句核对确认；all 池 nonMemoHash 基线随之更新，memo 与其余字段未变。",
   "baseline": {
     "all": {
       "count": 6363,
-      "nonMemoHash": "fe92d489d6bfcecf43f11dc032fe7b17f8b42e9a7d6c02ba8a837319540f4d74",
+      "nonMemoHash": "3240ec33bed746d571f1592e529b3befd072d84967976e5570e64f4ce1d904a3",
       "untouchedMemosHash": "dbf4443e11c3ec5fd5d6ebf15e2f06b114c6bf7df93476dd6ce47832a12c7c12"
     },
     "full": {
