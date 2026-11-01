@@ -172,11 +172,32 @@
 
 ## 🗂 项目结构
 
-所有文件扁平存放于仓库根目录：
+前端已模块化拆分（2026-10 重构），源码按职责分目录存放：
 
 ```
 README.md             项目说明
-cet6_quiz.html        主程序（单文件，含全部数据 + 图表库）
+cet6_quiz.html        主程序入口（HTML 骨架 + 内嵌词库数据块）
+├─ css/app.css        统一样式表（三层级联合并为单文件）
+├─ vendor/chartjs.js  Chart.js 4.4.0 第三方库
+├─ js/                应用逻辑模块（18 个文件，按职责拆分）
+│   ├─ data.js            词库加载与索引（ALL_WORDS / FULL_WORDS / C1500）
+│   ├─ theme.js           主题切换（白天/黑夜，View Transitions API）
+│   ├─ state.js           localStorage 状态管理 + 规范化迁移
+│   ├─ words.js           单词查询、词性、释义清洗
+│   ├─ distractors.js     选择题干扰项生成
+│   ├─ quiz-engine.js     出题引擎、调度、记忆模式
+│   ├─ save-resume.js     进度暂存与恢复、偏好持久化
+│   ├─ gesture.js         手势闸门（切后台恢复防误触）
+│   ├─ render.js          题卡渲染、词群导图、单词详解
+│   ├─ charts.js          统计图表（雷达/热力图/趋势）
+│   ├─ export-import.js   数据导出导入、频率统计 UI
+│   ├─ events.js          事件绑定与 data-action 委托
+│   ├─ tts.js             朗读发音（TTS + 媒体音频）
+│   ├─ pronunciation.js    发音练习面板
+│   ├─ skip-keyboard.js    跳过/键盘快捷键/滚动
+│   ├─ handwrite.js       默写手写输入
+│   ├─ browse.js           单词浏览器
+│   └─ app.js             初始化与回顶按钮
 full-words.js         外置打卡词库（核心词汇 3,324 词）
 core1500-words.js     外置 1500 核心词库（2026 年 6 月，1,500 词 / List 1-50）
 unit-maps.js          外置词群导图数据（Unit 1-10）
@@ -188,7 +209,7 @@ dict-server.js        本地词典抓取服务（node dict-server.js，端口 17
 打开词群编辑器.bat     一键启动编辑器（自动拉起词典服务）
 启动词典服务.bat       单独启动词典服务
 manifest.json         PWA 应用清单
-sw.js                 Service Worker（资源缓存）
+sw.js                 Service Worker（资源缓存，v46）
 icon-192.png / icon-512.png / apple-touch-icon.png   应用图标
 site-qrcode.png       网站二维码
 build-core-words.js   构建脚本（生成词库索引 core-words.js）
@@ -197,7 +218,11 @@ scan_meaning_bugs.js  释义数据质量扫描工具
 _lookup.js            单词查询小工具
 ```
 
+构建脚本依赖说明：`build-core-words.js`、`scan_meaning_bugs.js`、`scripts/mnemonic-maintenance.mjs` 均通过正则读取 `cet6_quiz.html` 中内嵌的 `<script type="application/json" id="data-all-words">` 数据块，该块在重构后保持原位不变。`regression/` 目录下的回归测试依赖全局函数（`quizState`、`speakWord`、`ensureFullWords`、`applyTheme`、`openPronPractice`、`_ppState` 等），这些函数在模块拆分后仍挂在 `window` 上，契约不变。
+
 释义扫描脚本用法：在仓库根目录运行 `node scan_meaning_bugs.js`。
+
+回归测试用法：`node --test regression/pronunciation-single-mode.test.mjs regression/mnemonics.test.mjs regression/mnemonics-browser.test.mjs regression/pronunciation.test.mjs`（需先 `npm i -D @playwright/test playwright` 安装浏览器）。
 
 > **测试文件不入库**：Playwright 用例（`*.spec.js`）与 Python 回归脚本（`test_*.py`）只在本地保留，
 > 已在 `.gitignore` 中忽略，不会被提交或推送。下方修复记录里提到的用例名与运行命令，
@@ -205,13 +230,22 @@ _lookup.js            单词查询小工具
 
 ## 🛠 技术栈
 
-原生 HTML + CSS + JavaScript（无框架）、Chart.js（已内联）、Vosk WASM、MediaRecorder、Web Audio / 系统语音、Service Worker、localStorage、Node.js（词群编辑器与构建脚本）、Python（音标数据维护）。
+原生 HTML + CSS + JavaScript（无框架）、Chart.js 4.4.0（vendor 目录）、Vosk WASM、MediaRecorder、Web Audio / 系统语音、Service Worker、localStorage、Node.js（词群编辑器与构建脚本）、Python（音标数据维护）。
 
 ## 📄 License
 
 MIT
 
 ## 📝 更新与修复记录
+
+### 前端模块化重构（2026-10）
+
+- **拆分模块**：将原 8,253 行单文件 `cet6_quiz.html`（含 ~7,100 行内联 JS、~800 行内联 CSS）拆分为 18 个 JS 模块（`js/`）+ 1 个统一样式表（`css/app.css`）+ Chart.js vendor 文件（`vendor/chartjs.js`）。`cet6_quiz.html` 保留为轻量 HTML 骨架（约 300 行），内嵌词库数据块不变。
+- **统一 CSS**：将原有三层 CSS 级联（基础层 / Study Desk 刷新层 / Apple HIG 覆盖层）合并为单一 `css/app.css`（713 行）。设计令牌以 HIG 层为准（Apple 色板 + 空间节奏 + 半透明材质），消除三处重复 `:root` 块；所有组件样式完整保留。
+- **主题闪白修复**：在 `<head>` 中增加阻塞脚本，首帧即读取 `localStorage` 并设定 `data-theme`，避免暗色模式下页面加载瞬间的白闪。
+- **移除内联事件处理器**：将 21 处 `onclick`/`oninput`/`onkeydown` 替换为 `data-action` 属性委托（在 `js/events.js` 统一处理），HTML 中不再有任何内联 JS。
+- **Service Worker**：版本升级 v45 → v46；`css/` `js/` `vendor/` 路径纳入 network-first 策略，保证发版后用户即时获取最新模块。
+- **回归验证**：全部 27 项自动化测试通过（pronunciation-single-mode × 5 / mnemonics × 6 / mnemonics-browser × 3 / pronunciation × 13）；localStorage 向后兼容，所有全局函数契约不变。
 
 ### 新增第三个词库：🎯 六级 1500 核心词（2026 年 6 月）
 
