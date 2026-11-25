@@ -684,8 +684,9 @@ body {
 /* ---------- 17. 降级：减少动效（保留可理解性反馈，去掉位移） ---------- */
 @media (prefers-reduced-motion: reduce) {
   .opt-flash-green, .opt-shake, .opt-entering { animation: none !important; }
-  .opt-btn.correct { background: var(--green); color: #fff; }
-  .opt-btn.wrong   { background: var(--red);   color: #fff; }
+  /* 只关闭动效，答题后的配色仍沿用常规模式的浅色底 + 正常文字颜色。
+     不能在这里写 color:#fff：选项的浅色反馈底是 !important 的 8%~10% 蒙层，
+     白字叠在白底上会看不见（Windows 关闭“动画效果”时桌面端会命中此媒体查询）。 */
   .ctrl-btn:active, .tab-btn:active, .opt-btn:active,
   .mode-btn:active, .freq-chip:active { transform: none; }
 }
