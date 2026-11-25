@@ -44,17 +44,18 @@ var quizActive = false;
 
 function buildQuiz(mode, wordPool, options) {
   _lastCompletion = null;
+  var opts = options || {};
   var pool = wordPool || getActivePool();
   var ids = pool.map(function(w) { return w.id; });
   // 过滤无效 id（数据异常保护）
   ids = ids.filter(function(id) { return getWord(id, currentPool) !== null; });
   // 队列：当前筛选范围的全部单词（按书中顺序）；重做模式默认全部错题乱序，
-  // 复习最近错词时传 keepOrder，让最近答错的词先出现。
+  // 复习最近错词/继续学习时传 keepOrder，保持调用方给定的顺序。
   var ordered = ids;
-  var finalIds = (!!wordPool && !(options && options.keepOrder)) ? shuffle(ordered) : ordered;
+  var finalIds = (!!wordPool && !opts.keepOrder) ? shuffle(ordered) : ordered;
   quizState = {
     mode: mode,
-    isRetry: !!wordPool,
+    isRetry: opts.isRetry !== undefined ? !!opts.isRetry : !!wordPool,
     isSmart: false,
     isReview: false,
     isMemory: false,
@@ -83,7 +84,7 @@ function startRetryQuiz(mode) {
   if (ids.length === 0) { alert('当前模式没有错题可以复习！'); return; }
   var words = ids.map(function(id) { return getWord(id, currentPool); }).filter(Boolean);
   if (words.length === 0) { alert('错题数据异常'); return; }
-  buildQuiz(mode, words, { keepOrder: true });
+  buildQuiz(mode, words, { keepOrder: true, isRetry: true });
   advanceQuestion();
   renderAll();
 }
@@ -279,7 +280,53 @@ function quizCompletionControlsHTML(onHome) {
 function continueLearningFromCompletion() {
   _lastCompletion = null;
   if (memoryModeOn()) startMemoryQuiz(currentMode);
-  else startNewQuiz(currentMode);
+  else startContinueLearning(currentMode);
+}
+
+// 继续学习：从“最近一次新学单词”的下一个未学词开始，只推送当前筛选范围内
+// 尚未作答过的词；已经学完的词不从头重刷。全部学过时退回智能练习，
+// 按到期/薄弱词优先级继续，而不是又把整库从第 1 题开始。
+function getContinueLearningIds(mode, poolName) {
+  var pool = poolName || currentPool || 'core';
+  if (!isKnownPool(pool)) pool = currentPool || 'core';
+  ensurePool(pool);
+  var candidates = getActivePool().filter(function(word) { return !!getWord(word.id, pool); });
+  var attempts = (state.stats && state.stats.wordAttempts) || {};
+  var unlearnedIndexes = [];
+  var lastLearnedIndex = -1;
+  var lastLearnedAt = -1;
+  candidates.forEach(function(word, index) {
+    var wa = attempts[wordStateKey(word.id, pool)] || {};
+    if ((Number(wa.attempts) || 0) > 0 || wa.learnedAt) {
+      var learnedAt = Number(wa.learnedAt) || 0;
+      if (learnedAt >= lastLearnedAt) { lastLearnedAt = learnedAt; lastLearnedIndex = index; }
+      return;
+    }
+    unlearnedIndexes.push(index);
+  });
+  if (unlearnedIndexes.length === 0) return [];
+  // 优先从最近学会的词之后接着学；后面没有新词时回到开头补齐漏学的词。
+  var startPos = 0;
+  for (var i = 0; i < unlearnedIndexes.length; i++) {
+    if (unlearnedIndexes[i] > lastLearnedIndex) { startPos = i; break; }
+  }
+  var ordered = unlearnedIndexes.slice(startPos).concat(unlearnedIndexes.slice(0, startPos));
+  return ordered.map(function(index) { return candidates[index].id; });
+}
+
+function startContinueLearning(mode) {
+  _lastCompletion = null;
+  var quizMode = mode || currentMode;
+  var ids = getContinueLearningIds(quizMode, currentPool);
+  var words = ids.map(function(id) { return getWord(id, currentPool); }).filter(Boolean);
+  if (words.length === 0) {
+    // 当前筛选范围已经全部学过：按优先级练到期/薄弱词，避免从头重刷整库。
+    startSmartQuiz(quizMode);
+    return;
+  }
+  buildQuiz(quizMode, words, { keepOrder: true, isRetry: false });
+  advanceQuestion();
+  renderAll();
 }
 
 function startEbbingPlanFromCompletion() {

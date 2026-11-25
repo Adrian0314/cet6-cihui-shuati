@@ -78,6 +78,8 @@ document.querySelectorAll('.hm-range').forEach(function(btn) {
 });
 
 document.getElementById('startBtn').addEventListener('click', function() {
+  // 完成一轮后按钮变为「继续学习」：接着未学词继续，不从头重刷整库。
+  if (typeof _lastCompletion !== 'undefined' && _lastCompletion) { continueLearningFromCompletion(); return; }
   if (memoryModeOn()) startMemoryQuiz(currentMode);
   else startNewQuiz(currentMode);
 });

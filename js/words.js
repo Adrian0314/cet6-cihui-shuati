@@ -63,12 +63,13 @@ function getSmartQueueIds(poolName, limit, sourceIds) {
   } else if (pool === currentPool) {
     candidates = getActivePool().filter(function(word) { return !!getWord(word.id, pool); });
   } else {
-    ensureFullWords();
-    var raw = pool === 'full' ? (FULL_WORDS || []) : ALL_WORDS;
+    var raw = poolWords(pool);
     candidates = raw.filter(function(word) { return !!getWord(word.id, pool); });
   }
   var due = {};
-  var dueIds = pool === 'full' ? dueWordsByGrid() : dueUnitWordIds();
+  // 8 格周期词库（核心词汇 / 1500 核心词）都按每个词的到期时间判断；
+  // 只有大纲词汇才走 4周25天 的 Unit 级到期。
+  var dueIds = isGridPool(pool) ? dueWordsByGrid(pool) : dueUnitWordIds();
   dueIds.forEach(function(id) { due[id] = true; });
   var attempts = state.stats.wordAttempts || {};
   var ranked = candidates.map(function(word, index) {
@@ -91,7 +92,9 @@ function startSmartQuiz(mode, sourceIds) {
   var ids = getSmartQueueIds(currentPool, 0, sourceIds);
   if (ids.length === 0) { alert('当前筛选范围没有可练习的单词。'); return; }
   var words = ids.map(function(id) { return getWord(id, currentPool); }).filter(Boolean);
-  buildQuiz(mode || currentMode, words);
+  // 智能练习的队列已按优先级排好序，buildQuiz 不能再打乱，否则
+  // 「到期/重点/薄弱词优先」会被随机顺序覆盖。
+  buildQuiz(mode || currentMode, words, { keepOrder: true });
   quizState.isRetry = false;
   quizState.isSmart = true;
   document.getElementById('retryInfo').classList.remove('show');
