@@ -62,10 +62,8 @@ function switchTab(tab, btn) {
 }
 document.querySelectorAll('.tab-btn').forEach(function(btn) {
   btn.addEventListener('click', function() {
-    var tab = this.dataset.tab;
-    // 直接切换；离开做题页时若有模式调整，显示非阻塞保留提示条（可忽略＝默认保留当前模式）
-    switchTab(tab, this);
-    if (tab !== 'quiz' && typeof askKeepPrefs === 'function') askKeepPrefs();
+    // 直接切换，练习设置已即时保存，不再弹「是否保留当前模式」提示。
+    switchTab(this.dataset.tab, this);
   });
 });
 
@@ -100,12 +98,10 @@ document.getElementById('favoriteSmartBtn').addEventListener('click', function()
 });
 
 document.getElementById('retryQuizBtn').addEventListener('click', function() {
-  var ws = state.wrongWordIds[wwKey(currentMode)] || {};
-  var wc = Object.keys(ws).length;
-  if (wc === 0) { alert('当前模式没有错题可以重做！'); return; }
-  if (wc < 4) { alert('当前模式错题不足4道（至少需要4道才能生成选项），继续积累吧~'); return; }
+  var recent = recentWrongWordIds(currentMode, currentPool);
+  if (recent.length === 0) { alert('当前模式没有最近做错的单词，先去刷题吧！'); return; }
   if (quizActive) {
-    if (!confirm('重做错题将保存当前进度，确定吗？')) return;
+    if (!confirm('复习最近错词将保存当前进度，确定吗？')) return;
     saveSuspendedQuiz();
   }
   startRetryQuiz(currentMode);

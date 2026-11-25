@@ -42,14 +42,16 @@ var currentQuizType = 'choice';
 var autoSpeakEnabled = false;
 var quizActive = false;
 
-function buildQuiz(mode, wordPool) {
+function buildQuiz(mode, wordPool, options) {
+  _lastCompletion = null;
   var pool = wordPool || getActivePool();
   var ids = pool.map(function(w) { return w.id; });
   // 过滤无效 id（数据异常保护）
   ids = ids.filter(function(id) { return getWord(id, currentPool) !== null; });
-  // 队列：当前筛选范围的全部单词（按书中顺序）；重做模式为全部错题乱序
+  // 队列：当前筛选范围的全部单词（按书中顺序）；重做模式默认全部错题乱序，
+  // 复习最近错词时传 keepOrder，让最近答错的词先出现。
   var ordered = ids;
-  var finalIds = (!!wordPool) ? shuffle(ordered) : ordered;
+  var finalIds = (!!wordPool && !(options && options.keepOrder)) ? shuffle(ordered) : ordered;
   quizState = {
     mode: mode,
     isRetry: !!wordPool,
@@ -77,13 +79,11 @@ function startNewQuiz(mode) {
 }
 
 function startRetryQuiz(mode) {
-  var ws = state.wrongWordIds[wwKey(mode)] || {};
-  var ids = Object.keys(ws).map(Number);
-  if (ids.length === 0) { alert('当前模式没有错题可以重做！'); return; }
-  if (ids.length < 4) { alert('当前模式错题不足4道'); return; }
+  var ids = recentWrongWordIds(mode, currentPool, RECENT_WRONG_REVIEW_LIMIT);
+  if (ids.length === 0) { alert('当前模式没有错题可以复习！'); return; }
   var words = ids.map(function(id) { return getWord(id, currentPool); }).filter(Boolean);
-  if (words.length < 4) { alert('错题数据异常'); return; }
-  buildQuiz(mode, words);
+  if (words.length === 0) { alert('错题数据异常'); return; }
+  buildQuiz(mode, words, { keepOrder: true });
   advanceQuestion();
   renderAll();
 }
@@ -216,15 +216,70 @@ function isAnsweredCorrectly(pos) {
   return q !== null && a === q.correctIndex;
 }
 
-function quizCompletionControlsHTML() {
+// ============ COMPLETION / RECENT WRONG REVIEW ============
+// 最近错词优先：刚答错的词排在最前，历史错词按错题记录时间从新到旧补足。
+// 单轮最多取 40 个，避免历史错题过多时一轮做不完；更早的错词会在下一轮继续。
+var RECENT_WRONG_REVIEW_LIMIT = 40;
+var _lastCompletion = null; // 本轮完成摘要：回到主页面后仍展示，并提供继续学习 / 复习最近错词入口
+
+function recentWrongWordIds(mode, poolName, limit) {
+  var pool = poolName || currentPool || 'core';
+  var ws = state.wrongWordIds[wwKey(mode, pool)] || {};
+  var seen = {};
+  var ids = [];
+  // wrongHistory 采用 unshift，数组顺序即最近答错时间从新到旧。
+  (state.wrongHistory || []).forEach(function(rec) {
+    if (!rec || rec.mode !== mode || recordPool(rec) !== pool) return;
+    var id = Number(rec.wordId);
+    if (!(id > 0) || !ws[id] || seen[id]) return;
+    seen[id] = true;
+    ids.push(id);
+  });
+  // 没有历史时间记录的错词（例如从旧存档迁移来的）排在后面。
+  Object.keys(ws).forEach(function(rawId) {
+    var id = Number(rawId);
+    if (!(id > 0) || seen[id]) return;
+    seen[id] = true;
+    ids.push(id);
+  });
+  if (limit && ids.length > limit) ids = ids.slice(0, limit);
+  return ids;
+}
+
+function completionCardHTML() {
+  var c = _lastCompletion;
+  if (!c) return '';
+  return '<div class="empty"><div class="ei">' + c.icon + '</div><p>' + c.title + '</p>' +
+    (c.note ? '<p style="font-size:0.85em;color:var(--text2);margin-top:6px;">' + c.note + '</p>' : '') +
+    '</div>';
+}
+
+function quizCompletionControlsHTML(onHome) {
   var card = document.getElementById('quizCard');
   var isFullscreen = card && card.classList.contains('fullscreen');
   var canStartEbbingPlan = currentPool === 'full' && !state.ebbingActive;
-  return '<div class="completion-actions" style="display:flex;justify-content:center;gap:10px;margin-top:18px;">' +
-    (canStartEbbingPlan ? '<button class="ctrl-btn accent" id="startEbbingPlanBtn" onclick="startEbbingPlanFromCompletion()">\u{1F4C5} \u5f00\u59cb 4 \u5468 25 \u5929\u6253\u5361\u8868</button>' : '') +
-    '<button class="ctrl-btn" id="returnToStartBtn" onclick="returnToQuizStart()">\u21a9 \u8fd4\u56de\u4e3b\u9875\u9762</button>' +
-    (isFullscreen ? '<button class="toggle-fs-btn" id="toggleFsBtn" onclick="toggleFullscreen()">\u26f6 \u9000\u51fa\u5168\u5c4f</button>' : '') +
-    '</div>';
+  var recentCount = recentWrongWordIds(currentMode, currentPool, RECENT_WRONG_REVIEW_LIMIT).length;
+  var html = '<div class="completion-actions" style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:18px;">';
+  html += '<button class="ctrl-btn accent" id="continueLearningBtn" onclick="continueLearningFromCompletion()">\u25b6 \u7ee7\u7eed\u5b66\u4e60</button>';
+  if (recentCount > 0) {
+    html += '<button class="ctrl-btn" id="reviewRecentWrongBtn" onclick="startRetryQuiz(currentMode)">\u{1F504} \u590d\u4e60\u6700\u8fd1\u9519\u8bcd\uff08' + recentCount + '\uff09</button>';
+  }
+  if (canStartEbbingPlan) {
+    html += '<button class="ctrl-btn accent" id="startEbbingPlanBtn" onclick="startEbbingPlanFromCompletion()">\u{1F4C5} \u5f00\u59cb 4 \u5468 25 \u5929\u6253\u5361\u8868</button>';
+  }
+  if (!onHome) {
+    html += '<button class="ctrl-btn" id="returnToStartBtn" onclick="returnToQuizStart()">\u21a9 \u56de\u5230\u4e3b\u9875\u9762</button>';
+  }
+  if (isFullscreen) {
+    html += '<button class="toggle-fs-btn" id="toggleFsBtn" onclick="toggleFullscreen()">\u26f6 \u9000\u51fa\u5168\u5c4f</button>';
+  }
+  return html + '</div>';
+}
+
+function continueLearningFromCompletion() {
+  _lastCompletion = null;
+  if (memoryModeOn()) startMemoryQuiz(currentMode);
+  else startNewQuiz(currentMode);
 }
 
 function startEbbingPlanFromCompletion() {
@@ -234,12 +289,15 @@ function startEbbingPlanFromCompletion() {
   updatePoolUI();
   savePrefs();
   activateEbbing();
+  _lastCompletion = null;
   returnToQuizStart();
 }
 
 function returnToQuizStart() {
   var card = document.getElementById('quizCard');
   if (card && card.classList.contains('fullscreen')) toggleFullscreen();
+  // 回到主页面后保留本轮完成摘要，并给出“继续学习 / 复习最近错词”选项。
+  if (card && _lastCompletion) card.innerHTML = completionCardHTML() + quizCompletionControlsHTML(true);
   var quizTab = document.querySelector('.tab-btn[data-tab="quiz"]');
   if (quizTab) switchTab('quiz', quizTab);
   try { window.scrollTo(0, 0); } catch (e) {}
@@ -255,20 +313,29 @@ function finishQuiz() {
   if (quizState.isReview) {
     var rc = quizState.reviewCorrect || 0;
     var rate = done > 0 ? Math.round(rc / done * 100) : 0;
-    card.innerHTML = '<div class="empty"><div class="ei">🧠</div><p>复习完成！共 ' + total + ' 题，已答 ' + done + ' 题，答对 ' + rc + ' 题（' + rate + '%）</p>' +
-      '<p style="font-size:0.85em;color:var(--text2);margin-top:6px;">' +
-      (isGridPool(currentPool) ? poolLabel(currentPool) + '已按 8 格周期（5分/30分/12时/1天/2天/4天/7天）推进，到期的词会再次出现' : '大纲词汇已按 4周25天打卡表，当天到期的 Unit 已标记复习完成') +
-      '</p></div>' + quizCompletionControlsHTML();
+    _lastCompletion = {
+      icon: '\u{1F9E0}',
+      title: '\u590d\u4e60\u5b8c\u6210\uff01\u5171 ' + total + ' \u9898\uff0c\u5df2\u7b54 ' + done + ' \u9898\uff0c\u7b54\u5bf9 ' + rc + ' \u9898\uff08' + rate + '%\uff09',
+      note: isGridPool(currentPool) ? poolLabel(currentPool) + '\u5df2\u6309 8 \u683c\u5468\u671f\uff085\u5206/30\u5206/12\u65f6/1\u5929/2\u5929/4\u5929/7\u5929\uff09\u63a8\u8fdb\uff0c\u5230\u671f\u7684\u8bcd\u4f1a\u518d\u6b21\u51fa\u73b0' : '\u5927\u7eb2\u8bcd\u6c47\u5df2\u6309 4\u546825\u5929\u6253\u5361\u8868\uff0c\u5f53\u5929\u5230\u671f\u7684 Unit \u5df2\u6807\u8bb0\u590d\u4e60\u5b8c\u6210'
+    };
   } else if (quizState.isMemory) {
     var mw = quizState.memWrong || 0;
     var mc = done - mw;
-    card.innerHTML = '<div class="empty"><div class="ei">🧠</div><p>记忆模式完成！本次共学习 ' + quizState.memTotal + ' 词，答对 ' + mc + ' 词</p>' +
-      '<p style="font-size:0.85em;color:var(--text2);margin-top:6px;">答错 ' + mw + ' 词已加入记忆调度：错词按当前词库的书中记忆规律（4周25天打卡表 / 8格周期）自动排期回来</p></div>';
+    _lastCompletion = {
+      icon: '\u{1F9E0}',
+      title: '\u8bb0\u5fc6\u6a21\u5f0f\u5b8c\u6210\uff01\u672c\u6b21\u5171\u5b66\u4e60 ' + quizState.memTotal + ' \u8bcd\uff0c\u7b54\u5bf9 ' + mc + ' \u8bcd',
+      note: '\u7b54\u9519 ' + mw + ' \u8bcd\u5df2\u52a0\u5165\u8bb0\u5fc6\u8c03\u5ea6\uff1a\u9519\u8bcd\u6309\u5f53\u524d\u8bcd\u5e93\u7684\u4e66\u4e2d\u8bb0\u5fc6\u89c4\u5f8b\uff084\u546825\u5929\u6253\u5361\u8868 / 8\u683c\u5468\u671f\uff09\u81ea\u52a8\u6392\u671f\u56de\u6765'
+    };
   } else {
-    card.innerHTML = '<div class="empty"><div class="ei">\u{1F389}</div><p>本轮题目全部完成！共 ' + total + ' 题，已答 ' + done + ' 题</p></div>' + quizCompletionControlsHTML();
+    _lastCompletion = {
+      icon: '\u{1F389}',
+      title: '\u672c\u8f6e\u9898\u76ee\u5168\u90e8\u5b8c\u6210\uff01\u5171 ' + total + ' \u9898\uff0c\u5df2\u7b54 ' + done + ' \u9898',
+      note: ''
+    };
   }
+  card.innerHTML = completionCardHTML() + quizCompletionControlsHTML(false);
   document.getElementById('startBtn').style.display = 'inline-block';
-  document.getElementById('startBtn').textContent = '▶ 再来一轮';
+  document.getElementById('startBtn').textContent = '\u25b6 \u7ee7\u7eed\u5b66\u4e60';
   document.getElementById('retryInfo').classList.remove('show');
   quizState.isRetry = false;
   quizState.isReview = false;
@@ -282,8 +349,6 @@ function finishQuiz() {
     window._prevQuizTypeBeforeReview = null;
     savePrefs();
   }
-  // 完成一轮后，若本会话调整了做题模式，弹窗询问是否保留（没选择直接退出则默认保留；选「回到上次」即恢复快照）
-  if (typeof askKeepPrefs === 'function') askKeepPrefs(null);
   renderAll();
   saveState();
 }
@@ -586,6 +651,7 @@ function memoryModeOn() {
   return btn ? btn.classList.contains('active') : false;
 }
 function startMemoryQuiz(mode) {
+  _lastCompletion = null;
   ensurePool(currentPool);
   var st = state.stats;
   var learned = st.wordAttempts || {};
@@ -634,6 +700,7 @@ function startMemoryQuiz(mode) {
 }
 
 function startReview() {
+  _lastCompletion = null;
   migrateEbbingPlanSnapshot(state.suspendedQuiz);
   if (isCurrentEbbingPlanSnapshot(state.suspendedQuiz)) {
     // A snapshot created before the current plan was reconciled may contain

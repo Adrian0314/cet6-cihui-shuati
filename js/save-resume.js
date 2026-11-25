@@ -224,6 +224,7 @@ function checkSuspendedQuiz() {
 }
 
 function resumeQuiz() {
+  _lastCompletion = null;
   migrateEbbingPlanSnapshot(state.suspendedQuiz);
   var sq = state.suspendedQuiz;
   if (!sq) return;
@@ -368,57 +369,7 @@ function applyPrefs() {
   if (p.pool) updatePoolUI();
 }
 
-// ============ KEEP PREFS ON EXIT (退出做题模式时选择是否保留当前模式；没选择直接退出则默认保留) ============
-var _sessionPrefsSnapshot = null; // 本次会话「上次已保存」的模式快照（进入页面时记录）
-function prefsCopy(p) {
-  return JSON.parse(JSON.stringify(p || {}));
-}
-function prefsDiffer(a, b) {
-  a = a || {}; b = b || {};
-  return a.pool !== b.pool || a.size !== b.size || a.gate !== b.gate ||
-    a.mode !== b.mode || a.type !== b.type || !!a.memory !== !!b.memory ||
-    !!a.autoSpeak !== !!b.autoSpeak ||
-    (a.units && b.units ? a.units.join(',') !== b.units.join(',') : a.units !== b.units);
-}
-function updatePrefsSnapshot() {
-  _sessionPrefsSnapshot = prefsCopy(state.prefs);
-}
-// 「回到上次已保存」：把内存与 state.prefs 恢复为进入本页时的快照
-function revertPrefsToSnapshot() {
-  if (!_sessionPrefsSnapshot) return;
-  state.prefs = prefsCopy(_sessionPrefsSnapshot);
-  currentPool = state.prefs.pool || currentPool;
-  selectedUnits = state.prefs.units ? state.prefs.units.slice() : selectedUnits;
-  gateLevel = state.prefs.gate || gateLevel;
-  currentMode = state.prefs.mode || currentMode;
-  currentQuizType = state.prefs.type || currentQuizType;
-  autoSpeakEnabled = !!state.prefs.autoSpeak;
-  applyPrefs();
-  saveState();
-}
-// 非阻塞底部提示条：「保留当前模式」/「回到上次已保存」；可忽略（×）＝默认保留当前模式
-function askKeepPrefs() {
-  var differ = _sessionPrefsSnapshot && prefsDiffer(state.prefs, _sessionPrefsSnapshot);
-  if (!differ) return;
-  if (document.getElementById('keepPrefsBar')) return;
-  var bar = document.createElement('div');
-  bar.id = 'keepPrefsBar';
-  bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:350;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;padding:10px 16px;background:var(--surface);border-top:1px solid var(--border);box-shadow:0 -4px 16px rgba(0,0,0,0.15);font-size:0.9em;';
-  bar.innerHTML = '<span style="color:var(--text2);">本次调整了做题模式，是否保留？</span>' +
-    '<button class="ctrl-btn accent" id="keepPrefsYes">✓ 保留当前模式</button>' +
-    '<button class="ctrl-btn" id="keepPrefsNo">↩ 回到上次已保存</button>' +
-    '<button class="ctrl-btn" id="keepPrefsClose" title="忽略（默认保留当前模式）">×</button>';
-  document.body.appendChild(bar);
-  document.getElementById('keepPrefsYes').addEventListener('click', function() {
-    bar.remove(); updatePrefsSnapshot(); // 保留当前 → 快照更新为本次调整后的模式
-  });
-  document.getElementById('keepPrefsNo').addEventListener('click', function() {
-    bar.remove(); revertPrefsToSnapshot(); // 回到上次已保存
-  });
-  document.getElementById('keepPrefsClose').addEventListener('click', function() {
-    bar.remove(); updatePrefsSnapshot(); // 忽略 → 默认保留当前模式（不再提示）
-  });
-}
+// 练习设置改为即时保存，不再在离开做题页时询问是否保留模式。
 
 // ============ AUTO-SAVE ON EXIT (退出页面自动保留做题进度，不打断当前做题) ============
 function autoSaveProgress() {

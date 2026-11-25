@@ -39,7 +39,6 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   }).catch(function() {});
 }
 applyPrefs();  // 恢复上次做题模式（词库/单元/闯关/模式/题型/记忆/学习量）
-updatePrefsSnapshot();  // 记录「上次已保存」的模式快照，退出做题时据此询问是否保留
 checkSuspendedQuiz();
 setTimeout(function() { showOnboarding(); }, 500);
 setTimeout(function() { checkSpacedRepetition(); }, 1200);
